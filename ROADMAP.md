@@ -4,8 +4,8 @@ Status por fase (ver `PROMPT-ARQUITETO-ELITE-SISTEM.md` seção 5 para escopo/cr
 
 | Fase | Status | Observação |
 |---|---|---|
-| 0 — Diagnóstico e Auditoria | 🟡 Concluída tecnicamente, **aguardando aprovação da Clara** | Ver `ARCHITECTURE.md` seção 1. Achado crítico de segurança reportado (exposição pública de dados no repo `leitor-relatorio`) — ação urgente fora do escopo de dev. |
-| 1 — Arquitetura e Proposta Técnica | ⬜ Não iniciada | Depende das respostas às pendências em `ARCHITECTURE.md` seção 1.9. |
+| 0 — Diagnóstico e Auditoria | 🟢 Concluída | Ver `ARCHITECTURE.md` seção 1. Achado crítico de segurança já mitigado pela Clara (repo `leitor-relatorio` tornado privado). Pendências do Gate 0 respondidas em 1.9. |
+| 1 — Arquitetura e Proposta Técnica | 🟡 Proposta pronta, **aguardando decisões D1/D2/D3** | Ver `ARCHITECTURE.md` seção 2, `DATABASE.md` (v1) e `SECURITY.md`. |
 | 2 — Preparação da Fundação | ⬜ Não iniciada | |
 | 3 — Migração dos Módulos Existentes | ⬜ Não iniciada | |
 | 4 — Autenticação, Multiempresa, Setores e Permissões | ⬜ Não iniciada | |

@@ -39,7 +39,34 @@ dados futuro: `operadoras` (EXÍMIA/ELITE, fixo, controla acesso/segregação) e
 (muitas, dado de negócio dos relatórios). Ver pendência 3 em `ARCHITECTURE.md` seção 1.9.
 **Reversível:** sim, é uma decisão de modelagem ainda não implementada.
 
+## 2026-09-21 — Respostas do Gate 0 recebidas; Fase 0 encerrada
+
+**Contexto:** a Clara respondeu às 5 pendências de `ARCHITECTURE.md` seção 1.9.
+**Decisões/registros resultantes:**
+- Fonte de dados real = Google Sheets, atualizado todo dia (não Excel local). Ver D5 em
+  `ARCHITECTURE.md` 2.5 — import manual/planilha na Fase 3, integração direta com a API do Google
+  Sheets fica para uma Fase 7 (automação) futura, evitando overengineering agora.
+- Módulo de fluxo de caixa/contas a pagar interno (`PAGAMENTOS`, `PAG.<mês>`) **fica fora do
+  escopo** do novo sistema — confirmado explicitamente.
+- Nomenclatura operadora (EXÍMIA/ELITE) vs. empresa-cliente confirmada; regra dura adicionada: só o
+  Admin Superior vê as duas operadoras, qualquer outro usuário fica restrito à(s) sua(s).
+- Hierarquia real tem 3 níveis: Admin Superior (hoje 3 pessoas) → Líder de setor → Colaborador de
+  setor — atualizado em `DATABASE.md` seção 1 e `ARCHITECTURE.md` seção 2.6.
+- Risco crítico de segurança (dados expostos publicamente) **mitigado**: repositório
+  `leitor-relatorio` já está privado.
+**Reversível:** os registros de nomenclatura/hierarquia são decisões de modelagem ainda não
+implementadas em código — reversíveis até a Fase 4 começar de fato.
+
 ## Pendências abertas
 
-Ver `ARCHITECTURE.md` seção 1.9 (lista completa, numerada) — todas aguardando resposta da Clara
-antes do início da Fase 1.
+1. **[DECISÃO da Clara] D1** (`ARCHITECTURE.md` 2.2): login individual (recomendado) vs.
+   compartilhado para os 3 Admin Superior.
+2. **[DECISÃO da Clara] D2** (`ARCHITECTURE.md` 2.3): migrar frontend para stack web própria
+   (recomendado) vs. manter Streamlit.
+3. **[DECISÃO da Clara] D3** (`ARCHITECTURE.md` 2.4): Supabase (recomendado) vs. Neon+Render como
+   banco/hospedagem.
+4. Lista real dos setores (nomes) — não bloqueia o schema (`setores` é genérico), mas precisa ser
+   confirmada antes da Fase 4.
+5. Se uma `empresa_cliente` pode pertencer às duas operadoras ao mesmo tempo, ou é sempre separada
+   por operadora (`DATABASE.md` seção 8).
+6. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 4.

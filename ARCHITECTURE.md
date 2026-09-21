@@ -157,29 +157,154 @@ achar algo "melhor" para a nova plataforma.
 | Auditoria/logs | Não existe |
 | Gestão de Processos | Não existe |
 
-### 1.9 Pendências abertas (Gate 0 — respostas ainda necessárias antes da Fase 1)
+### 1.9 Pendências do Gate 0 — respostas da Clara (2026-09-21)
 
-1. **Fonte de verdade das planilhas**: hoje quem preenche a planilha de agendamento/fluxo de caixa,
-   com que ferramenta (Excel local? Google Sheets compartilhado?) e com que frequência? Isso decide
-   se a Fase 3 precisa de uma tela de cadastro/edição desses dados no sistema novo, ou se continua
-   recebendo por upload de planilha por mais tempo.
-2. **Escopo das abas de contas a pagar** (`PAGAMENTOS`, `PAG.<mês>`): entram no novo sistema (um
-   módulo de fluxo de caixa completo, recebimentos + pagamentos) ou ficam de fora (o novo sistema
-   continua só relatórios de cobrança aos clientes)?
-3. **Confirmação da nomenclatura da seção 1.3**: "EXÍMIA/ELITE" = as duas operadoras com usuários e
-   setores próprios; "empresa" nas planilhas = cliente delas. Correto? Existe algum caso em que
-   dados de uma operadora devem ser vistos por usuário da outra (além do Admin Superior)?
-4. **Usuários reais**: hoje só existe a credencial `funcionario`. Quantas pessoas usam o sistema no
-   dia a dia, e quais seriam seus setores/papéis (mesmo que informalmente)?
-5. **Decisão de segurança** (seção 1.5): autorização para tornar `leitor-relatorio` privado (e,
-   depois, decidir sobre reescrever o histórico) — e se quer que eu participe disso, com acesso de
-   escrita concedido explicitamente.
+1. **Fonte de verdade das planilhas** → **Google Sheets, atualizado todos os dias.** Não é Excel
+   local — é uma planilha viva, editada diariamente pela equipe. Implicação para a Fase 1: o
+   upload manual de `.xlsx` deixa de ser a única via aceitável a médio prazo; faz sentido planejar
+   uma integração direta com a API do Google Sheets (leitura) como evolução natural, sem que isso
+   precise entrar já na Fase 3 (ver decisão D5 abaixo).
+2. **Escopo das abas de contas a pagar** (`PAGAMENTOS`, `PAG.<mês>`) → **Fora do escopo.** Confirmado:
+   "Sem sistema de fluxo de caixa". O novo sistema cobre laudos, audiências e cobrança de
+   pendências (recebimentos), como hoje — não um módulo de contas a pagar/fluxo de caixa completo.
+3. **Nomenclatura EXÍMIA/ELITE vs. empresa-cliente** → **Confirmado**, com uma regra adicional
+   importante: **só o Admin Superior enxerga as duas operadoras** — qualquer outro usuário fica
+   restrito à sua própria operadora (e, dentro dela, ao(s) seu(s) setor(es)). Isso vira requisito
+   duro de segregação na Fase 4 (RLS/filtro obrigatório por operadora em toda consulta que não seja
+   do Admin Superior).
+4. **Usuários e papéis reais** → Hoje **3 pessoas atuam como Admin Superior** (podendo compartilhar
+   um único login, como é hoje) e a Clara quer **acrescentar um papel de "Líder" por setor**. Ou
+   seja, a hierarquia real tem 3 níveis, não 2:
+   - **Admin Superior** — acesso total, às duas operadoras, sem restrição de setor.
+   - **Líder de setor** — acesso total dentro do(s) setor(es)/operadora(s) a que pertence (provável
+     escopo: gerenciar valores do setor, ver tudo do setor, o que um colaborador comum não pode).
+   - **Colaborador de setor** — acesso operacional dentro do(s) setor(es) a que pertence (gerar
+     relatórios, não necessariamente gerenciar valores/CNPJs).
+   Fica como pendência menor, não bloqueante para a Fase 1: **a lista real dos setores** (nomes) —
+   uso como hipótese de trabalho: um setor por linha de produto observada no sistema atual (ex.:
+   Laudos, Audiências, Financeiro/Cobrança), a confirmar antes da Fase 4.
+5. **Decisão de segurança** → **Já resolvido pela Clara**: o repositório `leitor-relatorio` foi
+   tornado **privado**. Mitiga a exposição pública imediata. Ainda fica em aberto, sem urgência
+   agora, decidir se vale a pena reescrever o histórico do Git para remover os arquivos sensíveis
+   definitivamente (ele continua no histórico de um repo agora privado, mas não é mais público).
 
-> Enquanto essas pendências não forem respondidas, a Fase 1 (Arquitetura) não deve propor modelo de
-> dados definitivo — apenas rascunhos condicionais, como já registrado no prompt mestre.
+> Com essas respostas, a Fase 1 (Arquitetura) segue abaixo. As únicas questões que ainda preciso de
+> decisão da Clara para fechar a Fase 1 são as marcadas como **[DECISÃO]** na seção 2.
 
 ---
 
 ## 2. Fase 1 — Arquitetura proposta
 
-_A preencher após aprovação da Fase 0 e resposta às pendências da seção 1.9._
+### 2.1 Visão geral
+
+Substituir o app monolítico Streamlit (sem persistência de dados de negócio) por:
+
+- Um **backend com API própria**, dono da regra de negócio (reaproveitando a lógica já validada em
+  `core/laudos.py`, `core/audiencias.py`, `core/pendencias.py`) e de toda a autorização/segregação
+  por operadora/setor.
+- Um **banco de dados relacional gerenciado** (free tier), fonte de verdade dos dados de negócio
+  (laudos, audiências, pendências, usuários, permissões, auditoria) — não mais "recalcular tudo a
+  cada upload".
+- Uma **camada de autenticação real** (login individual, senha com hash, sessão com expiração).
+- Um **frontend** — decisão em aberto entre continuar com Streamlit ou migrar (ver D2).
+
+Nenhuma dessas peças é escolhida ainda de forma definitiva nesta seção sem a aprovação da Clara —
+as decisões com trade-off relevante estão marcadas **[DECISÃO]**, com opções, prós/contras e uma
+recomendação, como definido no prompt mestre (seção 7).
+
+### 2.2 [DECISÃO] D1 — Login do Admin Superior: único compartilhado ou individual por pessoa
+
+**Contexto:** hoje 3 pessoas atuam como Admin Superior. A Clara sugeriu que "pode ser um login
+único". Isso funciona, mas colide com um requisito explícito do projeto: **auditoria/log de quem
+fez o quê**. Com um login compartilhado, o log mostraria sempre "Admin Superior fez X", nunca qual
+das 3 pessoas.
+
+- **Opção A — Login individual por pessoa (mesmo papel/permissão para as 3)** — *recomendado*.
+  Prós: auditoria de verdade (sabe-se quem gerou/editou o quê), permite revogar acesso de uma
+  pessoa sem afetar as outras duas, sem custo extra (não depende de quantidade de usuários em
+  nenhum provedor gratuito considerado). Contras: mais um pouco de trabalho inicial de cadastro (3
+  contas em vez de 1) — irrelevante em esforço.
+- **Opção B — Login único compartilhado entre as 3 pessoas** — como hoje. Prós: simplicidade
+  imediata. Contras: nenhuma rastreabilidade individual no log de auditoria; se uma pessoa sair da
+  empresa, é preciso trocar a senha e comunicar às outras duas; contraria o requisito de auditoria
+  pedido no início do projeto.
+- **Reversível?** Sim, dá para migrar de B para A depois — mas com perda do histórico de auditoria
+  do período em que foi usado o login único.
+
+### 2.3 [DECISÃO] D2 — Continuar com Streamlit ou migrar o frontend
+
+**Contexto:** o sistema atual usa Streamlit para tudo (telas + estado). Streamlit é ótimo para
+protótipos e ferramentas internas simples, mas tem limitações reais para o que está sendo pedido:
+multiempresa com RBAC granular, várias telas por papel, auditoria, crescimento a médio prazo.
+
+- **Opção A — Migrar para uma stack web tradicional (backend API + frontend separado)** —
+  *recomendado para o objetivo declarado ("mais completa, profissional, escalável")*. Ex.: backend
+  em **FastAPI** (Python — reaproveita `core/*.py` quase sem alteração) + frontend simples em
+  **server-side rendering com Jinja2 + HTMX** (continua tudo em Python, sem exigir aprender um
+  framework JS novo, e ainda assim dá controle real de rotas/permissões por página) **ou** um
+  frontend em React/Next.js se a Clara preferir uma cara mais "produto" desde já. Prós: controle
+  fino de permissão por rota, melhor UX para telas administrativas (usuários, setores, auditoria),
+  sem as limitações de sessão/estado do Streamlit, caminho mais natural para crescer. Contras: mais
+  trabalho de desenvolvimento nas Fases 2-3 do que só adaptar o Streamlit existente.
+- **Opção B — Manter Streamlit, só trocar a autenticação e ligar num banco de verdade.** Prós:
+  reaproveita 100% da interface já pronta e aprovada pela equipe, menor esforço nas Fases 2-3.
+  Contras: multiempresa/RBAC granular em Streamlit é mais gambiarra do que suporte nativo (não tem
+  roteamento real por permissão, `st.session_state` não foi pensado para isso); tende a esbarrar de
+  novo nas mesmas limitações assim que "Gestão de Processos" (Fase 5) trouxer mais telas e papéis.
+- **Reversível?** Migrar depois de B para A é possível, mas é retrabalho considerável — por isso
+  vale decidir com calma agora, não só "pela pressa".
+
+### 2.4 [DECISÃO] D3 — Banco de dados e hospedagem (combinação gratuita)
+
+Com base na comparação da seção 8 do prompt mestre, e considerando volumetria real observada
+(~1.900 linhas/ano em audiências, ~800 linhas/ano em recebimentos — tudo bem dentro de qualquer
+free tier de Postgres gerenciado):
+
+- **Opção A — Supabase (Postgres + Auth gerenciados, free tier)** — *recomendado*. Prós: Postgres
+  real, painel de administração pronto, autenticação e políticas de acesso por linha (Row Level
+  Security) prontas para modelar a segregação por operadora sem reinventar a roda, storage
+  incluído (útil para anexos/PDFs se um dia precisar). Contras: projeto free pausa após ~1 semana
+  de inatividade total (mitigável com um "ping" agendado gratuito, ou aceitável dado que o sistema
+  é usado todo dia).
+- **Opção B — Neon (Postgres serverless free) + Render (web service free) separados.** Prós: Neon é
+  bem previsível para Postgres puro. Contras: duas contas/provedores para administrar em vez de um,
+  sem Auth pronta (precisa implementar login do zero, mais trabalho na Fase 4).
+- **Reversível?** Sim — é uma decisão de infraestrutura, não de dados; trocar de provedor de
+  hospedagem no futuro não exige remodelar o banco (ambos são Postgres padrão).
+
+### 2.5 D4 — Migração de dados: upload manual primeiro, integração com Google Sheets depois
+
+Dado que a fonte real hoje é uma planilha Google Sheets editada todo dia (seção 1.9, item 1), duas
+abordagens de import são possíveis. **Proposta (não é decisão com trade-off forte, é sequenciamento
+— mas registro aqui para visibilidade):**
+
+- **Fase 3 (migração dos módulos):** continuar aceitando `.xlsx` (upload manual ou exportado do
+  próprio Google Sheets) como fonte de import, gravando os dados no banco novo — evita depender de
+  credenciais/API do Google logo de cara, e permite validar a paridade com o sistema atual com o
+  mesmo processo que a equipe já usa.
+- **Fase 7 (automação), se aprovado depois:** avaliar integração direta via Google Sheets API
+  (leitura automática, sem precisar exportar/upload manual) — só depois que o banco e as regras já
+  estiverem estáveis e validadas. Evita overengineering na largada.
+
+### 2.6 Modelo de permissões (resultado das respostas do Gate 0)
+
+```
+Admin Superior         → acesso total, às duas operadoras (EXÍMIA e ELITE), todos os setores
+   └── Líder de setor   → acesso total dentro do(s) setor(es)/operadora(s) a que pertence
+         └── Colaborador → acesso operacional dentro do(s) setor(es) a que pertence
+```
+
+Um usuário pode ter vínculos com **mais de um setor e mais de uma operadora ao mesmo tempo** (ex.:
+Líder do setor de Audiências na EXIMIA e Colaborador do setor de Laudos na ELITE) — modelado como
+tabela associativa (ver `DATABASE.md`), exceto o Admin Superior, que é um nível acima disso (global,
+sem precisar de vínculo por setor).
+
+### 2.7 O que decidir para fechar a Fase 1
+
+Aguardando da Clara: **D1** (login individual vs. compartilhado do Admin Superior), **D2** (migrar
+frontend vs. manter Streamlit) e **D3** (Supabase vs. Neon+Render). A lista real de setores (item 4
+da seção 1.9) também é bem-vinda, mas não bloqueia o desenho do schema em `DATABASE.md` (a tabela
+`setores` é genérica, aceita qualquer nome cadastrado depois).
+
+Depois dessas decisões, sigo para a Fase 2 (Preparação da Fundação) só com aprovação explícita —
+nenhum código de produção será escrito antes disso.
