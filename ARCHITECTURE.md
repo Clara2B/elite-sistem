@@ -299,12 +299,13 @@ Líder do setor de Audiências na EXIMIA e Colaborador do setor de Laudos na ELI
 tabela associativa (ver `DATABASE.md`), exceto o Admin Superior, que é um nível acima disso (global,
 sem precisar de vínculo por setor).
 
-### 2.7 O que decidir para fechar a Fase 1
+### 2.7 Decisões fechadas (2026-09-21)
 
-Aguardando da Clara: **D1** (login individual vs. compartilhado do Admin Superior), **D2** (migrar
-frontend vs. manter Streamlit) e **D3** (Supabase vs. Neon+Render). A lista real de setores (item 4
-da seção 1.9) também é bem-vinda, mas não bloqueia o desenho do schema em `DATABASE.md` (a tabela
-`setores` é genérica, aceita qualquer nome cadastrado depois).
+A Clara aprovou as três recomendações:
 
-Depois dessas decisões, sigo para a Fase 2 (Preparação da Fundação) só com aprovação explícita —
-nenhum código de produção será escrito antes disso.
+- **D1 — Login individual** por pessoa para os 3 Admin Superior (não compartilhado).
+- **D2 — Migrar o frontend**: backend API (FastAPI) + frontend próprio, não manter Streamlit.
+- **D3 — Supabase** (Postgres + Auth + RLS) como banco/hospedagem de dados.
+
+**Fase 1 concluída e aprovada.** Segue em `ROADMAP.md`. A lista real de setores (item 4 da seção
+1.9) segue como pendência menor, não bloqueante — a tabela `setores` do schema é genérica.

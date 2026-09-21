@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Segredos — nunca versionar
+.env
+backend/.env
+
+# Frontend (Fase 2+)
+node_modules/
+dist/
+.next/
+
+# Editor/OS
+.DS_Store
+.vscode/

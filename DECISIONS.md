@@ -57,16 +57,20 @@ dados futuro: `operadoras` (EXÍMIA/ELITE, fixo, controla acesso/segregação) e
 **Reversível:** os registros de nomenclatura/hierarquia são decisões de modelagem ainda não
 implementadas em código — reversíveis até a Fase 4 começar de fato.
 
+## 2026-09-21 — D1/D2/D3 aprovados; Fase 1 concluída
+
+**Decisão:** a Clara aprovou as três recomendações do arquiteto: login individual (D1), migrar
+frontend para stack própria com backend FastAPI (D2), Supabase como banco/hospedagem (D3). Detalhes
+e justificativas em `ARCHITECTURE.md` seção 2.
+**Reversível:** D1 e D3 são reversíveis com esforço baixo/médio; D2 (frontend) é a mais cara de
+reverter depois — decidida com essa ressalva já exposta e aceita.
+
 ## Pendências abertas
 
-1. **[DECISÃO da Clara] D1** (`ARCHITECTURE.md` 2.2): login individual (recomendado) vs.
-   compartilhado para os 3 Admin Superior.
-2. **[DECISÃO da Clara] D2** (`ARCHITECTURE.md` 2.3): migrar frontend para stack web própria
-   (recomendado) vs. manter Streamlit.
-3. **[DECISÃO da Clara] D3** (`ARCHITECTURE.md` 2.4): Supabase (recomendado) vs. Neon+Render como
-   banco/hospedagem.
-4. Lista real dos setores (nomes) — não bloqueia o schema (`setores` é genérico), mas precisa ser
+1. Lista real dos setores (nomes) — não bloqueia o schema (`setores` é genérico), mas precisa ser
    confirmada antes da Fase 4.
-5. Se uma `empresa_cliente` pode pertencer às duas operadoras ao mesmo tempo, ou é sempre separada
+2. Se uma `empresa_cliente` pode pertencer às duas operadoras ao mesmo tempo, ou é sempre separada
    por operadora (`DATABASE.md` seção 8).
-6. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 4.
+3. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 4.
+4. Contas de infraestrutura a serem criadas pela Clara antes da Fase 2 avançar para deploy real:
+   projeto Supabase e provedor de hospedagem do backend — ver pedido no chat.
