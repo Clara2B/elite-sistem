@@ -309,3 +309,15 @@ A Clara aprovou as três recomendações:
 
 **Fase 1 concluída e aprovada.** Segue em `ROADMAP.md`. A lista real de setores (item 4 da seção
 1.9) segue como pendência menor, não bloqueante — a tabela `setores` do schema é genérica.
+
+### 2.8 Infraestrutura provisionada (Fase 2, 2026-09-22)
+
+- **Backend (Render, Web Service, free tier):** https://elite-sistem.onrender.com — deploy do
+  esqueleto FastAPI, branch `claude/relatorios-arquitetura-auditoria-pewhu8`, `/health` confirmado
+  respondendo. Nenhuma regra de negócio ainda (Fase 3).
+- **Banco (Supabase, free tier):** projeto criado (`ozhvviiidjpgttcayhnv.supabase.co`), ainda **não
+  conectado** ao backend — a connection string será adicionada como variável de ambiente no Render
+  só quando a Fase 3 precisar dela de fato (ver `SECURITY.md` seção 4 sobre nunca colar esse valor
+  em chat/commit).
+- **Fase 2 concluída**: critério de conclusão do prompt mestre ("deploy hello world funcionando no
+  ambiente gratuito escolhido, sem nenhuma funcionalidade de negócio ainda") atingido.

@@ -79,6 +79,17 @@ aprovada, só esclarece a implementação: não vamos usar o SDK/Auth do Supabas
 Supabase (URL/publishable key) vs. o que nunca deve ir para o chat (connection string com senha,
 service_role key).
 
+## 2026-09-22 — Fase 2 concluída: backend em produção (hello world)
+
+**Contexto:** a Clara criou o Web Service no Render (branch
+`claude/relatorios-arquitetura-auditoria-pewhu8`, root `backend/`) e o projeto no Supabase. O
+esqueleto FastAPI ficou no ar em https://elite-sistem.onrender.com, `/health` confirmado
+funcionando pela própria Clara (o ambiente de execução deste agente não tem acesso de saída a
+domínios externos como `onrender.com`, então a verificação final foi feita por ela).
+**Decisão:** considerar a Fase 2 concluída — critério de conclusão do prompt mestre atingido. O
+Supabase fica provisionado mas sem conexão ativa até a Fase 3 precisar de fato gravar dados.
+**Reversível:** sim, é infraestrutura, não dado nem schema.
+
 ## Pendências abertas
 
 1. Lista real dos setores (nomes) — não bloqueia o schema (`setores` é genérico), mas precisa ser
