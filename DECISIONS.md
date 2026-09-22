@@ -291,6 +291,27 @@ sessão, contra o arquivo `ELITE - GESTÃO DE PROCESSOS.xlsx` que a Clara enviou
 não está mais disponível neste ambiente pra reconferir. **Ainda não confirmado** se o arquivo que
 ela está testando agora em produção é o mesmo (21 abas) ou um arquivo diferente/menor — relevante
 porque muda se a correção de N+1 da entrada acima é de fato a causa do 502 relatado.
+**Atualização:** a Clara confirmou que é o mesmo arquivo de 21 abas, e testou de novo depois do
+deploy — o 502 sumiu (a correção de N+1 resolveu). Apareceu um erro novo, tratado na entrada abaixo.
+
+## 2026-09-22 — Corrige linhas de tamanho desigual no modo `read_only` do openpyxl
+
+**Contexto:** depois da correção do N+1 (entrada acima), o import real não deu mais 502, mas passou
+a dar `400` com `"X columns passed, passed data had Y columns"` — um erro do pandas ao montar o
+DataFrame. Causa: o modo `read_only=True` do openpyxl (ligado na correção anterior pra economizar
+memória) não garante que toda linha de uma aba tenha o mesmo número de células — uma linha sem
+célula preenchida no fim vem "cortada" (tupla mais curta), refletindo só o que está escrito naquele
+trecho do XML da planilha real, diferente do modo padrão do openpyxl (que sempre preenche até a
+última coluna usada na aba inteira, reconstruindo a grade inteira em memória). Isso é conhecido do
+openpyxl em modo somente leitura e mais comum em arquivos gerados por outra ferramenta que não o
+próprio openpyxl (ex. Excel, exportação do Google Sheets — a planilha real da Clara parece vir de
+um desses).
+**Correção:** nova função `_normalizar_larguras` (`app/excel_reader.py`) — completa toda linha até o
+tamanho da mais larga da aba com `None` antes de montar o DataFrame. Coberta por teste unitário
+direto (não depende de conseguir gerar um arquivo .xlsx com linhas desiguais via openpyxl, que
+sempre escreve larguras uniformes — por isso testei a função isolada com tuplas de tamanhos
+diferentes construídas à mão).
+**Reversível:** sim, correção pura de parsing, sem mudança de dado.
 
 ## Pendências abertas
 

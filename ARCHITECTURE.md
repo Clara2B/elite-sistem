@@ -439,10 +439,16 @@ texto livre no `Processo` (sem login — só os líderes acessam o sistema; ver 
   origem na planilha (ex. `"SETEMBRO/2026"`, extraído do nome da aba — confirmado por ela, não é
   uma coluna nem o nome do arquivo). Só informativo por ora (aparece no painel de prazos), sem
   filtro de relatório nem bloqueio de import. Ver `DATABASE.md` seção 6.1 e `DECISIONS.md`.
-- **Investigando 502 no import em produção:** a Clara reportou `502 Bad Gateway` ao importar a
-  planilha real pelo `/docs`. Encontrei e corrigi um N+1 real (`get_or_create_empresa` consultava o
-  banco a cada linha em vez de cachear as ~43 empresas fixas) e reduzi o uso de memória do
-  `openpyxl` (`read_only=True`) — mas a causa raiz ainda não está confirmada, porque o volume real
-  do arquivo testado em produção ficou em dúvida (ver nota em `DECISIONS.md`).
-- **Pendente:** confirmar com a Clara o tamanho real do arquivo testado e revalidar o import via
-  API em produção depois das correções de performance.
+- **502 no import em produção — resolvido:** a Clara reportou `502 Bad Gateway` ao importar a
+  planilha real pelo `/docs`, com o mesmo arquivo de 21 abas usado na validação local. Causa: N+1
+  real em `get_or_create_empresa` (consultava o banco a cada linha em vez de cachear as ~43 empresas
+  fixas), consumindo tempo suficiente pra estourar o proxy do Render num import de dezenas de
+  milhares de linhas. Corrigido (cache) e confirmado pela Clara — o 502 não voltou.
+- **400 "columns mismatch" — resolvido:** apareceu logo depois de corrigir o 502, causado pela
+  própria correção de memória (`read_only=True` no `openpyxl`): esse modo não garante que toda linha
+  de uma aba tenha o mesmo número de células (linhas "cortadas" no fim, mais comum em arquivos
+  gerados por outra ferramenta que não o openpyxl — a planilha real da Clara parece ser um desses
+  casos). Corrigido preenchendo linhas curtas com `None` até a largura da mais larga da aba antes de
+  montar o DataFrame (`_normalizar_larguras`, `app/excel_reader.py`). Ver `DECISIONS.md`.
+- **Pendente:** revalidar o import via API em produção com a planilha real depois dessa última
+  correção.

@@ -48,6 +48,20 @@ def _find_header_row(rows: list[tuple], required_headers: list[str]) -> int | No
     return None
 
 
+def _normalizar_larguras(rows: list[tuple]) -> list[tuple]:
+    """Em modo `read_only=True` do openpyxl, uma linha sem célula preenchida
+    no fim pode vir "cortada" (tupla mais curta que outras linhas da mesma
+    aba) — o comprimento de cada linha reflete só as células realmente
+    escritas naquele trecho do XML, diferente do modo padrão (que sempre
+    preenche até a última coluna usada na aba inteira). Sem isso, o pandas
+    recusa montar o DataFrame quando linhas têm tamanhos diferentes
+    ("X columns passed, passed data had Y columns")."""
+    if not rows:
+        return rows
+    largura = max(len(r) for r in rows)
+    return [r + (None,) * (largura - len(r)) for r in rows]
+
+
 def load_data_sheets(
     path: str,
     required_headers: list[str],
@@ -71,6 +85,7 @@ def load_data_sheets(
             rows = list(ws.iter_rows(values_only=True))
             if not rows:
                 continue
+            rows = _normalizar_larguras(rows)
             header_idx = _find_header_row(rows, required_headers)
             if header_idx is None:
                 continue
