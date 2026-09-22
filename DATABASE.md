@@ -165,6 +165,63 @@ logs_auditoria
 └── criado_em
 ```
 
+## 6.1 Gestão de Processos (Fase 5 — proposta, aguardando aprovação)
+
+Levantada a partir da planilha real `ELITE - GESTÃO DE PROCESSOS.xlsx` (21 abas: mensais, por
+advogada, e abas "fatais" copiadas manualmente — sinal de que o sistema atual não tem essas
+visões). Cada linha da planilha é um **andamento/evento** dentro de um **processo**, não o processo
+em si (o mesmo processo aparece várias vezes ao longo do tempo, com eventos diferentes).
+
+```
+processos
+├── id
+├── numero_processo     -- formato CNJ, único
+├── empresa_cliente_id  -- FK empresas_clientes (mesma lista já usada em laudos/audiências/cobranças)
+├── nome_cliente         -- pessoa física atendida
+├── advogada             -- texto livre por enquanto (ver nota abaixo)
+├── assistente            -- texto livre por enquanto (ver nota abaixo)
+└── criado_em
+
+tipos_evento                          -- catálogo (igual tipos_laudo), com "Gerenciar valores"
+├── id                                   equivalente pra cadastrar/editar
+├── nome                -- ex.: CUSTAS, DOCUMENTOS, PREPARO DE APELAÇÃO, PROCURAÇÃO...
+└── ativo
+
+eventos_processo                      -- os "andamentos"
+├── id
+├── processo_id         -- FK processos
+├── data                -- data do lançamento do evento
+├── tipo_evento_nome     -- texto livre (resolvido contra tipos_evento por nome, igual laudos)
+├── prazo_fatal          -- bool
+├── data_prazo           -- date; obrigatório quando prazo_fatal = true (decisão da Clara — sem
+│                            isso não dá pra alertar antes de vencer)
+├── resolvido            -- bool, default false
+├── resolvido_em         -- datetime, preenchido quando marcado como resolvido
+├── status_prazo         -- calculado, não gravado: PENDENTE / CUMPRIDO / PERDIDO (ver regra abaixo)
+├── observacao           -- texto livre
+├── criado_por           -- FK usuarios (agora dá pra rastrear — Fase 4 já existe)
+└── criado_em
+```
+
+**Regra de `status_prazo`** (só se aplica quando `prazo_fatal = true`):
+- `resolvido = true` e `resolvido_em <= data_prazo` → **CUMPRIDO**
+- `resolvido = true` e `resolvido_em > data_prazo` → **CUMPRIDO COM ATRASO** (conta como perdido nas
+  métricas, mas fica registrado que foi feito depois)
+- `resolvido = false` e hoje `> data_prazo` → **PERDIDO**
+- `resolvido = false` e hoje `<= data_prazo` → **PENDENTE**
+
+**"Processo parado"**: calculado como dias desde o último `eventos_processo.data` daquele
+`processo_id`. Proposta: considerar "parado" acima de **15 dias sem novo evento** — número
+inicial, ajustável depois que a Clara validar com uso real (não é uma regra que estava documentada
+em lugar nenhum, é uma proposta para começar).
+
+**Nota sobre `advogada`/`assistente` como texto livre, não `usuarios`:** os setores confirmados na
+Fase 4 são `Líder - Gestão de Processos`, `Doutores(as)`, `Admin/dona`, `Financeiro` — não existe um
+setor "Assistente". Como os relatórios pedidos são "por assistente" e nem toda assistente
+necessariamente vai ter login no sistema, mantive como texto livre por enquanto (baixo custo de
+mudar depois para uma FK de `usuarios`, se/quando as assistentes também tiverem conta própria).
+**Sinalizando para a Clara confirmar ou corrigir**, junto com o resto da proposta desta seção.
+
 ## 7. Fora de escopo (confirmado pela Clara, seção 1.9 item 2)
 
 Não haverá tabelas de contas a pagar / fluxo de caixa interno (o equivalente às abas `PAGAMENTOS` /

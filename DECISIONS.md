@@ -157,11 +157,31 @@ exigido pelo prompt mestre antes de qualquer código — não existe hoje nenhum
 documentada sobre esse domínio (ao contrário de laudos/audiências/pendências, que vieram de um
 sistema existente auditável).
 
+## 2026-09-22 — Fase 5: levantamento de requisitos da Gestão de Processos
+
+**Contexto:** módulo sem precedente no sistema atual — nenhum código para auditar. Levantamento
+feito em duas partes: perguntas diretas à Clara (tipo de processo, prioridades, quem usa) e análise
+da planilha real `ELITE - GESTÃO DE PROCESSOS.xlsx` (21 abas, milhares de linhas de andamentos).
+**Decisões resultantes:** ver `ARCHITECTURE.md` seção 3 e `DATABASE.md` seção 6.1 — resumo: data de
+prazo fatal estruturada e obrigatória (para permitir alertas automáticos, que hoje não existem —
+a equipe copia manualmente os itens urgentes para abas "fatais" à parte), `status_prazo` calculado
+(não gravado), "processo parado" proposto como 15 dias sem novo evento (número inicial, ajustável),
+`advogada`/`assistente` como texto livre por ora (não existe setor "Assistente" no modelo de
+permissões da Fase 4), alerta de prazo dentro do sistema + e-mail (WhatsApp fica para depois).
+**Reversível:** é uma proposta ainda não implementada — aguardando aprovação da Clara antes de
+escrever qualquer código (ver plano em `ARCHITECTURE.md` seção 3.4).
+
 ## Pendências abertas
 
-1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6, levar à Clara antes da
-   Fase 5 (Gestão de Processos).
+1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante
+   agora: processos judiciais carregam nome completo + número de processo (pode revelar o tipo de
+   ação). Não foi perguntado explicitamente na Fase 5 — levar à Clara antes de ir para produção
+   com dados reais de processos.
 2. Rate limiting / bloqueio de tentativas de login — sem risco relevante no volume atual, mas fica
    registrado para um refinamento futuro.
 3. `criado_por` em `laudos`/`audiencias`/`cobrancas` (rastreabilidade linha a linha, hoje só o
    import/geração fica no log de auditoria, não cada registro) — `DATABASE.md` seção 9.
+4. Confirmar com a Clara: `advogada`/`assistente` como texto livre em `eventos_processo` (proposta
+   da Fase 5) — ou deveriam ser FK para `usuarios`, exigindo que assistentes também tenham login?
+5. Provedor de e-mail transacional gratuito a escolher para os alertas de prazo (Fase 5) — ainda não
+   avaliado (candidatos: Resend, Brevo — verificar limites reais do free tier antes de decidir).

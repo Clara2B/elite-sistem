@@ -321,3 +321,70 @@ A Clara aprovou as três recomendações:
   em chat/commit).
 - **Fase 2 concluída**: critério de conclusão do prompt mestre ("deploy hello world funcionando no
   ambiente gratuito escolhido, sem nenhuma funcionalidade de negócio ainda") atingido.
+
+## 3. Fase 5 — Gestão de Processos (levantamento e proposta)
+
+Diferente de laudos/audiências/pendências, esse módulo não existe no sistema atual — não havia
+nada para auditar em código. O levantamento foi feito em duas partes: perguntas diretas à Clara e
+análise da planilha real que a equipe usa hoje (`ELITE - GESTÃO DE PROCESSOS.xlsx`).
+
+### 3.1 O que a planilha real revelou
+
+21 abas (mensais, uma por advogada, e abas "fatais" — cópias manuais dos itens urgentes, prova de
+que a equipe já sente falta de um filtro assim no sistema). Volume bem maior que os outros módulos:
+milhares de linhas por mês. Cada linha é um **andamento** de um **processo** (o mesmo processo
+número aparece repetidas vezes, com eventos diferentes ao longo do tempo) — não uma lista de
+processos únicos.
+
+**Achado importante:** a data do prazo fatal, hoje, frequentemente não está num campo separado —
+aparece só dentro do texto da observação (ex.: "fatal 20/07") ou nem é registrada de forma
+estruturada, só uma marcação "SIM"/"FATAL". Isso foi levado à Clara explicitamente porque, sem uma
+data estruturada, não é possível gerar alertas automáticos de prazo — que é a prioridade que ela
+apontou.
+
+### 3.2 Respostas da Clara (Gate de requisitos da Fase 5)
+
+- **Tipo de processo:** processo judicial (ação na Justiça), não fluxo administrativo interno.
+- **Prioridade do módulo:** não perder prazo, e gerar relatórios (individuais por pessoa + geral da
+  equipe).
+- **Quem usa:** setores Líder - Gestão de Processos e Admin/dona.
+- **Data do prazo fatal:** deve ser obrigatória quando o evento for marcado como prazo fatal — sem
+  isso, alertas automáticos não seriam possíveis.
+- **Status de processo (aberto/encerrado):** não é prioridade agora — módulo foca em
+  andamentos/prazos, não em um fluxo formal de abertura/encerramento.
+- **Empresa-cliente:** confirmado — é a mesma lista de ~43 empresas-clientes já cadastrada
+  (laudos/audiências/cobranças), não um cadastro separado.
+- **Tipos de evento:** confirmado como lista mais ou menos fixa (CUSTAS, DOCUMENTOS, PREPARO DE
+  APELAÇÃO, PROCURAÇÃO, SOLICITAR HONORÁRIOS SUCUMBENCIAIS...) — vira catálogo, igual tipos de
+  laudo.
+- **Aviso de prazo:** dentro do sistema **e** por e-mail (WhatsApp fica para avaliar depois — custo/
+  complexidade maior de integrar).
+- **Conteúdo dos relatórios** (pedido literal da Clara): quantidade de processos e eventos por
+  pessoa (assistente), com nome e período; prazos cumpridos vs. perdidos; processos parados e há
+  quanto tempo sem atualização. Gerado por funcionário individual **e** em modo geral (equipe toda).
+  Com o mesmo cabeçalho/identidade visual ELITE dos relatórios já existentes.
+
+### 3.3 Proposta de modelo de dados
+
+Ver `DATABASE.md` seção 6.1 (`processos`, `tipos_evento`, `eventos_processo`, regra de cálculo de
+`status_prazo`, critério proposto de "processo parado" — 15 dias sem novo evento, ajustável).
+
+### 3.4 Plano da Fase 5 (aguardando aprovação para começar a implementar)
+
+- **Objetivo:** portar o controle de processos/prazos da planilha para o sistema, com alertas de
+  prazo e os relatórios pedidos pela Clara (individual + geral, com identidade visual ELITE).
+- **Escopo dentro:** tabelas `processos`/`tipos_evento`/`eventos_processo`; import da planilha atual
+  (mesmo padrão de paridade usado nas Fases 3); endpoints de CRUD de processos/eventos; cálculo de
+  `status_prazo` e "processo parado"; relatório individual e geral (texto + PDF com o cabeçalho
+  ELITE); lista de "prazos próximos" dentro do sistema; envio de e-mail de alerta de prazo (usa
+  algum provedor gratuito de e-mail transacional — a escolher, ex. Resend/Brevo free tier).
+- **Escopo fora:** WhatsApp; fluxo formal de status de processo (aberto/encerrado); frontend visual
+  (API + `/docs`, como nos módulos anteriores).
+- **Dependências:** provedor de e-mail transacional gratuito escolhido e configurado (nova conta a
+  criar, como Supabase/Render antes).
+- **Riscos:** volume real bem maior que os outros módulos (milhares de linhas) — validar performance
+  do import; vocabulário de `tipos_evento` tem cauda longa (muitas variações) — mesmo tratamento já
+  usado em `tipos_laudo` (avisa quando não reconhece, não trava o lançamento).
+- **Critério de conclusão:** import da planilha real validado (contagens batendo), relatório
+  individual e geral gerando com os campos pedidos, alerta de prazo (sistema + e-mail) funcionando
+  para ao menos um cenário de teste.
