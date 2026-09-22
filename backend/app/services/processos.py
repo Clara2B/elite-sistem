@@ -18,15 +18,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.excel_reader import load_data_sheets
-from app.models import EventoProcesso, Processo, TipoEvento, Usuario, UsuarioSetor
+from app.models import EventoProcesso, Processo, TipoEvento
 from app.services.empresas import get_or_create_empresa
 from app.utils import cell_text, normalize, parse_date_cell
-
-# Setores confirmados pela Clara como usuários deste módulo (Fase 4/5) —
-# recebem o e-mail de alerta de prazo. Assistentes/advogadas não têm login
-# (texto livre em Processo), então o alerta vai para quem de fato acessa
-# o sistema. Comparado sempre via normalize() (ignora acento/caixa).
-SETORES_ALERTA = {normalize("Líder - Gestão de Processos"), normalize("Admin/dona")}
 
 REQUIRED_HEADERS = ["CLIENTE", "Nº PROCESSO"]
 CHAVE_DUPLICIDADE = ["Nº PROCESSO", "DATA", "EVENTO", "CLIENTE"]
@@ -340,8 +334,8 @@ class PrazoProximo:
 
 def prazos_proximos(db: Session, dias: int = 7) -> list[PrazoProximo]:
     """Eventos com prazo fatal, não resolvidos, vencendo nos próximos `dias`
-    dias (ou já vencidos) — base tanto do painel "prazos próximos" quanto do
-    e-mail de alerta (ver app/api/processos.py)."""
+    dias (ou já vencidos) — alerta de prazo dentro do sistema (sem envio por
+    e-mail, ver DECISIONS.md)."""
     hoje = date.today()
     limite = hoje + timedelta(days=dias)
     resultado = []
@@ -364,31 +358,3 @@ def prazos_proximos(db: Session, dias: int = 7) -> list[PrazoProximo]:
             )
         )
     return sorted(resultado, key=lambda p: p.data_prazo)
-
-
-def destinatarios_alerta(db: Session) -> list[Usuario]:
-    """Quem recebe o e-mail de prazos próximos: Admin Superior/T.I. (acesso
-    total) + qualquer usuário vinculado aos setores confirmados pela Clara
-    para este módulo (Líder - Gestão de Processos, Admin/dona)."""
-    usuarios: dict[int, Usuario] = {}
-    for usuario in db.scalars(select(Usuario).where(Usuario.ativo.is_(True))):
-        if usuario.papel_global:
-            usuarios[usuario.id] = usuario
-    for vinculo in db.scalars(select(UsuarioSetor)):
-        if normalize(vinculo.setor.nome) in SETORES_ALERTA and vinculo.usuario.ativo:
-            usuarios[vinculo.usuario_id] = vinculo.usuario
-    return list(usuarios.values())
-
-
-def formatar_email_alerta(prazos: list[PrazoProximo]) -> str:
-    if not prazos:
-        return "Nenhum prazo fatal vencendo nos próximos dias. 🎉"
-    linhas = [f"{len(prazos)} prazo(s) fatal(is) próximo(s) ou vencido(s):", ""]
-    for p in prazos:
-        situacao = f"vence em {p.dias_restantes} dia(s)" if p.dias_restantes >= 0 else f"VENCIDO há {-p.dias_restantes} dia(s)"
-        linhas.append(
-            f"- Processo {p.numero_processo} ({p.nome_cliente}) — {p.tipo_evento_nome} — "
-            f"prazo {p.data_prazo.strftime('%d/%m/%Y')} ({situacao}) — "
-            f"assistente: {p.assistente or '-'} | advogada: {p.advogada or '-'}"
-        )
-    return "\n".join(linhas)

@@ -6,6 +6,11 @@ verdade em vez de esperar o token expirar sozinho). Segregação por
 operadora: só `papel_global` (ADMIN_SUPERIOR ou ADMIN_TI) enxerga as duas
 operadoras — qualquer outro usuário fica restrito às operadoras dos setores
 a que pertence (ver ARCHITECTURE.md seção 2.6 e seção 1.9 item 3).
+
+O token é lido via `HTTPBearer` (não um `Header()` genérico) para que o
+FastAPI registre um esquema de segurança no OpenAPI — sem isso, o botão
+"Authorize" não aparece no Swagger (`/docs`), porque ele só é desenhado
+para dependências reconhecidas como autenticação.
 """
 from __future__ import annotations
 
@@ -13,7 +18,8 @@ import secrets
 from datetime import datetime, timedelta
 
 import bcrypt
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -22,6 +28,11 @@ from app.models import Sessao, Usuario, UsuarioSetor
 
 SESSAO_DURACAO_HORAS = 12
 PAPEIS_GLOBAIS = {"ADMIN_SUPERIOR", "ADMIN_TI"}
+
+_bearer_scheme = HTTPBearer(
+    auto_error=False,
+    description="Cole aqui só o token devolvido por POST /auth/login (sem o prefixo 'Bearer').",
+)
 
 
 def hash_senha(senha: str) -> str:
@@ -46,17 +57,16 @@ def criar_sessao(db: Session, usuario: Usuario) -> Sessao:
     return sessao
 
 
-def _extrair_token(authorization: str | None) -> str:
-    if not authorization or not authorization.startswith("Bearer "):
+def _extrair_token(credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme)) -> str:
+    if credentials is None:
         raise HTTPException(status_code=401, detail="Não autenticado. Envie 'Authorization: Bearer <token>'.")
-    return authorization.removeprefix("Bearer ").strip()
+    return credentials.credentials
 
 
 def get_current_user(
-    authorization: str | None = Header(default=None),
+    token: str = Depends(_extrair_token),
     db: Session = Depends(get_db),
 ) -> Usuario:
-    token = _extrair_token(authorization)
     sessao = db.get(Sessao, token)
     if sessao is None or sessao.expira_em < datetime.utcnow():
         raise HTTPException(status_code=401, detail="Sessão inválida ou expirada. Faça login novamente.")

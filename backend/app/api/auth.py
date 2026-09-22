@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -56,11 +56,10 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
 @router.post("/logout")
 def logout(
-    authorization: str | None = Header(default=None),
+    token: str = Depends(_extrair_token),
     usuario: Usuario = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    token = _extrair_token(authorization)
     sessao = db.get(Sessao, token)
     if sessao is not None:
         db.delete(sessao)

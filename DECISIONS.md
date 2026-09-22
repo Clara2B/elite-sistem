@@ -209,7 +209,33 @@ qualquer outro valor vira `false`. Coberto por teste com planilha real gerada em
 (`test_import_prazo_fatal_so_quando_coluna_e_sim`, `openpyxl`), incluindo o caso `"NÃO"`. Ver
 `DATABASE.md` seção 6.1 e `app/services/processos.py::importar_planilha`.
 **Reversível:** sim, é lógica de import; não afeta dado já gravado (o dado real ainda não foi
-importado em produção — pendência 5 abaixo).
+importado em produção — pendência 4 abaixo).
+
+## 2026-09-22 — Fase 5: alerta por e-mail removido; só dentro do sistema
+
+**Contexto:** ao tentar validar a Fase 5 em produção pelo `/docs`, a Clara pediu pra tirar o alerta
+por e-mail do escopo e deixar só o alerta dentro do sistema.
+**Decisão:** removidos `app/email_alertas.py`, a rota `POST /processos/prazos-proximos/notificar`,
+as funções `destinatarios_alerta`/`formatar_email_alerta` e as variáveis de configuração
+`RESEND_API_KEY`/`RESEND_EMAIL_REMETENTE`. O painel `GET /processos/prazos-proximos` (alerta dentro
+do sistema) continua como estava — não dependia do e-mail.
+**Reversível:** sim, é uma extensão futura de baixo esforço reintroduzir o envio por e-mail (a
+lógica de "quem recebe" e "como formatar" pode ser recriada do zero ou recuperada do histórico do
+git) se a prioridade mudar.
+
+## 2026-09-22 — Corrige botão "Authorize" ausente no `/docs`
+
+**Contexto:** a Clara não estava achando o botão "Authorize" no Swagger (`/docs`) pra colar o token
+de login, travando a validação manual da Fase 5 em produção. Causa raiz: `get_current_user`
+(`app/auth.py`) lia o cabeçalho `Authorization` via `Header()` genérico — o FastAPI só desenha o
+botão "Authorize" para dependências que declaram um esquema de segurança reconhecido (OAuth2,
+API key, HTTP Bearer/Basic), então esse botão nunca existiu em nenhuma fase, mesmo com o `README.md`
+descrevendo como se existisse.
+**Correção:** trocado por `fastapi.security.HTTPBearer`, que registra o esquema no OpenAPI. Sem
+mudança de comportamento pra quem já chama a API via `curl`/Postman com o cabeçalho manual — só
+muda a experiência dentro do `/docs`, que agora tem o cadeado de verdade. `README.md` atualizado com
+o passo a passo (colar só o token, sem o prefixo "Bearer").
+**Reversível:** sim, mudança de infraestrutura de auth, sem impacto em dado.
 
 ## Pendências abertas
 
@@ -221,8 +247,5 @@ importado em produção — pendência 5 abaixo).
    registrado para um refinamento futuro.
 3. `criado_por` em `laudos`/`audiencias`/`cobrancas` (rastreabilidade linha a linha, hoje só o
    import/geração fica no log de auditoria, não cada registro) — `DATABASE.md` seção 9.
-4. Configurar `RESEND_API_KEY`/`RESEND_EMAIL_REMETENTE` no Render (Resend escolhido como provedor de
-   e-mail transacional, free tier) — sem isso, o alerta por e-mail da Fase 5 fica desligado
-   silenciosamente; o painel "prazos próximos" dentro do sistema não depende disso.
-5. Validar o import de Gestão de Processos (Fase 5) via API já em produção, com a planilha real da
+4. Validar o import de Gestão de Processos (Fase 5) via API já em produção, com a planilha real da
    Clara — a validação até aqui foi só local.

@@ -18,12 +18,6 @@ class Settings(BaseSettings):
     # essas variáveis do Render sem afetar nada.
     admin_bootstrap_email: str | None = None
     admin_bootstrap_senha: str | None = None
-    # Fase 5: alerta de prazo por e-mail (Gestão de Processos). Sem essas
-    # variáveis, o envio de e-mail fica desligado (silenciosamente) — o
-    # painel "prazos próximos" dentro do sistema continua funcionando de
-    # qualquer forma. Ver README.md e SECURITY.md.
-    resend_api_key: str | None = None
-    resend_email_remetente: str | None = None
 
 
 settings = Settings()

@@ -3,7 +3,7 @@
 API do novo sistema (FastAPI), decisão D2 em `../ARCHITECTURE.md`. Laudos, audiências e cobrança de
 pendências portados do sistema atual (`leitor-relatorio`), persistindo no banco. Login individual,
 setores/operadoras e segregação de acesso implementados (Fase 4). Gestão de Processos (Fase 5)
-ainda não existe.
+implementada.
 
 ## Autenticação
 
@@ -25,10 +25,24 @@ troque a senha em seguida (`POST /auth/senha`); dali em diante, crie o resto da 
 - `POST /laudos/import`, `GET /laudos/relatorio`, `GET /laudos/relatorio.pdf` — exige acesso à ELITE
 - `POST /audiencias/import`, `GET /audiencias/relatorio`, `GET /audiencias/relatorio.pdf` — exige acesso à EXIMIA
 - `POST /pendencias/import` (login), `GET /pendencias/mensagens` (filtra pelas operadoras que o usuário acessa)
+- `POST /processos/import`, `GET /processos/relatorio`, `GET /processos/relatorio.pdf`,
+  `GET /processos/prazos-proximos`, `POST /processos/eventos/{id}/resolver` — exige acesso à ELITE.
+  Alerta de prazo fica só dentro do sistema (painel `/processos/prazos-proximos`), sem envio por
+  e-mail — ver `DECISIONS.md`.
 
 Os `/import` recebem a planilha `.xlsx` (`multipart/form-data`, campo `arquivo`) — mesmo formato
-aceito hoje pelo `leitor-relatorio`. Documentação interativa em `/docs` quando o servidor está
-rodando (inclui um botão "Authorize" para colar o token).
+aceito hoje pelo `leitor-relatorio`.
+
+## Testando pelo `/docs`
+
+Documentação interativa em `/docs` quando o servidor está rodando, com um botão **Authorize**
+(cadeado no canto superior direito da página) para autenticar as chamadas seguintes:
+
+1. Abra `POST /auth/login`, clique em "Try it out", preencha e-mail/senha e execute. Copie o valor
+   de `token` da resposta.
+2. Clique em **Authorize** e cole **só o token**, sem o prefixo `Bearer` (o Swagger acrescenta
+   sozinho) — depois clique em "Authorize" de novo e "Close".
+3. A partir daí, toda rota testada pelo `/docs` já sai autenticada.
 
 ## Rodar localmente
 

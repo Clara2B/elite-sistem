@@ -357,8 +357,9 @@ apontou.
 - **Tipos de evento:** confirmado como lista mais ou menos fixa (CUSTAS, DOCUMENTOS, PREPARO DE
   APELAÇÃO, PROCURAÇÃO, SOLICITAR HONORÁRIOS SUCUMBENCIAIS...) — vira catálogo, igual tipos de
   laudo.
-- **Aviso de prazo:** dentro do sistema **e** por e-mail (WhatsApp fica para avaliar depois — custo/
-  complexidade maior de integrar).
+- **Aviso de prazo:** inicialmente pedido como dentro do sistema **e** por e-mail (WhatsApp fica para
+  avaliar depois); na implementação, a Clara decidiu deixar só o alerta dentro do sistema por
+  enquanto — ver §3.5 e `DECISIONS.md`.
 - **Conteúdo dos relatórios** (pedido literal da Clara): quantidade de processos e eventos por
   pessoa (assistente), com nome e período; prazos cumpridos vs. perdidos; processos parados e há
   quanto tempo sem atualização. Gerado por funcionário individual **e** em modo geral (equipe toda).
@@ -395,12 +396,15 @@ Aprovado e implementado depois da confirmação da Clara de que `advogada`/`assi
 texto livre no `Processo` (sem login — só os líderes acessam o sistema; ver `DECISIONS.md`).
 
 - **Construído:** modelos `Processo`/`TipoEvento`/`EventoProcesso`; `app/services/processos.py`
-  (import, `status_prazo`, `gerar_relatorio`, `prazos_proximos`, alerta por e-mail); rotas em
-  `app/api/processos.py` (`POST /processos/import`, `GET /processos/relatorio`(`.pdf`),
-  `GET /processos/prazos-proximos`, `POST /processos/prazos-proximos/notificar`,
+  (import, `status_prazo`, `gerar_relatorio`, `prazos_proximos`); rotas em `app/api/processos.py`
+  (`POST /processos/import`, `GET /processos/relatorio`(`.pdf`), `GET /processos/prazos-proximos`,
   `POST /processos/eventos/{id}/resolver`), todas restritas à operadora ELITE; `gerar_pdf_processos`
-  reaproveitando a folha timbrada dos laudos; `app/email_alertas.py` (Resend, no-op silencioso sem
-  `RESEND_API_KEY`/`RESEND_EMAIL_REMETENTE` configurados).
+  reaproveitando a folha timbrada dos laudos.
+- **Alerta por e-mail implementado e depois removido:** a primeira versão incluía envio por e-mail
+  (Resend) — a Clara decidiu deixar só o alerta dentro do sistema (`GET /processos/prazos-proximos`)
+  por ora. `app/email_alertas.py`, a rota `POST /processos/prazos-proximos/notificar` e as
+  variáveis `RESEND_API_KEY`/`RESEND_EMAIL_REMETENTE` foram removidos; ver `DECISIONS.md`. Fica como
+  extensão futura de baixo esforço se a prioridade mudar.
 - **Import validado contra a planilha real** (`ELITE - GESTÃO DE PROCESSOS.xlsx`, 21 abas, 51.116
   linhas brutas): 44.333 eventos novos importados, 5.636 processos distintos, 6.303 marcados como
   `prazo_fatal`. 6.278 linhas descartadas por não bater com o formato CNJ de número de processo
@@ -421,7 +425,12 @@ texto livre no `Processo` (sem login — só os líderes acessam o sistema; ver 
   explicitamente via API — não há tentativa de adivinhar a data por regex no texto histórico.
   Também esperado: uma fração grande dos processos aparece como "(sem assistente informado)" no
   relatório — várias abas da planilha real não têm uma coluna `ASSISTENTE` utilizável.
-- **Testes:** 49/49 passando (`pytest -q`), `ruff check .` limpo.
-- **Pendente:** validar o import via API já em produção (Render), com a planilha real da Clara;
-  configurar conta Resend (ou outro provedor) se ela quiser o alerta por e-mail ativo — sem isso, o
-  painel "prazos próximos" dentro do sistema continua funcionando normalmente.
+- **Testes:** 50/50 passando (`pytest -q`), `ruff check .` limpo.
+- **Ajuste na regra de `prazo_fatal`:** a versão original marcava fatal qualquer célula não-vazia na
+  coluna `PRAZO FATAL` (`bool(texto)`) — um `"NÃO"` escrito à mão contaria como fatal. Corrigido
+  depois de perguntar à Clara: só `SIM` (normalizado) marca o evento como fatal. Ver `DECISIONS.md`.
+- **Correção de usabilidade do `/docs`:** o login usava um `Header()` genérico para ler o
+  `Authorization`, o que não registra esquema de segurança no OpenAPI — o botão "Authorize" do
+  Swagger não aparecia. Trocado por `fastapi.security.HTTPBearer` (`app/auth.py`), sem mudar o
+  formato do token na prática; passo a passo em `backend/README.md`.
+- **Pendente:** validar o import via API já em produção (Render), com a planilha real da Clara.

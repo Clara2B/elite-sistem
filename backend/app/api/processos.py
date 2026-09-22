@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 from app.api._shared import salvar_temp
 from app.auth import require_operadora
 from app.db import get_db
-from app.email_alertas import enviar_email
 from app.models import Usuario
 from app.pdf_export import gerar_pdf_processos
 from app.services import processos as processos_service
@@ -83,30 +82,10 @@ def prazos_proximos(
     usuario: Usuario = Depends(_acesso_elite),
     db: Session = Depends(get_db),
 ):
+    """Alerta de prazo dentro do sistema — lista de eventos com prazo fatal
+    vencendo nos próximos `dias` dias (ou já vencidos). Sem envio por
+    e-mail (decisão da Clara, ver DECISIONS.md)."""
     return processos_service.prazos_proximos(db, dias)
-
-
-@router.post("/prazos-proximos/notificar")
-def notificar_prazos(
-    dias: int = 7,
-    usuario: Usuario = Depends(_acesso_elite),
-    db: Session = Depends(get_db),
-):
-    """Envia e-mail com os prazos próximos para quem usa este módulo (ver
-    SETORES_ALERTA). Sem RESEND_API_KEY configurado, não envia nada — só
-    devolve a lista, sem erro (ver app/email_alertas.py)."""
-    prazos = processos_service.prazos_proximos(db, dias)
-    corpo = processos_service.formatar_email_alerta(prazos)
-    destinatarios = processos_service.destinatarios_alerta(db)
-    enviados = []
-    for destinatario in destinatarios:
-        if enviar_email(destinatario.email, f"Elite Sistem — {len(prazos)} prazo(s) próximo(s)", corpo):
-            enviados.append(destinatario.email)
-    registrar(
-        db, usuario, "NOTIFICOU_PRAZOS_PROCESSOS", entidade="processo",
-        detalhes=f"{len(prazos)} prazos, {len(enviados)}/{len(destinatarios)} e-mails enviados",
-    )
-    return {"prazos": len(prazos), "destinatarios": len(destinatarios), "emails_enviados": enviados}
 
 
 @router.post("/eventos/{evento_id}/resolver")
