@@ -29,6 +29,20 @@ _engine = None
 _SessionLocal: sessionmaker | None = None
 
 
+def _normalizar_url(url: str) -> str:
+    """Garante que a URL do Postgres use o driver `psycopg` (v3), que é o
+    instalado em requirements.txt. Sem isso, uma URL comum
+    (`postgresql://...`, como a que o Supabase fornece) faz o SQLAlchemy
+    tentar o driver antigo `psycopg2` por padrão — que não instalamos —
+    e o servidor não sobe (`ModuleNotFoundError: No module named 'psycopg2'`).
+    URLs de SQLite (usadas nos testes) passam direto, sem alteração."""
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+    if url.startswith("postgresql://"):
+        url = "postgresql+psycopg://" + url[len("postgresql://"):]
+    return url
+
+
 def get_engine():
     global _engine
     if _engine is None:
@@ -36,7 +50,7 @@ def get_engine():
             raise RuntimeError(
                 "DATABASE_URL não configurado. Defina a variável de ambiente antes de usar o banco."
             )
-        _engine = create_engine(settings.database_url, pool_pre_ping=True)
+        _engine = create_engine(_normalizar_url(settings.database_url), pool_pre_ping=True)
     return _engine
 
 
