@@ -41,7 +41,23 @@ repositório sem acesso de escrita explicitamente concedido e autorização dire
   avaliar necessidade de criptografia em repouso ou mascaramento em tela conforme o provedor de
   banco escolhido permitir, na Fase 4.
 
-## 4. Em aberto (a decidir nas próximas fases)
+## 4. Segredos vs. dados públicos do Supabase (registro, 2026-09-22)
+
+Ao configurar o projeto Supabase, a Clara compartilhou no chat a URL do projeto e a
+*publishable key* (`sb_publishable_...`). **Isso não é um incidente**: essas duas informações são
+feitas para ser públicas (a publishable key é o equivalente atual da antiga *anon key* — protegida
+por Row Level Security no banco, não por sigilo). Registrando aqui só para deixar claro, daqui pra
+frente, o que É segredo de verdade e nunca deve ser colado em chat/commit:
+
+- **Connection string do Postgres** (inclui a senha do banco) — Settings → Database no Supabase.
+- **`service_role` key** — dá acesso total ao banco, ignorando RLS.
+- Qualquer coisa que o próprio painel do provedor rotular como "secret"/"senha".
+
+Esses valores devem ser inseridos **diretamente no painel do provedor de hospedagem** (Render, nas
+variáveis de ambiente do serviço) quando chegar a hora (Fase 3, quando o backend passar a acessar o
+banco de verdade) — nunca aqui no chat.
+
+## 5. Em aberto (a decidir nas próximas fases)
 
 - Política de retenção de dados pessoais (LGPD: por quanto tempo manter CPF/nome de clientes após o
   processo encerrado?) — pergunta de negócio, não técnica; levar à Clara antes da Fase 4.

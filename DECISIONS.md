@@ -65,6 +65,20 @@ e justificativas em `ARCHITECTURE.md` seção 2.
 **Reversível:** D1 e D3 são reversíveis com esforço baixo/médio; D2 (frontend) é a mais cara de
 reverter depois — decidida com essa ressalva já exposta e aceita.
 
+## 2026-09-22 — Supabase usado só como Postgres gerenciado, não como Auth/SDK do lado do backend
+
+**Contexto:** ao criar o projeto Supabase, a Clara recebeu da própria Supabase um passo a passo de
+integração para **Next.js** (pacotes `@supabase/supabase-js`/`@supabase/ssr`, cookies de sessão,
+`middleware.ts`). Isso não se aplica ao nosso backend, que é Python/FastAPI (decisão D2).
+**Decisão:** usar o Supabase só pelo que já foi decidido em D3 — Postgres gerenciado (connection
+string) — e manter a autenticação implementada no próprio backend FastAPI (login individual, hash
+de senha, papéis por setor/operadora), como já definido em D1/D2. Isso não muda nenhuma decisão já
+aprovada, só esclarece a implementação: não vamos usar o SDK/Auth do Supabase do lado do backend.
+**Reversível:** sim, é só uma escolha de biblioteca/integração, não afeta o schema.
+**Nota de segurança relacionada:** ver `SECURITY.md` seção 4 sobre o que é seguro compartilhar do
+Supabase (URL/publishable key) vs. o que nunca deve ir para o chat (connection string com senha,
+service_role key).
+
 ## Pendências abertas
 
 1. Lista real dos setores (nomes) — não bloqueia o schema (`setores` é genérico), mas precisa ser
