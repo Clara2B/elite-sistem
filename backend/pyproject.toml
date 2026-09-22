@@ -1,0 +1,4 @@
+[tool.ruff.lint]
+# B008: "function call in default argument" — é o padrão idiomático de
+# injeção de dependência do FastAPI (Depends(...)), não um bug.
+ignore = ["B008"]

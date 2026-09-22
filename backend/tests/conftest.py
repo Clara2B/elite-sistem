@@ -1,0 +1,36 @@
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from app.db import DEFAULT_FAIXAS_AUDIENCIA, DEFAULT_TIPOS_LAUDO
+from app.models import Base, FaixaAudiencia, TipoLaudo
+
+
+@pytest.fixture()
+def db():
+    """Sessão contra um SQLite em memória — mais rápido que subir um
+    Postgres no CI, e o schema (tipos simples, sem recursos exclusivos de
+    Postgres) é totalmente compatível entre os dois."""
+    # check_same_thread=False + StaticPool: o TestClient da FastAPI roda a
+    # app numa thread separada da do teste, e um SQLite ":memory:" comum cria
+    # um banco novo (vazio) a cada conexão do pool — StaticPool força reusar
+    # a mesma conexão/banco em memória entre as duas threads (padrão
+    # recomendado pela própria SQLAlchemy para testar com SQLite em memória).
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+    session = session_factory()
+    for nome, valor in DEFAULT_TIPOS_LAUDO.items():
+        session.add(TipoLaudo(nome=nome, valor_padrao=valor))
+    for inicio, fim, valor in DEFAULT_FAIXAS_AUDIENCIA:
+        session.add(FaixaAudiencia(inicio=inicio, fim=fim, valor=valor))
+    session.commit()
+    try:
+        yield session
+    finally:
+        session.close()

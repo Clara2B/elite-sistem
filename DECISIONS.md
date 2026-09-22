@@ -90,6 +90,30 @@ domínios externos como `onrender.com`, então a verificação final foi feita p
 Supabase fica provisionado mas sem conexão ativa até a Fase 3 precisar de fato gravar dados.
 **Reversível:** sim, é infraestrutura, não dado nem schema.
 
+## 2026-09-22 — Fase 3: laudos/audiências/pendências portados e validados
+
+**Contexto:** implementação da Fase 3 (ver plano apresentado no chat): backend conectado ao
+Supabase, lógica de `core/laudos.py`, `core/audiencias.py`, `core/pendencias.py` (leitor-relatorio)
+portada para `backend/app/services/`, agora persistindo em banco em vez de recalcular a cada
+upload. Endpoints de import (`.xlsx`) e de geração de relatório (texto + PDF) criados para os três
+fluxos.
+**Validação de paridade** (critério de conclusão da Fase 3) rodada contra os dados reais que a
+Clara enviou: **272/272 combinações empresa×período de audiências** e **18/18 empresas com
+pendência** batendo exatamente com a saída do `leitor-relatorio` para as mesmas planilhas. Laudos
+validado com dados sintéticos (nenhuma das duas planilhas de exemplo tem `TIPO DE LAUDO`).
+**Bug real encontrado durante a validação:** células vazias (`PAGO`, `DATA`) viravam o texto `"nan"`
+em vez de `None` ao serem importadas (pandas representa célula vazia como `NaN`/`NaT`, não `None`) —
+isso fazia uma pendência já paga (`PAGO` em branco) ser contada como pendente por engano.
+Corrigido com `cell_text()` em `app/utils.py`, com teste de regressão. Esse mesmo padrão de bug foi
+corrigido nos três serviços (laudos, audiências, pendências) antes de fechar a Fase 3 — nenhum dos
+três tinha esse tratamento até a validação com dados reais expor o problema em pendências.
+**Decisão de modelagem:** `laudos.tipo_laudo_nome` ficou como texto livre (não FK para
+`tipos_laudo`) e o valor é resolvido por nome normalizado no momento da geração do relatório, não
+congelado no lançamento — mantém o mesmo comportamento do sistema atual (avisar tipo sem valor
+cadastrado, mas não travar o relatório). Documentado em `DATABASE.md` seção 3.
+**Reversível:** os ajustes de modelagem são simplificações registradas, não perdas de dado — dá para
+migrar para FK/valor congelado depois se necessário.
+
 ## Pendências abertas
 
 1. Lista real dos setores (nomes) — não bloqueia o schema (`setores` é genérico), mas precisa ser
