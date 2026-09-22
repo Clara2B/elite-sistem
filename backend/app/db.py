@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Generator
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -53,15 +52,24 @@ def _normalizar_url(url: str) -> str:
     recusa a conexão se ela vier na URL
     (`invalid connection option "pgbouncer"`).
 
+    Importante: a remoção do `pgbouncer` é feita com manipulação de texto
+    simples (partir a string em "?"/"&"), **sem** usar `urllib.parse.urlsplit`
+    para reanalisar a URL inteira — o parser da stdlib (a partir do Python
+    3.14, usado no Render) passou a validar mais rigorosamente o "host" da
+    URL e derruba o app (`ValueError: ... does not appear to be an IPv4 or
+    IPv6 address`) quando a senha do banco tem certos caracteres especiais
+    (comuns em senhas geradas pelo Supabase). Texto puro evita reanalisar
+    (e potencialmente rejeitar) a parte de usuário/senha/host da URL.
+
     URLs de SQLite (usadas nos testes) passam direto, sem alteração."""
     if url.startswith("postgres://"):
         url = "postgresql://" + url[len("postgres://"):]
-    if url.startswith(("postgresql://", "postgresql+psycopg://")):
-        if url.startswith("postgresql://"):
-            url = "postgresql+psycopg://" + url[len("postgresql://"):]
-        partes = urlsplit(url)
-        query = [(k, v) for k, v in parse_qsl(partes.query, keep_blank_values=True) if k.lower() != "pgbouncer"]
-        url = urlunsplit((partes.scheme, partes.netloc, partes.path, urlencode(query), partes.fragment))
+    if url.startswith("postgresql://"):
+        url = "postgresql+psycopg://" + url[len("postgresql://"):]
+    if url.startswith("postgresql+psycopg://") and "?" in url:
+        base, _, query = url.partition("?")
+        params = [p for p in query.split("&") if p and p.split("=", 1)[0].lower() != "pgbouncer"]
+        url = base + ("?" + "&".join(params) if params else "")
     return url
 
 
