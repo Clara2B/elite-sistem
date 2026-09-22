@@ -145,6 +145,18 @@ Admin Superior via variáveis de ambiente. 37 testes automatizados (unitários +
 **Reversível:** o schema pode evoluir (ex.: adicionar `operadora_id` depois, se algum dia deixar de
 ser verdade que toda empresa-cliente atende as duas operadoras) sem perda de dado.
 
+## 2026-09-22 — Fase 4 validada em produção; início da Fase 5
+
+**Contexto:** depois de alguns problemas reais de infraestrutura no caminho (driver Postgres, URL do
+pooler do Supabase quebrando o parser do Python 3.14, senha do banco com caractere reservado `@`,
+connection string de "Direct connection" — IPv6, incompatível com o Render — em vez de "Session
+pooler"), o deploy ficou estável e a Clara confirmou ter conseguido cadastrar os usuários principais
+direto pela API em produção. Fase 4 encerrada.
+**Decisão:** seguir para a Fase 5 (Gestão de Processos), começando pelo levantamento de requisitos
+exigido pelo prompt mestre antes de qualquer código — não existe hoje nenhuma regra de negócio
+documentada sobre esse domínio (ao contrário de laudos/audiências/pendências, que vieram de um
+sistema existente auditável).
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6, levar à Clara antes da
