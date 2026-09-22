@@ -114,6 +114,17 @@ cadastrado, mas não travar o relatório). Documentado em `DATABASE.md` seção 
 **Reversível:** os ajustes de modelagem são simplificações registradas, não perdas de dado — dá para
 migrar para FK/valor congelado depois se necessário.
 
+## 2026-09-22 — Fase 3 validada em produção
+
+**Contexto:** primeiro deploy real após conectar o `DATABASE_URL` do Supabase falhou no startup
+(`ModuleNotFoundError: No module named 'psycopg2'`) — a connection string do Supabase vem no
+formato genérico `postgresql://`, e o SQLAlchemy tenta o driver `psycopg2` por padrão nesse caso,
+mas só `psycopg` (v3) estava instalado.
+**Decisão:** normalizar a URL em `app/db.py` para sempre usar `postgresql+psycopg://`
+independente do formato recebido, com testes cobrindo os formatos possíveis. Corrigido, deploy
+confirmado funcionando (`/health` respondendo em produção, conectado ao Supabase real).
+**Fase 3 encerrada.**
+
 ## Pendências abertas
 
 1. Lista real dos setores (nomes) — não bloqueia o schema (`setores` é genérico), mas precisa ser
