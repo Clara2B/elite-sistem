@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.excel_reader import load_data_sheets
-from app.models import EventoProcesso, Processo, TipoEvento
+from app.models import EmpresaCliente, EventoProcesso, Processo, TipoEvento
 from app.services.empresas import get_or_create_empresa
 from app.utils import cell_text, normalize, parse_date_cell
 
@@ -104,6 +104,10 @@ def importar_planilha(db: Session, path: str, usuario_id: int | None = None) -> 
         (e.processo_id, e.data, normalize(e.tipo_evento_nome))
         for e in db.scalars(select(EventoProcesso))
     }
+    # Cache de empresa-cliente pro import inteiro (ver docstring de
+    # get_or_create_empresa) — sem isso, cada uma das dezenas de milhares de
+    # linhas faria uma consulta ao banco só pra resolver ~43 empresas fixas.
+    empresa_cache: dict[str, EmpresaCliente] = {}
 
     resumo = ImportResumo()
     for _, row in df.iterrows():
@@ -125,7 +129,7 @@ def importar_planilha(db: Session, path: str, usuario_id: int | None = None) -> 
         if data_val is None:
             continue  # sem data não dá pra colocar no relatório por período
 
-        empresa = get_or_create_empresa(db, empresa_nome)
+        empresa = get_or_create_empresa(db, empresa_nome, cache=empresa_cache)
 
         processo = processos_existentes.get(numero)
         if processo is None:
@@ -178,6 +182,14 @@ def importar_planilha(db: Session, path: str, usuario_id: int | None = None) -> 
         )
         eventos_existentes.add(chave)
         resumo.linhas_novas += 1
+
+        # Planilha real tem dezenas de milhares de linhas — sem isso, tudo
+        # fica pendente numa única transação/sessão gigante até o fim do
+        # loop, o que pesa memória e mantém uma transação aberta por muito
+        # tempo no pooler do Supabase. Seguro fazer aqui: nenhuma exceção é
+        # levantada dentro do loop por dado ruim (só contadores e "continue").
+        if resumo.linhas_novas % 2000 == 0:
+            db.commit()
 
     db.commit()
     return resumo

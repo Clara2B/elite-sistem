@@ -54,31 +54,42 @@ def load_data_sheets(
     chave_duplicidade: list[str] | None = None,
 ) -> pd.DataFrame:
     """Lê todas as abas do arquivo que contenham as colunas exigidas e devolve
-    tudo empilhado num único DataFrame, com uma coluna extra '_ABA'."""
-    wb = openpyxl.load_workbook(path, data_only=True)
-    frames = []
-    for sheet_name in wb.sheetnames:
-        ws = wb[sheet_name]
-        rows = list(ws.iter_rows(values_only=True))
-        if not rows:
-            continue
-        header_idx = _find_header_row(rows, required_headers)
-        if header_idx is None:
-            continue
-        header = [
-            _canonical_header(c) if c is not None else f"col_{i}"
-            for i, c in enumerate(rows[header_idx])
-        ]
-        seen: dict[str, int] = {}
-        cols = []
-        for h in header:
-            seen[h] = seen.get(h, 0) + 1
-            cols.append(h if seen[h] == 1 else f"{h}_{seen[h]}")
-        data_rows = rows[header_idx + 1:]
-        df = pd.DataFrame(data_rows, columns=cols)
-        df["_ABA"] = sheet_name
-        df = df.dropna(how="all", subset=[c for c in cols if c != "_ABA"])
-        frames.append(df)
+    tudo empilhado num único DataFrame, com uma coluna extra '_ABA'.
+
+    `read_only=True`: o modo padrão do openpyxl carrega a planilha inteira
+    como objetos Python na memória, o que fica pesado em planilhas com
+    dezenas de milhares de linhas (ex.: Gestão de Processos, Fase 5) —
+    plausível causa de estourar a memória do plano gratuito do Render. Modo
+    somente leitura lê linha a linha, sem esse custo; só leitura de valor
+    de célula (`iter_rows(values_only=True)`) é usada aqui, então não perde
+    nada."""
+    wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
+    try:
+        frames = []
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            rows = list(ws.iter_rows(values_only=True))
+            if not rows:
+                continue
+            header_idx = _find_header_row(rows, required_headers)
+            if header_idx is None:
+                continue
+            header = [
+                _canonical_header(c) if c is not None else f"col_{i}"
+                for i, c in enumerate(rows[header_idx])
+            ]
+            seen: dict[str, int] = {}
+            cols = []
+            for h in header:
+                seen[h] = seen.get(h, 0) + 1
+                cols.append(h if seen[h] == 1 else f"{h}_{seen[h]}")
+            data_rows = rows[header_idx + 1:]
+            df = pd.DataFrame(data_rows, columns=cols)
+            df["_ABA"] = sheet_name
+            df = df.dropna(how="all", subset=[c for c in cols if c != "_ABA"])
+            frames.append(df)
+    finally:
+        wb.close()  # modo read_only mantém o arquivo aberto até fechar explicitamente
     if not frames:
         return pd.DataFrame()
     resultado = pd.concat(frames, ignore_index=True)

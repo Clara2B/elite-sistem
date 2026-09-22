@@ -237,6 +237,30 @@ muda a experiência dentro do `/docs`, que agora tem o cadeado de verdade. `READ
 o passo a passo (colar só o token, sem o prefixo "Bearer").
 **Reversível:** sim, mudança de infraestrutura de auth, sem impacto em dado.
 
+## 2026-09-22 — Import de processos em produção deu 502; corrigido N+1 de empresa-cliente, causa raiz não confirmada
+
+**Contexto:** ao testar `POST /processos/import` em produção com a planilha real, a Clara recebeu
+`502 Bad Gateway` (erro do proxy do Render, não da nossa aplicação — sinal de processo travado ou
+sem resposta a tempo, não uma exceção tratada). Investigando o código antes de arriscar um palpite:
+encontrei que `get_or_create_empresa` (usada por todo import, `app/services/empresas.py`) faz uma
+consulta ao banco percorrendo **todas** as empresas-clientes **a cada linha** — no import de
+processos, isso significa uma ida-e-volta à rede (Supabase, via pooler) repetida para cada evento
+processado, quando existem só ~43 empresas fixas no total. Em laudos/audiências/pendências isso
+nunca doeu (poucas centenas/milhares de linhas por import); em processos, com um volume bem maior,
+pode ser o suficiente pra estourar o tempo de resposta.
+**Correção aplicada:** `get_or_create_empresa` ganhou um parâmetro `cache` opcional (dict
+compartilhado durante o loop); `importar_planilha` (Fase 5) monta esse cache uma vez e reaproveita
+em todas as linhas — elimina a consulta repetida para empresas já vistas. Também troquei o
+`openpyxl.load_workbook` de `excel_reader.py` para `read_only=True` (bem mais leve em memória para
+planilhas grandes) e passei a commitar a cada 2.000 linhas novas no import de processos, em vez de
+uma única transação gigante no final.
+**Importante — ainda não confirmado:** a Clara questionou o número "44.333 linhas" que eu tinha
+reportado (validação local rodada antes da compactação do contexto desta sessão) — ela está vendo
+uma aba com só ~2.500 linhas. Preciso confirmar com ela se o arquivo testado em produção é o mesmo
+de 21 abas (44.333 é a soma de todas, não de uma aba só) ou um arquivo menor/diferente, porque isso
+muda se o N+1 acima é de fato a causa do 502 ou só uma melhoria correta encontrada no caminho.
+**Reversível:** sim, mudanças de performance sem alteração de comportamento/dado.
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante
