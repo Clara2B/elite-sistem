@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import settings
@@ -139,10 +139,27 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
+def _garantir_coluna(engine, tabela: str, coluna: str, tipo_sql: str) -> None:
+    """Adiciona uma coluna nova a uma tabela que já existe em produção — o
+    projeto não usa uma ferramenta de migração (Alembic); `create_all` só
+    cria tabelas que ainda não existem, não altera as existentes. Sem isso,
+    um campo novo (ex.: `mes_referencia`) some silenciosamente num banco já
+    provisionado (Render/Supabase), mesmo depois do deploy do código novo."""
+    inspector = inspect(engine)
+    if not inspector.has_table(tabela):
+        return  # create_all acima já criou a tabela com a coluna certa
+    colunas = {c["name"] for c in inspector.get_columns(tabela)}
+    if coluna not in colunas:
+        with engine.begin() as conn:
+            conn.execute(text(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {tipo_sql}"))
+
+
 def init_db() -> None:
     """Cria as tabelas (se não existirem) e semeia valores padrão, igual ao
     comportamento do core/db.py do sistema atual na primeira execução."""
-    Base.metadata.create_all(get_engine())
+    engine = get_engine()
+    Base.metadata.create_all(engine)
+    _garantir_coluna(engine, "eventos_processo", "mes_referencia", "VARCHAR(20)")
     session_factory = get_session_factory()
     with session_factory() as db:
         if db.scalar(select(TipoLaudo.id).limit(1)) is None:

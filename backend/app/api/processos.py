@@ -104,4 +104,5 @@ def resolver_evento(
         "resolvido": evento.resolvido,
         "resolvido_em": evento.resolvido_em,
         "status_prazo": processos_service.status_prazo(evento),
+        "mes_referencia": evento.mes_referencia,
     }

@@ -192,6 +192,9 @@ eventos_processo                      -- os "andamentos"
 ├── processo_id         -- FK processos
 ├── data                -- data do lançamento do evento
 ├── tipo_evento_nome     -- texto livre (resolvido contra tipos_evento por nome, igual laudos)
+├── mes_referencia       -- ex. "SETEMBRO/2026" — extraído do nome da aba de origem na planilha
+│                            (não de `data`); None quando a aba não é nomeada por mês. Só
+│                            informativo (aparece no painel de prazos), não filtra nem trava nada.
 ├── prazo_fatal          -- bool
 ├── data_prazo           -- date; obrigatório quando prazo_fatal = true (decisão da Clara — sem
 │                            isso não dá pra alertar antes de vencer)

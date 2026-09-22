@@ -48,6 +48,35 @@ def _pessoa_valida(texto: str) -> str | None:
     return texto
 
 
+# Nome de mês -> abreviação de 2 dígitos do ano é como as abas reais são
+# nomeadas (ex. "SETEMBRO", "SETEMBRO26", "JUNHO 2026", "OUTUBRO-26").
+# Confirmado pela Clara: o mês de referência vem do nome da aba, não de uma
+# coluna. Abas que não são nomeadas por mês (ex. "DOCS E CUSTAS", abas
+# "fatais") não batem com o regex — ficam sem mês de referência, sem travar
+# o import (mesmo espírito das outras checagens de sanidade deste módulo).
+_MESES = (
+    "JANEIRO", "FEVEREIRO", "MARCO", "ABRIL", "MAIO", "JUNHO",
+    "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO",
+)
+_RE_ABA_MES = re.compile(rf"^({'|'.join(_MESES)})[\s\-_/]*(\d{{2,4}})?$")
+
+
+def _mes_referencia_da_aba(nome_aba: str) -> str | None:
+    """'SETEMBRO26' -> 'SETEMBRO/2026'; 'JUNHO 2026' -> 'JUNHO/2026'; aba
+    sem ano no nome -> só o mês ('SETEMBRO'); aba que não é um nome de mês
+    -> None."""
+    m = _RE_ABA_MES.match(normalize(nome_aba))
+    if not m:
+        return None
+    mes, ano_txt = m.group(1), m.group(2)
+    if not ano_txt:
+        return mes
+    ano = int(ano_txt)
+    if ano < 100:
+        ano += 2000
+    return f"{mes}/{ano}"
+
+
 def _col(df, nome: str) -> str:
     for c in df.columns:
         if normalize(c) == normalize(nome):
@@ -169,11 +198,15 @@ def importar_planilha(db: Session, path: str, usuario_id: int | None = None) -> 
         # fatal — qualquer outro valor (vazio, "NÃO", etc.) não é fatal.
         prazo_fatal = (normalize(cell_text(row.get(col_prazo))) == "SIM") if col_prazo else False
 
+        aba_nome = row.get("_ABA")
+        mes_referencia = _mes_referencia_da_aba(str(aba_nome)) if aba_nome else None
+
         db.add(
             EventoProcesso(
                 processo_id=processo.id,
                 data=data_val,
                 tipo_evento_nome=tipo_evento.upper(),
+                mes_referencia=mes_referencia,
                 prazo_fatal=prazo_fatal,
                 data_prazo=None,  # não extraído do histórico — ver docstring do módulo
                 observacao=(cell_text(row.get(col_observacao)) or None) if col_observacao else None,
@@ -342,6 +375,7 @@ class PrazoProximo:
     assistente: str | None
     advogada: str | None
     dias_restantes: int
+    mes_referencia: str | None
 
 
 def prazos_proximos(db: Session, dias: int = 7) -> list[PrazoProximo]:
@@ -367,6 +401,7 @@ def prazos_proximos(db: Session, dias: int = 7) -> list[PrazoProximo]:
                 assistente=evento.processo.assistente,
                 advogada=evento.processo.advogada,
                 dias_restantes=(evento.data_prazo - hoje).days,
+                mes_referencia=evento.mes_referencia,
             )
         )
     return sorted(resultado, key=lambda p: p.data_prazo)

@@ -261,6 +261,37 @@ de 21 abas (44.333 é a soma de todas, não de uma aba só) ou um arquivo menor/
 muda se o N+1 acima é de fato a causa do 502 ou só uma melhoria correta encontrada no caminho.
 **Reversível:** sim, mudanças de performance sem alteração de comportamento/dado.
 
+## 2026-09-22 — Fase 5: `mes_referencia` extraído do nome da aba da planilha
+
+**Contexto:** a Clara pediu que o sistema identifique o mês de referência (ex. "SETEMBRO 2026") da
+planilha subida. Perguntei onde essa informação mora e o que fazer com ela antes de implementar.
+**Resposta da Clara:** o mês de referência é o **nome da aba** (ex. "SETEMBRO26"), não uma coluna
+nem o nome do arquivo; o sistema deve só **guardar e mostrar** — sem travar o import nem filtrar
+relatório por enquanto.
+**Implementação:** novo campo `eventos_processo.mes_referencia` (string, ex. `"SETEMBRO/2026"`),
+preenchido no import a partir do nome da aba (`_mes_referencia_da_aba` em
+`app/services/processos.py`, ver `DATABASE.md` seção 6.1). Abas que não são nomeadas por mês (ex.
+"DOCS E CUSTAS", abas "fatais") ficam com `mes_referencia = None` — não bloqueia o import, mesmo
+tratamento das outras checagens de sanidade do módulo. Aparece no painel `prazos-proximos` e na
+resposta de `POST /processos/eventos/{id}/resolver`.
+**Migração de schema:** como o projeto não usa Alembic e a tabela `eventos_processo` já existe em
+produção (mesmo vazia — nenhum import real teve sucesso até agora), adicionei um guard em
+`app/db.py::_garantir_coluna` que roda um `ALTER TABLE ... ADD COLUMN` idempotente dentro de
+`init_db()`, no próximo start do servidor — sem apagar nem alterar dado nenhum.
+**Reversível:** sim, campo novo e nullable; não afeta o resto do schema.
+
+## Nota sobre o número "44.333 linhas" (pendente de confirmação da Clara)
+
+Reportei anteriormente que o import local processou 44.333 eventos a partir de "51.116 linhas
+brutas" numa planilha de 21 abas. A Clara mostrou uma captura de tela de uma aba única com ~2.500
+linhas e perguntou de onde veio esse número. Esclarecimento: **51.116 é a soma de todas as 21 abas**
+(cada aba mensal/por advogada real tem algo em torno de 2 a 2,5 mil linhas — 21 × ~2.400 ≈ 51 mil),
+não o tamanho de uma aba isolada. Essa validação foi rodada localmente, numa parte anterior desta
+sessão, contra o arquivo `ELITE - GESTÃO DE PROCESSOS.xlsx` que a Clara enviou na época — o arquivo
+não está mais disponível neste ambiente pra reconferir. **Ainda não confirmado** se o arquivo que
+ela está testando agora em produção é o mesmo (21 abas) ou um arquivo diferente/menor — relevante
+porque muda se a correção de N+1 da entrada acima é de fato a causa do 502 relatado.
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante

@@ -425,7 +425,7 @@ texto livre no `Processo` (sem login — só os líderes acessam o sistema; ver 
   explicitamente via API — não há tentativa de adivinhar a data por regex no texto histórico.
   Também esperado: uma fração grande dos processos aparece como "(sem assistente informado)" no
   relatório — várias abas da planilha real não têm uma coluna `ASSISTENTE` utilizável.
-- **Testes:** 50/50 passando (`pytest -q`), `ruff check .` limpo.
+- **Testes:** 52/52 passando (`pytest -q`), `ruff check .` limpo.
 - **Ajuste na regra de `prazo_fatal`:** a versão original marcava fatal qualquer célula não-vazia na
   coluna `PRAZO FATAL` (`bool(texto)`) — um `"NÃO"` escrito à mão contaria como fatal. Corrigido
   depois de perguntar à Clara: só `SIM` (normalizado) marca o evento como fatal. Ver `DECISIONS.md`.
@@ -433,4 +433,16 @@ texto livre no `Processo` (sem login — só os líderes acessam o sistema; ver 
   `Authorization`, o que não registra esquema de segurança no OpenAPI — o botão "Authorize" do
   Swagger não aparecia. Trocado por `fastapi.security.HTTPBearer` (`app/auth.py`), sem mudar o
   formato do token na prática; passo a passo em `backend/README.md`.
-- **Pendente:** validar o import via API já em produção (Render), com a planilha real da Clara.
+- **Alerta por e-mail removido:** a Clara decidiu deixar só o alerta dentro do sistema
+  (`GET /processos/prazos-proximos`) por enquanto. Ver `DECISIONS.md`.
+- **`mes_referencia` (novo, a pedido da Clara):** cada evento importado guarda o mês/ano da aba de
+  origem na planilha (ex. `"SETEMBRO/2026"`, extraído do nome da aba — confirmado por ela, não é
+  uma coluna nem o nome do arquivo). Só informativo por ora (aparece no painel de prazos), sem
+  filtro de relatório nem bloqueio de import. Ver `DATABASE.md` seção 6.1 e `DECISIONS.md`.
+- **Investigando 502 no import em produção:** a Clara reportou `502 Bad Gateway` ao importar a
+  planilha real pelo `/docs`. Encontrei e corrigi um N+1 real (`get_or_create_empresa` consultava o
+  banco a cada linha em vez de cachear as ~43 empresas fixas) e reduzi o uso de memória do
+  `openpyxl` (`read_only=True`) — mas a causa raiz ainda não está confirmada, porque o volume real
+  do arquivo testado em produção ficou em dúvida (ver nota em `DECISIONS.md`).
+- **Pendente:** confirmar com a Clara o tamanho real do arquivo testado e revalidar o import via
+  API em produção depois das correções de performance.

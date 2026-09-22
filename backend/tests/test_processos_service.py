@@ -8,6 +8,7 @@ from app.models import EventoProcesso, Processo
 from app.services.empresas import get_or_create_empresa
 from app.services.processos import (
     PROCESSO_PARADO_DIAS,
+    _mes_referencia_da_aba,
     _pessoa_valida,
     gerar_relatorio,
     importar_planilha,
@@ -157,6 +158,31 @@ def test_import_prazo_fatal_so_quando_coluna_e_sim(db, tmp_path):
     assert eventos[numeros[1]].prazo_fatal is True  # "sim " — normalizado
     assert eventos[numeros[2]].prazo_fatal is False  # "NÃO" não é fatal
     assert eventos[numeros[3]].prazo_fatal is False  # vazio não é fatal
+
+
+def test_import_preenche_mes_referencia_a_partir_do_nome_da_aba(db):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "SETEMBRO26"
+    ws.append(["CLIENTE", "Nº PROCESSO", "DATA", "EVENTO"])
+    numero = "5555555-55.2026.8.11.0005"
+    ws.append(["ABSOLUTA - Fulano de Tal", numero, date(2026, 9, 1), "CUSTAS"])
+    path = Path(tempfile.mkdtemp()) / "processos.xlsx"
+    wb.save(path)
+
+    importar_planilha(db, str(path))
+
+    evento = db.query(EventoProcesso).join(Processo).filter(Processo.numero_processo == numero).one()
+    assert evento.mes_referencia == "SETEMBRO/2026"
+
+
+def test_mes_referencia_da_aba():
+    assert _mes_referencia_da_aba("SETEMBRO26") == "SETEMBRO/2026"
+    assert _mes_referencia_da_aba("Setembro 2026") == "SETEMBRO/2026"
+    assert _mes_referencia_da_aba("OUTUBRO-26") == "OUTUBRO/2026"
+    assert _mes_referencia_da_aba("MARÇO") == "MARCO"
+    assert _mes_referencia_da_aba("DOCS E CUSTAS") is None
+    assert _mes_referencia_da_aba("FATAL") is None
 
 
 def test_pessoa_valida_rejeita_valores_parecidos_com_data():

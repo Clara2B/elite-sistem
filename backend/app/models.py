@@ -200,6 +200,12 @@ class EventoProcesso(Base):
     processo_id: Mapped[int] = mapped_column(ForeignKey("processos.id"), index=True)
     data: Mapped[date] = mapped_column(Date, index=True)
     tipo_evento_nome: Mapped[str] = mapped_column(String(80))
+    # Mês/ano da aba de origem na planilha (ex.: "SETEMBRO/2026") — não é
+    # extraído de `data`, é o que a própria planilha chama a aba. Só
+    # informativo (mostrado em relatórios/painel), pode ficar None quando a
+    # aba não é nomeada por mês (ex. abas "fatais", "DOCS E CUSTAS"). Ver
+    # app/services/processos.py::_mes_referencia_da_aba.
+    mes_referencia: Mapped[str | None] = mapped_column(String(20), nullable=True)
     prazo_fatal: Mapped[bool] = mapped_column(default=False)
     data_prazo: Mapped[date | None] = mapped_column(Date, nullable=True)
     resolvido: Mapped[bool] = mapped_column(default=False)
