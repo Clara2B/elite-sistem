@@ -6,7 +6,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import settings
-from app.models import Base, FaixaAudiencia, TipoLaudo
+from app.models import Base, FaixaAudiencia, Operadora, Setor, TipoLaudo, Usuario
 
 DEFAULT_TIPOS_LAUDO = {
     "AUTO": 40.0,
@@ -24,6 +24,15 @@ DEFAULT_FAIXAS_AUDIENCIA = (
     (61, 79, 250.0),
     (80, 100, 200.0),
 )
+
+# Ver ARCHITECTURE.md seção 2.6 e o chat da Fase 4: setores reais informados
+# pela Clara. "Financeiro" existe uma vez por operadora (times distintos);
+# os outros três são exclusivos da ELITE. T.I. tem papel_global próprio
+# (ADMIN_TI, ver app/auth.py) — não é um setor, por isso não está aqui.
+DEFAULT_SETORES = {
+    "ELITE": ["Líder - Gestão de Processos", "Doutores(as)", "Admin/dona", "Financeiro"],
+    "EXIMIA": ["Financeiro"],
+}
 
 _engine = None
 _SessionLocal: sessionmaker | None = None
@@ -82,4 +91,45 @@ def init_db() -> None:
         if db.scalar(select(FaixaAudiencia.id).limit(1)) is None:
             for inicio, fim, valor in DEFAULT_FAIXAS_AUDIENCIA:
                 db.add(FaixaAudiencia(inicio=inicio, fim=fim, valor=valor))
+
+        operadoras = {o.nome: o for o in db.scalars(select(Operadora))}
+        for nome in ("EXIMIA", "ELITE"):
+            if nome not in operadoras:
+                operadora = Operadora(nome=nome)
+                db.add(operadora)
+                db.flush()
+                operadoras[nome] = operadora
+
+        setores_existentes = {(s.operadora_id, s.nome) for s in db.scalars(select(Setor))}
+        for operadora_nome, nomes_setor in DEFAULT_SETORES.items():
+            operadora = operadoras[operadora_nome]
+            for nome_setor in nomes_setor:
+                if (operadora.id, nome_setor) not in setores_existentes:
+                    db.add(Setor(operadora_id=operadora.id, nome=nome_setor))
+
         db.commit()
+        _bootstrap_admin(db)
+
+
+def _bootstrap_admin(db: Session) -> None:
+    """Cria o primeiro Admin Superior a partir de variáveis de ambiente, só
+    se ainda não existir nenhum usuário com papel_global no banco. Depois
+    do primeiro login, novos usuários são criados por `POST /usuarios` —
+    ver README.md."""
+    from app.auth import (
+        hash_senha,  # import tardio: evita ciclo com app.auth (que importa app.db)
+    )
+
+    if not settings.admin_bootstrap_email or not settings.admin_bootstrap_senha:
+        return
+    if db.scalar(select(Usuario.id).where(Usuario.papel_global.isnot(None)).limit(1)) is not None:
+        return
+    db.add(
+        Usuario(
+            nome="Admin Superior",
+            email=settings.admin_bootstrap_email.strip().lower(),
+            senha_hash=hash_senha(settings.admin_bootstrap_senha),
+            papel_global="ADMIN_SUPERIOR",
+        )
+    )
+    db.commit()

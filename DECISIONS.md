@@ -125,12 +125,31 @@ independente do formato recebido, com testes cobrindo os formatos possíveis. Co
 confirmado funcionando (`/health` respondendo em produção, conectado ao Supabase real).
 **Fase 3 encerrada.**
 
+## 2026-09-22 — Fase 4: setores reais, papéis globais e segregação implementada
+
+**Contexto:** a Clara respondeu as perguntas pendentes da Fase 4 (lista real de setores, se
+empresa-cliente pertence às duas operadoras, o que "acesso especial" do T.I. significa).
+**Decisões resultantes:**
+- Setores reais confirmados: ELITE tem *Líder - Gestão de Processos*, *Doutores(as)*, *Admin/dona*
+  e *Financeiro*; EXIMIA tem só *Financeiro*. Seeds em `app/db.py DEFAULT_SETORES`.
+- `empresa_cliente` **não** tem `operadora_id`: confirmado que a mesma empresa-cliente é atendida
+  pelas duas operadoras — pendência 2 (abaixo) resolvida, sem mudança de schema necessária.
+- T.I. ganhou um segundo papel de alcance global, `ADMIN_TI` (mesmo alcance de dados do Admin
+  Superior) — o modelo trocou o booleano `is_admin_superior` do rascunho da Fase 1 por
+  `papel_global: NULL | 'ADMIN_SUPERIOR' | 'ADMIN_TI'`.
+- Doutores(as)/Admin/dona confirmados como **só ELITE**, apesar de aparecerem como "ADVOGADA" nas
+  planilhas de audiência (EXIMIA) — é só um registro histórico da planilha, não implica acesso.
+**Implementação:** login por token opaco (não JWT, ver `SECURITY.md` seção 5), segregação aplicada
+via dependency do FastAPI em toda rota de negócio, auditoria de ações-chave, bootstrap do primeiro
+Admin Superior via variáveis de ambiente. 37 testes automatizados (unitários + API + permissões).
+**Reversível:** o schema pode evoluir (ex.: adicionar `operadora_id` depois, se algum dia deixar de
+ser verdade que toda empresa-cliente atende as duas operadoras) sem perda de dado.
+
 ## Pendências abertas
 
-1. Lista real dos setores (nomes) — não bloqueia o schema (`setores` é genérico), mas precisa ser
-   confirmada antes da Fase 4.
-2. Se uma `empresa_cliente` pode pertencer às duas operadoras ao mesmo tempo, ou é sempre separada
-   por operadora (`DATABASE.md` seção 8).
-3. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 4.
-4. Contas de infraestrutura a serem criadas pela Clara antes da Fase 2 avançar para deploy real:
-   projeto Supabase e provedor de hospedagem do backend — ver pedido no chat.
+1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6, levar à Clara antes da
+   Fase 5 (Gestão de Processos).
+2. Rate limiting / bloqueio de tentativas de login — sem risco relevante no volume atual, mas fica
+   registrado para um refinamento futuro.
+3. `criado_por` em `laudos`/`audiencias`/`cobrancas` (rastreabilidade linha a linha, hoje só o
+   import/geração fica no log de auditoria, não cada registro) — `DATABASE.md` seção 9.

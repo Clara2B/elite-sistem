@@ -1,11 +1,10 @@
 # DATABASE.md — Elite Sistem
 
-> Modelo de dados **v1**, resultado da Fase 1 (Arquitetura). Ainda sujeito a ajuste conforme as
-> decisões D1/D2/D3 em `ARCHITECTURE.md` seção 2 forem fechadas, e conforme a lista real de setores
-> for confirmada. Convenção: `snake_case`, chave primária `id` (inteiro autoincremento ou UUID —
-> a decidir junto com D3), timestamps `criado_em`/`atualizado_em` em todas as tabelas de negócio.
+> Modelo de dados vivo — rascunhado na Fase 1, implementado nas Fases 3 (laudos/audiências/
+> pendências) e 4 (setores/usuários/sessões/auditoria). Convenção: `snake_case`, chave primária
+> `id` inteiro autoincremento, timestamp `criado_em` nas tabelas de negócio.
 
-## 1. Organização e acesso
+## 1. Organização e acesso (implementado na Fase 4)
 
 ```
 operadoras
@@ -13,31 +12,54 @@ operadoras
 ├── nome            -- 'EXIMIA' | 'ELITE' (fixo, só 2 linhas)
 └── ativo
 
-setores
+setores                                -- ver lista real abaixo
 ├── id
 ├── operadora_id    -- FK operadoras
-├── nome            -- ex.: 'Laudos', 'Audiências', 'Financeiro/Cobrança' (a confirmar com a Clara)
+├── nome
 └── ativo
 
 usuarios
 ├── id
 ├── nome
-├── email                  -- login individual (ver decisão D1)
-├── senha_hash             -- nunca texto puro (bcrypt/argon2)
-├── is_admin_superior       -- bool: acesso total às duas operadoras, sem vínculo de setor
+├── email                  -- login individual (decisão D1)
+├── senha_hash             -- bcrypt, nunca texto puro
+├── papel_global            -- NULL | 'ADMIN_SUPERIOR' | 'ADMIN_TI' (acesso total às duas
+│                               operadoras, sem depender de vínculo de setor — ver nota abaixo)
 ├── ativo
-├── criado_em
-└── atualizado_em
+└── criado_em
 
-usuario_setor                        -- vínculo N:N; não se aplica ao Admin Superior
+usuario_setor                        -- vínculo N:N; não se aplica a quem tem papel_global
 ├── usuario_id      -- FK usuarios
 ├── setor_id        -- FK setores (setor já carrega a operadora)
 ├── papel           -- 'LIDER' | 'COLABORADOR'
 └── PK (usuario_id, setor_id)
+
+sessoes                              -- login = token opaco (não JWT), revogável no logout
+├── token (PK)
+├── usuario_id      -- FK usuarios
+├── criado_em
+└── expira_em                        -- 12h após o login (SESSAO_DURACAO_HORAS em app/auth.py)
 ```
 
-**Regra de segregação (dura, seção 1.9 item 3):** toda consulta feita por um usuário que não seja
-`is_admin_superior` deve ser filtrada obrigatoriamente pela(s) operadora(s)/setor(es) em
+> **`is_admin_superior` (booleano) virou `papel_global` (texto)** em relação ao rascunho da Fase 1:
+> a Clara definiu que o setor T.I. também precisa de acesso total (igual Admin Superior), então o
+> modelo ficou com dois papéis de alcance global — `ADMIN_SUPERIOR` (dono do negócio, hoje 3
+> pessoas) e `ADMIN_TI` (suporte técnico) — em vez de um booleano só. Os dois têm exatamente o
+> mesmo alcance de dados hoje; a distinção existe para o log de auditoria mostrar quem é quem.
+
+**Setores reais** (confirmados pela Clara, seeds em `app/db.py DEFAULT_SETORES`):
+
+| Operadora | Setores |
+|---|---|
+| ELITE | Líder - Gestão de Processos, Doutores(as), Admin/dona, Financeiro |
+| EXIMIA | Financeiro |
+
+Confirmado também: **Doutores(as) e Admin/dona enxergam só dados da ELITE** (mesmo aparecendo como
+"ADVOGADA" nas planilhas de audiência, que são da EXIMIA — isso é só um registro histórico da
+planilha, não implica acesso ao sistema).
+
+**Regra de segregação (dura, seção 1.9 item 3):** toda consulta feita por um usuário sem
+`papel_global` deve ser filtrada obrigatoriamente pela(s) operadora(s)/setor(es) em
 `usuario_setor` — nunca confiar só no frontend para esconder dados de outra operadora.
 
 ## 2. Empresas-clientes (não confundir com `operadoras` — ver ARCHITECTURE.md 1.3)
@@ -45,12 +67,14 @@ usuario_setor                        -- vínculo N:N; não se aplica ao Admin Su
 ```
 empresas_clientes
 ├── id
-├── operadora_id    -- de qual operadora é cliente (EXIMIA e/ou ELITE podem atender a mesma?
-│                       a confirmar; hipótese v1: uma empresa-cliente pode ter registro em ambas)
 ├── nome            -- ex.: 'ABSOLUTA', 'ALLURE', 'NEXUS', ... (hoje ~43 cadastradas)
 ├── cnpj
 └── ativo
 ```
+
+> Sem `operadora_id`: confirmado que a mesma empresa-cliente é atendida pelas duas operadoras (ver
+> `ARCHITECTURE.md` seção 1.9 item 3 nas respostas da Fase 4) — o que diferencia a operadora é o
+> tipo de registro (laudo = ELITE, audiência = EXIMIA, cobrança = campo `cobrador`), não a empresa.
 
 ## 3. Laudos
 
@@ -79,7 +103,7 @@ laudos
 > comportamento existente: planilhas frequentemente trazem tipos de laudo ainda não cadastrados em
 > "Gerenciar valores", e o sistema precisa continuar avisando isso e aceitando o lançamento mesmo
 > assim (com valor R$ 0,00 até alguém cadastrar) — uma FK obrigatória quebraria esse fluxo. `criado_por`
-> fica para a Fase 4 (depende de `usuarios` existir).
+> fica pendente — ver seção 9 (não bloqueou a Fase 4).
 
 ## 4. Audiências
 
@@ -101,7 +125,6 @@ audiencias
 ├── conciliadora
 ├── advogada
 ├── origem              -- 'IMPORT_PLANILHA' | 'MANUAL'
-├── criado_por          -- FK usuarios
 └── criado_em
 ```
 
@@ -125,19 +148,20 @@ cobrancas
 > **Simplificação da Fase 3:** `data_recebimento` e `observacao` (colunas `DATA DO RECEBIMENTO` e
 > `OBS` da planilha) ainda não são importadas — nenhuma tela hoje as usa (a mensagem de cobrança não
 > exibe isso). Se forem necessárias num refinamento futuro (Fase 6), é só acrescentar as colunas e
-> reimportar. `criado_por` fica para a Fase 4.
+> reimportar. `criado_por` continua pendente — ver seção 9.
 
 ## 6. Auditoria (requisito explícito do projeto)
 
 ```
 logs_auditoria
 ├── id
-├── usuario_id       -- FK usuarios
-├── operadora_id     -- FK operadoras (contexto em que a ação ocorreu, quando aplicável)
-├── acao             -- ex.: 'GEROU_RELATORIO_LAUDOS', 'EDITOU_VALOR_LAUDO', 'LOGIN', 'LOGIN_FALHOU'
-├── entidade          -- ex.: 'laudo', 'tipo_laudo', 'usuario'
+├── usuario_id       -- FK usuarios (nulo em ações antes do login, ex.: LOGIN_FALHOU sem usuário válido)
+├── acao             -- ex.: 'LOGIN', 'LOGIN_FALHOU', 'GEROU_RELATORIO_LAUDOS', 'IMPORTOU_LAUDOS',
+│                          'CRIOU_USUARIO', 'TROCOU_SENHA' (lista cresce conforme novas ações)
+├── entidade          -- ex.: 'laudo', 'usuario', 'empresa_cliente'
 ├── entidade_id
-├── detalhes          -- JSON livre (o que mudou, de/para)
+├── detalhes          -- texto livre (ex.: resumo do import); sem operadora_id — dá pra inferir
+│                          pela ação/entidade quando precisar
 └── criado_em
 ```
 
@@ -147,37 +171,29 @@ Não haverá tabelas de contas a pagar / fluxo de caixa interno (o equivalente �
 `PAG.<mês>` da planilha atual) — o sistema novo cobre laudos, audiências e cobrança de recebimentos,
 como o sistema atual já faz.
 
-## 8. Status da implementação (Fase 3, 2026-09-22)
+## 8. Status da implementação
 
-**Implementado e validado** (`backend/app/models.py`, Postgres via Supabase em produção, testado
-localmente com SQLite): `operadoras` (tabela existe, ainda sem uso — controle de acesso é Fase 4),
-`empresas_clientes` (sem `operadora_id` ainda, ver pendência abaixo), `tipos_laudo`, `laudos`,
-`faixas_audiencia`, `audiencias`, `cobrancas`. `id` ficou como inteiro autoincremento (mais simples,
-suficiente para o volume real observado — ~2 mil linhas/ano; UUID descartado por ora, evitando
-complexidade sem necessidade real).
+**Fase 3 (2026-09-22):** `operadoras`, `empresas_clientes`, `tipos_laudo`, `laudos`,
+`faixas_audiencia`, `audiencias`, `cobrancas` — validados com dados reais (272 combinações
+empresa×período de audiências e as 18 empresas com pendência da planilha de fluxo de caixa, todas
+batendo exatamente com a saída do `leitor-relatorio`). `id` ficou como inteiro autoincremento (mais
+simples, suficiente para o volume real — ~2 mil linhas/ano; UUID descartado, evitando complexidade
+sem necessidade real). Bug real encontrado e corrigido: células vazias de planilha (`PAGO`, `DATA`)
+viravam o texto `"nan"` em vez de `None` — corrigido com `cell_text()` em `app/utils.py`, com teste
+de regressão.
 
-**Ainda não existem no banco** (Fase 4, dependem das decisões de autenticação): `setores`,
-`usuarios`, `usuario_setor`, `logs_auditoria`, e as colunas `criado_por`/`operadora_id` em
-`empresas_clientes`.
-
-**Validação de paridade (critério de conclusão da Fase 3):** rodado contra os dados reais
-fornecidos pela Clara — **272 combinações empresa×período de audiências** e as **18 empresas com
-pendência** da planilha de fluxo de caixa, todas batendo exatamente com a saída do sistema atual
-(`leitor-relatorio`). Laudos foi validado só com dados sintéticos (nenhuma das duas planilhas de
-exemplo tem coluna `TIPO DE LAUDO`) — mesma lógica, mesmo padrão de teste.
-
-**Bug real encontrado e corrigido durante a validação:** células vazias de data (`PAGO`, `DATA`)
-lidas pelo pandas como `NaN`/`NaT` estavam sendo gravadas como o texto literal `"nan"` em vez de
-`None` — isso fazia uma pendência já paga (célula `PAGO` vazia) ser contada como pendente por
-engano. Corrigido com a função `cell_text()` em `app/utils.py` (ver DECISIONS.md), com teste de
-regressão em `tests/test_utils.py`.
+**Fase 4 (2026-09-22):** `setores` (com a lista real confirmada pela Clara, seção 1), `usuarios`,
+`usuario_setor`, `sessoes` (login) e `logs_auditoria` — todos implementados e testados (37 testes
+automatizados, incluindo segregação por operadora ponta a ponta via API). `empresas_clientes`
+**não** ganhou `operadora_id`: confirmado que a mesma empresa-cliente é atendida pelas duas
+operadoras, então essa pendência da Fase 1 está resolvida (não precisa da coluna).
 
 ## 9. Pendências deste modelo
 
-- Confirmar lista real de `setores` antes da Fase 4.
-- Confirmar se uma `empresa_cliente` pode pertencer às duas operadoras ao mesmo tempo, ou se são
-  sempre listas separadas por operadora (afeta a FK `operadora_id` em `empresas_clientes`, ainda não
-  criada).
 - Índices e constraints de unicidade (hoje o dedup de reimportação é feito em Python, comparando
   contra o que já existe no banco — funciona para o volume atual, mas constraints de banco
-  (`UNIQUE`) seriam mais robustas; avaliar na Fase 4/6).
+  (`UNIQUE`) seriam mais robustas; avaliar num refinamento futuro).
+- `criado_por` (FK `usuarios`) ainda não foi adicionado a `laudos`/`audiencias`/`cobrancas` — os
+  imports/relatórios já são autenticados e ficam no log de auditoria (`logs_auditoria`), mas o
+  registro em si não sabe quem importou aquela linha especificamente. Avaliar se vale a pena para
+  rastreabilidade mais fina.

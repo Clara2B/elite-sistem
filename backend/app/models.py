@@ -1,15 +1,13 @@
 """Modelos SQLAlchemy — schema v1 (ver DATABASE.md).
 
-Fase 3: só as tabelas necessárias para laudos/audiências/pendências.
-`operadoras` existe como referência (EXIMIA/ELITE, sem controle de acesso
-ainda — isso é Fase 4). `usuarios`/`setores`/`logs_auditoria` ficam para a
-Fase 4, junto com a autenticação.
+Fase 4: adiciona setores, usuários, vínculo usuário-setor, sessões de login
+e log de auditoria — ver ARCHITECTURE.md seção 2.6 para o modelo de papéis.
 """
 from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -103,3 +101,68 @@ class Cobranca(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     empresa_cliente: Mapped[EmpresaCliente] = relationship(back_populates="cobrancas")
+
+
+class Setor(Base):
+    __tablename__ = "setores"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    operadora_id: Mapped[int] = mapped_column(ForeignKey("operadoras.id"))
+    nome: Mapped[str] = mapped_column(String(80))
+    ativo: Mapped[bool] = mapped_column(default=True)
+
+    operadora: Mapped[Operadora] = relationship()
+
+
+class Usuario(Base):
+    __tablename__ = "usuarios"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    nome: Mapped[str] = mapped_column(String(120))
+    email: Mapped[str] = mapped_column(String(160), unique=True, index=True)
+    senha_hash: Mapped[str] = mapped_column(String(100))
+    # Papel de alcance global (vê as duas operadoras, todos os setores).
+    # None = usuário comum, escopo definido só pelos vínculos em usuario_setor.
+    papel_global: Mapped[str | None] = mapped_column(String(20), nullable=True)  # 'ADMIN_SUPERIOR' | 'ADMIN_TI'
+    ativo: Mapped[bool] = mapped_column(default=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    setores: Mapped[list[UsuarioSetor]] = relationship(back_populates="usuario")
+
+
+class UsuarioSetor(Base):
+    __tablename__ = "usuario_setor"
+
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), primary_key=True)
+    setor_id: Mapped[int] = mapped_column(ForeignKey("setores.id"), primary_key=True)
+    papel: Mapped[str] = mapped_column(String(20))  # 'LIDER' | 'COLABORADOR'
+
+    usuario: Mapped[Usuario] = relationship(back_populates="setores")
+    setor: Mapped[Setor] = relationship()
+
+
+class Sessao(Base):
+    """Token opaco de login — revogável (basta apagar a linha), consultado
+    a cada requisição autenticada. Evita depender de segredo de assinatura
+    (JWT) e permite "sair" de verdade, não só o token expirar sozinho."""
+
+    __tablename__ = "sessoes"
+
+    token: Mapped[str] = mapped_column(String(64), primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    expira_em: Mapped[datetime] = mapped_column(DateTime)
+
+    usuario: Mapped[Usuario] = relationship()
+
+
+class LogAuditoria(Base):
+    __tablename__ = "logs_auditoria"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    acao: Mapped[str] = mapped_column(String(60))
+    entidade: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    entidade_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    detalhes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

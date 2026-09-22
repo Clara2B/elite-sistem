@@ -3,20 +3,31 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api._shared import salvar_temp
+from app.auth import require_operadora
 from app.db import get_db
+from app.models import Usuario
 from app.pdf_export import gerar_pdf_audiencias
 from app.services import audiencias as audiencias_service
+from app.services.auditoria import registrar
 
 router = APIRouter(prefix="/audiencias", tags=["audiencias"])
 
+# Audiências é um produto da EXIMIA (ver ARCHITECTURE.md seção 1.3).
+_acesso_eximia = require_operadora("EXIMIA")
+
 
 @router.post("/import")
-def importar(arquivo: UploadFile, db: Session = Depends(get_db)):
+def importar(
+    arquivo: UploadFile,
+    usuario: Usuario = Depends(_acesso_eximia),
+    db: Session = Depends(get_db),
+):
     path = salvar_temp(arquivo)
     try:
         resumo = audiencias_service.importar_planilha(db, path)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    registrar(db, usuario, "IMPORTOU_AUDIENCIAS", entidade="audiencia", detalhes=str(resumo))
     return resumo
 
 
@@ -27,6 +38,7 @@ def relatorio(
     mes: int,
     quinzena: int,
     cnpj: str | None = None,
+    usuario: Usuario = Depends(_acesso_eximia),
     db: Session = Depends(get_db),
 ):
     periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
@@ -34,6 +46,7 @@ def relatorio(
         resultado = audiencias_service.gerar_relatorio(db, empresa, periodo_ini, periodo_fim, cnpj)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    registrar(db, usuario, "GEROU_RELATORIO_AUDIENCIAS", entidade="empresa_cliente", entidade_id=empresa)
     return {
         "empresa": resultado.empresa,
         "cnpj": resultado.cnpj,
@@ -56,6 +69,7 @@ def relatorio_pdf(
     mes: int,
     quinzena: int,
     cnpj: str | None = None,
+    usuario: Usuario = Depends(_acesso_eximia),
     db: Session = Depends(get_db),
 ):
     periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
@@ -63,5 +77,6 @@ def relatorio_pdf(
         resultado = audiencias_service.gerar_relatorio(db, empresa, periodo_ini, periodo_fim, cnpj)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    registrar(db, usuario, "GEROU_RELATORIO_AUDIENCIAS_PDF", entidade="empresa_cliente", entidade_id=empresa)
     pdf_bytes = gerar_pdf_audiencias(resultado)
     return Response(content=pdf_bytes, media_type="application/pdf")

@@ -57,11 +57,37 @@ Esses valores devem ser inseridos **diretamente no painel do provedor de hospeda
 variáveis de ambiente do serviço) quando chegar a hora (Fase 3, quando o backend passar a acessar o
 banco de verdade) — nunca aqui no chat.
 
-## 5. Em aberto (a decidir nas próximas fases)
+## 5. Autenticação implementada (Fase 4, 2026-09-22)
+
+- **Senha:** hash com `bcrypt` (biblioteca `bcrypt`, não passlib — evita problemas de detecção de
+  versão que essa combinação tem dado historicamente). Nunca texto puro, em lugar nenhum.
+- **Sessão:** token opaco aleatório (`secrets.token_hex(32)`, não JWT) guardado na tabela `sessoes`,
+  válido por 12h (`SESSAO_DURACAO_HORAS` em `app/auth.py`). Escolhido no lugar de JWT para não
+  depender de gerenciar um segredo de assinatura, e porque "sair" (logout) apaga a sessão de
+  verdade — não fica esperando o token expirar sozinho. Enviado como `Authorization: Bearer
+  <token>`.
+- **Segregação por operadora aplicada no backend, não só na tela:** toda rota de negócio
+  (`/laudos/*`, `/audiencias/*`) tem uma dependency (`require_operadora`) que barra o acesso antes
+  de qualquer consulta ao banco; `/pendencias/mensagens` filtra o resultado pelas operadoras que o
+  usuário pode ver, já que uma cobrança pode ser de qualquer uma das duas. Dois papéis têm alcance
+  total (`ADMIN_SUPERIOR`, `ADMIN_TI`) — o resto do acesso vem só dos vínculos em `usuario_setor`.
+  Cobertura de teste: `tests/test_permissoes.py`.
+- **Auditoria:** `logs_auditoria` grava login, login falho, logout, troca de senha, criação de
+  usuário, import de planilha e geração de relatório — sempre associado ao usuário autenticado.
+- **Primeiro acesso (bootstrap):** como não existe usuário nenhum na primeira vez que o banco sobe,
+  o Admin Superior inicial é criado a partir das variáveis de ambiente
+  `ADMIN_BOOTSTRAP_EMAIL`/`ADMIN_BOOTSTRAP_SENHA` (só uma vez — se já existir algum usuário com
+  `papel_global`, essas variáveis são ignoradas). **Ação recomendada:** depois do primeiro login,
+  trocar a senha por `POST /auth/senha` — não precisa remover as variáveis do Render depois disso
+  (ficam inofensivas), mas também não faz mal remover.
+- **Ainda não implementado, sem risco relevante no volume atual (10-20 usuários):** rate limiting /
+  bloqueio de tentativas de login repetidas.
+
+## 6. Em aberto (a decidir nas próximas fases)
 
 - Política de retenção de dados pessoais (LGPD: por quanto tempo manter CPF/nome de clientes após o
-  processo encerrado?) — pergunta de negócio, não técnica; levar à Clara antes da Fase 4.
-- Rate limiting / bloqueio de tentativas de login (Fase 4).
-- Expiração de sessão e "lembrar-me" (Fase 4).
-- Backup automatizado do banco de produção — depende do provedor escolhido em D3 (Fase 2).
+  processo encerrado?) — pergunta de negócio, não técnica; levar à Clara antes da Gestão de
+  Processos (Fase 5), que deve trazer ainda mais dado pessoal.
+- Rate limiting / bloqueio de tentativas de login.
+- Backup automatizado do banco de produção (verificar o que o plano free do Supabase já oferece).
 - Necessidade (ou não) de reescrever o histórico do Git de `leitor-relatorio` (seção 2).

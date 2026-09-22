@@ -20,17 +20,19 @@ def _planilha_laudos_bytes() -> bytes:
     return buffer.getvalue()
 
 
-def test_import_e_relatorio_via_api(db):
+def test_import_e_relatorio_via_api(db, admin_token):
     def override_get_db():
         yield db
 
     app.dependency_overrides[get_db] = override_get_db
+    headers = {"Authorization": f"Bearer {admin_token}"}
     try:
         client = TestClient(app)
 
         resp = client.post(
             "/laudos/import",
             files={"arquivo": ("laudos.xlsx", _planilha_laudos_bytes(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            headers=headers,
         )
         assert resp.status_code == 200
         assert resp.json()["linhas_novas"] == 2
@@ -38,6 +40,7 @@ def test_import_e_relatorio_via_api(db):
         resp = client.get(
             "/laudos/relatorio",
             params={"empresa": "ABSOLUTA", "ano": 2026, "mes": 9, "status": "Solicitação + Corrigido (cobrança)"},
+            headers=headers,
         )
         assert resp.status_code == 200
         body = resp.json()
@@ -47,9 +50,13 @@ def test_import_e_relatorio_via_api(db):
         resp_pdf = client.get(
             "/laudos/relatorio.pdf",
             params={"empresa": "ABSOLUTA", "ano": 2026, "mes": 9, "status": "Solicitação + Corrigido (cobrança)"},
+            headers=headers,
         )
         assert resp_pdf.status_code == 200
         assert resp_pdf.headers["content-type"] == "application/pdf"
         assert resp_pdf.content[:4] == b"%PDF"
+
+        resp_sem_login = client.get("/laudos/relatorio", params={"empresa": "ABSOLUTA", "ano": 2026, "mes": 9})
+        assert resp_sem_login.status_code == 401
     finally:
         app.dependency_overrides.clear()
