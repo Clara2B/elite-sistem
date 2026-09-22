@@ -165,7 +165,7 @@ logs_auditoria
 └── criado_em
 ```
 
-## 6.1 Gestão de Processos (Fase 5 — proposta, aguardando aprovação)
+## 6.1 Gestão de Processos (Fase 5 — implementado e validado, 2026-09-22)
 
 Levantada a partir da planilha real `ELITE - GESTÃO DE PROCESSOS.xlsx` (21 abas: mensais, por
 advogada, e abas "fatais" copiadas manualmente — sinal de que o sistema atual não tem essas
@@ -215,12 +215,17 @@ eventos_processo                      -- os "andamentos"
 inicial, ajustável depois que a Clara validar com uso real (não é uma regra que estava documentada
 em lugar nenhum, é uma proposta para começar).
 
-**Nota sobre `advogada`/`assistente` como texto livre, não `usuarios`:** os setores confirmados na
-Fase 4 são `Líder - Gestão de Processos`, `Doutores(as)`, `Admin/dona`, `Financeiro` — não existe um
-setor "Assistente". Como os relatórios pedidos são "por assistente" e nem toda assistente
-necessariamente vai ter login no sistema, mantive como texto livre por enquanto (baixo custo de
-mudar depois para uma FK de `usuarios`, se/quando as assistentes também tiverem conta própria).
-**Sinalizando para a Clara confirmar ou corrigir**, junto com o resto da proposta desta seção.
+**Nota sobre `advogada`/`assistente` como texto livre, não `usuarios`:** confirmado pela Clara —
+"os assistentes não acessam o sistema, só seus líderes, mas pode manter apenas como texto pois eles
+aparecerão no relatório". Decisão fechada (não mais uma proposta em aberto); ver `DECISIONS.md`.
+
+**Defeito de dados conhecido, com mitigação:** algumas abas da planilha real têm o cabeçalho
+desalinhado da linha de dados, o que pode jogar valores de outra coluna dentro de
+`ADVOGADA`/`ASSISTENTE` (observado durante a validação: uma data completa, ex.
+`2025-12-03 00:00:00`, apareceu como se fosse o nome de uma pessoa). O import filtra valores que
+"parecem data" nesses dois campos (viram `None` em vez de serem gravados) — mesmo tratamento
+defensivo já usado para o formato do número de processo (CNJ) e para o campo `CLIENTE`. Ver
+`app/services/processos.py::_pessoa_valida`.
 
 ## 7. Fora de escopo (confirmado pela Clara, seção 1.9 item 2)
 
@@ -244,6 +249,13 @@ de regressão.
 automatizados, incluindo segregação por operadora ponta a ponta via API). `empresas_clientes`
 **não** ganhou `operadora_id`: confirmado que a mesma empresa-cliente é atendida pelas duas
 operadoras, então essa pendência da Fase 1 está resolvida (não precisa da coluna).
+
+**Fase 5 (2026-09-22):** `processos`, `tipos_evento`, `eventos_processo` — implementados e validados
+contra a planilha real `ELITE - GESTÃO DE PROCESSOS.xlsx` (21 abas, 51.116 linhas brutas): 44.333
+eventos importados, 5.636 processos distintos, 6.303 marcados como `prazo_fatal`. `data_prazo` fica
+`None` em todo o histórico importado (não extraído de texto livre — só passa a existir para eventos
+lançados daqui pra frente, com data informada explicitamente). Ver ARCHITECTURE.md seção 3.5 para os
+números completos de validação e o defeito de dados encontrado/mitigado.
 
 ## 9. Pendências deste modelo
 

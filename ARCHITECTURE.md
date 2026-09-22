@@ -388,3 +388,40 @@ Ver `DATABASE.md` seção 6.1 (`processos`, `tipos_evento`, `eventos_processo`, 
 - **Critério de conclusão:** import da planilha real validado (contagens batendo), relatório
   individual e geral gerando com os campos pedidos, alerta de prazo (sistema + e-mail) funcionando
   para ao menos um cenário de teste.
+
+### 3.5 Implementação e validação (2026-09-22)
+
+Aprovado e implementado depois da confirmação da Clara de que `advogada`/`assistente` ficam como
+texto livre no `Processo` (sem login — só os líderes acessam o sistema; ver `DECISIONS.md`).
+
+- **Construído:** modelos `Processo`/`TipoEvento`/`EventoProcesso`; `app/services/processos.py`
+  (import, `status_prazo`, `gerar_relatorio`, `prazos_proximos`, alerta por e-mail); rotas em
+  `app/api/processos.py` (`POST /processos/import`, `GET /processos/relatorio`(`.pdf`),
+  `GET /processos/prazos-proximos`, `POST /processos/prazos-proximos/notificar`,
+  `POST /processos/eventos/{id}/resolver`), todas restritas à operadora ELITE; `gerar_pdf_processos`
+  reaproveitando a folha timbrada dos laudos; `app/email_alertas.py` (Resend, no-op silencioso sem
+  `RESEND_API_KEY`/`RESEND_EMAIL_REMETENTE` configurados).
+- **Import validado contra a planilha real** (`ELITE - GESTÃO DE PROCESSOS.xlsx`, 21 abas, 51.116
+  linhas brutas): 44.333 eventos novos importados, 5.636 processos distintos, 6.303 marcados como
+  `prazo_fatal`. 6.278 linhas descartadas por não bater com o formato CNJ de número de processo
+  (defeito de desalinhamento de cabeçalho em algumas abas — mesmo tratamento defensivo do `_RE_CNJ`,
+  documentado no módulo); 484 linhas descartadas por não conseguir separar "empresa - cliente" no
+  campo `CLIENTE`.
+- **Achado durante a validação do relatório:** o mesmo defeito de desalinhamento de cabeçalho que o
+  `_RE_CNJ` protege também pôde jogar uma data de outra coluna dentro de `ADVOGADA`/`ASSISTENTE`
+  numa linha que, ainda assim, tinha um número de processo válido — um teste real mostrou uma
+  "pessoa" no relatório aparecendo literalmente como `2025-12-03 00:00:00`. Corrigido com um guard
+  (`_pessoa_valida` em `app/services/processos.py`): valores que parecem data são tratados como
+  ausentes (ficam `None`), em vez de descartar a linha inteira — mesmo espírito das outras checagens
+  de sanidade do import. Coberto por teste (`test_pessoa_valida_rejeita_valores_parecidos_com_data`).
+- **Limitação conhecida, documentada e aceita:** `data_prazo` fica `None` para todo o histórico
+  importado (os dados antigos não têm data estruturada — só texto livre como "fatal 20/07", ou só a
+  marcação SIM/FATAL sem data nenhuma; ver §3.1). Os recursos de "prazos próximos" e alerta por
+  e-mail só funcionam para eventos lançados dali em diante, com data de prazo informada
+  explicitamente via API — não há tentativa de adivinhar a data por regex no texto histórico.
+  Também esperado: uma fração grande dos processos aparece como "(sem assistente informado)" no
+  relatório — várias abas da planilha real não têm uma coluna `ASSISTENTE` utilizável.
+- **Testes:** 49/49 passando (`pytest -q`), `ruff check .` limpo.
+- **Pendente:** validar o import via API já em produção (Render), com a planilha real da Clara;
+  configurar conta Resend (ou outro provedor) se ela quiser o alerta por e-mail ativo — sem isso, o
+  painel "prazos próximos" dentro do sistema continua funcionando normalmente.

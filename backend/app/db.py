@@ -6,7 +6,15 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import settings
-from app.models import Base, FaixaAudiencia, Operadora, Setor, TipoLaudo, Usuario
+from app.models import (
+    Base,
+    FaixaAudiencia,
+    Operadora,
+    Setor,
+    TipoEvento,
+    TipoLaudo,
+    Usuario,
+)
 
 DEFAULT_TIPOS_LAUDO = {
     "AUTO": 40.0,
@@ -33,6 +41,27 @@ DEFAULT_SETORES = {
     "ELITE": ["Líder - Gestão de Processos", "Doutores(as)", "Admin/dona", "Financeiro"],
     "EXIMIA": ["Financeiro"],
 }
+
+# Catálogo inicial de tipos de evento — os mais frequentes observados na
+# planilha real "ELITE - GESTÃO DE PROCESSOS.xlsx" (Fase 5). Igual aos tipos
+# de laudo: um evento com tipo fora dessa lista não é bloqueado no import,
+# só fica sinalizado como "não catalogado" (mesmo tratamento que já existe
+# para tipos de laudo desconhecidos).
+DEFAULT_TIPOS_EVENTO = [
+    "CUSTAS",
+    "CUSTAS INICIAIS",
+    "CUSTAS FINAIS",
+    "DOCUMENTOS",
+    "SOLICITAR DOCUMENTOS",
+    "DADOS PARA MLE",
+    "PREPARO DE APELAÇÃO",
+    "CONTATO COM O CLIENTE",
+    "SOLICITAR HONORÁRIOS SUCUMBENCIAIS",
+    "PROCURAÇÃO",
+    "SOLICITAR CUSTAS",
+    "EMITIR PARCELA INCONTROVERSA",
+    "TAXA DE CANCELAMENTO",
+]
 
 _engine = None
 _SessionLocal: sessionmaker | None = None
@@ -122,6 +151,9 @@ def init_db() -> None:
         if db.scalar(select(FaixaAudiencia.id).limit(1)) is None:
             for inicio, fim, valor in DEFAULT_FAIXAS_AUDIENCIA:
                 db.add(FaixaAudiencia(inicio=inicio, fim=fim, valor=valor))
+        if db.scalar(select(TipoEvento.id).limit(1)) is None:
+            for nome in DEFAULT_TIPOS_EVENTO:
+                db.add(TipoEvento(nome=nome))
 
         operadoras = {o.nome: o for o in db.scalars(select(Operadora))}
         for nome in ("EXIMIA", "ELITE"):

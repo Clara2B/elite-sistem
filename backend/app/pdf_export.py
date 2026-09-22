@@ -17,6 +17,7 @@ from app.utils import format_brl
 if TYPE_CHECKING:
     from app.services.audiencias import AudienciasResult
     from app.services.laudos import LaudosResult
+    from app.services.processos import RelatorioProcessos
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 FUNDO_LAUDOS = ASSETS_DIR / "laudos_logo_0.jpeg"
@@ -158,6 +159,84 @@ def gerar_pdf_audiencias(result: AudienciasResult) -> bytes:
         c.setFont("Helvetica-Bold", 11)
         c.drawString(MARGEM + 10, y - 14, "Total")
         c.drawRightString(LARGURA - MARGEM - 10, y - 14, format_brl(result.total))
+
+    c.showPage()
+    c.save()
+    return buffer.getvalue()
+
+
+def gerar_pdf_processos(relatorio: RelatorioProcessos, titulo: str) -> bytes:
+    """Relatório de Gestão de Processos (Fase 5) — usa a mesma folha
+    timbrada dos laudos, já que o setor é da ELITE."""
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    _fundo(c, FUNDO_LAUDOS, cobrir_rodape=True)
+
+    periodo = (
+        f"Período: {relatorio.periodo_ini.strftime('%d/%m/%Y')} a {relatorio.periodo_fim.strftime('%d/%m/%Y')}"
+    )
+    y = _cabecalho_empresa(c, TOPO_CONTEUDO, "ELITE MEDIAÇÕES", None, [titulo, periodo])
+
+    col_pessoa_x = MARGEM + 6
+    col_proc_x = MARGEM + 190
+    col_ev_x = MARGEM + 260
+    col_cump_x = MARGEM + 320
+    col_perd_x = MARGEM + 375
+    col_pend_x = MARGEM + 425
+    col_parado_x = LARGURA - MARGEM - 10
+
+    altura_linha = 16
+    c.setFont("Helvetica-Bold", 8)
+    c.setFillColor(NAVY)
+    y -= 6
+    c.drawString(col_pessoa_x, y, "PESSOA")
+    c.drawString(col_proc_x, y, "PROC.")
+    c.drawString(col_ev_x, y, "EVENTOS")
+    c.drawString(col_cump_x, y, "CUMPR.")
+    c.drawString(col_perd_x, y, "PERD.")
+    c.drawString(col_pend_x, y, "PEND.")
+    c.drawRightString(col_parado_x, y, "PARADOS")
+    y -= 6
+    c.setStrokeColor(NAVY)
+    c.line(MARGEM, y, LARGURA - MARGEM, y)
+    y -= altura_linha
+
+    c.setFont("Helvetica", 8)
+
+    def _linha(c, y, item, negrito=False):
+        c.setFont("Helvetica-Bold" if negrito else "Helvetica", 8)
+        c.setFillColor(NAVY if negrito else HexColor("#222222"))
+        c.drawString(col_pessoa_x, y, str(item.pessoa)[:32])
+        c.drawString(col_proc_x, y, str(item.processos))
+        c.drawString(col_ev_x, y, str(item.eventos))
+        c.drawString(col_cump_x, y, str(item.prazos_cumpridos))
+        c.drawString(col_perd_x, y, str(item.prazos_perdidos))
+        c.drawString(col_pend_x, y, str(item.prazos_pendentes))
+        c.drawRightString(col_parado_x, y, str(item.processos_parados))
+
+    for linha in relatorio.linhas:
+        if y < RODAPE_LIMITE + 30:
+            c.showPage()
+            _fundo(c, FUNDO_LAUDOS, cobrir_rodape=True)
+            y = TOPO_CONTEUDO - 20
+        _linha(c, y, linha)
+        y -= altura_linha
+
+    y -= 4
+    c.setFillColor(NAVY)
+    c.rect(MARGEM, y - 20, LARGURA - 2 * MARGEM, 22, stroke=0, fill=1)
+    c.setFillColor(whitesmoke)
+    _linha_total_y = y - 14
+    c.setFont("Helvetica-Bold", 8)
+    c.setFillColor(whitesmoke)
+    t = relatorio.total
+    c.drawString(col_pessoa_x, _linha_total_y, t.pessoa[:32])
+    c.drawString(col_proc_x, _linha_total_y, str(t.processos))
+    c.drawString(col_ev_x, _linha_total_y, str(t.eventos))
+    c.drawString(col_cump_x, _linha_total_y, str(t.prazos_cumpridos))
+    c.drawString(col_perd_x, _linha_total_y, str(t.prazos_perdidos))
+    c.drawString(col_pend_x, _linha_total_y, str(t.prazos_pendentes))
+    c.drawRightString(col_parado_x, _linha_total_y, str(t.processos_parados))
 
     c.showPage()
     c.save()

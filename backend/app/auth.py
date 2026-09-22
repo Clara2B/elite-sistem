@@ -39,7 +39,7 @@ def criar_sessao(db: Session, usuario: Usuario) -> Sessao:
     sessao = Sessao(
         token=secrets.token_hex(32),
         usuario_id=usuario.id,
-        expira_em=datetime.utcnow() + timedelta(hours=SESSAO_DURACAO_HORAS),  # noqa: DTZ003 — naive UTC, consistente com o resto do schema (models.py)
+        expira_em=datetime.utcnow() + timedelta(hours=SESSAO_DURACAO_HORAS),
     )
     db.add(sessao)
     db.commit()
@@ -58,7 +58,7 @@ def get_current_user(
 ) -> Usuario:
     token = _extrair_token(authorization)
     sessao = db.get(Sessao, token)
-    if sessao is None or sessao.expira_em < datetime.utcnow():  # noqa: DTZ003 — idem
+    if sessao is None or sessao.expira_em < datetime.utcnow():
         raise HTTPException(status_code=401, detail="Sessão inválida ou expirada. Faça login novamente.")
     usuario = db.get(Usuario, sessao.usuario_id)
     if usuario is None or not usuario.ativo:

@@ -16,6 +16,21 @@ HEADER_ALIASES = {
     normalize("ENTRADA DO LAUDO"): normalize("ENTRADA DE LAUDO"),
     normalize("VALOR FALTANTE"): normalize("VALOR"),
     normalize("PAGO (SIM/NÃO)"): normalize("PAGO"),
+    # Planilha "ELITE - GESTÃO DE PROCESSOS.xlsx" (Fase 5): mesmo cabeçalho
+    # de fato aparece com textos diferentes entre abas (mensais, por
+    # advogada, "fatais") — unifica pro parser tratar tudo igual.
+    normalize("DIA"): normalize("DATA"),
+    normalize("DATA DE LIBERAÇÃO - QUANDO A DRA INSERIIU O CLIENTE NA PLANILHA"): normalize("DATA"),
+    normalize("FATALISSIMO"): normalize("PRAZO FATAL"),
+    normalize("FATAL"): normalize("PRAZO FATAL"),
+    normalize("DRA"): normalize("ADVOGADA"),
+    normalize("EVENTO - DRA IQUE INSERI AS INFORMAÇÕES A SEREM FEITAS PARA O CLIENTE"): normalize("EVENTO"),
+    normalize(
+        "OBSERVAÇÃO - INFORMAR O QUE FOI REALIZADO OU O QUE ESTA EM ABERTP PARA ESSE CLIENTE"
+    ): normalize("OBSERVAÇÃO"),
+    normalize(
+        "OBSERVAÇÃO - INFORMAR O QUE FOI REALIZADO OU O QUE ESTA EM ABERTO PARA ESSE CLIENTE"
+    ): normalize("OBSERVAÇÃO"),
 }
 
 

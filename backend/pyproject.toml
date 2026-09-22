@@ -1,4 +1,13 @@
 [tool.ruff.lint]
-# B008: "function call in default argument" — é o padrão idiomático de
-# injeção de dependência do FastAPI (Depends(...)), não um bug.
-ignore = ["B008"]
+ignore = [
+    # B008: "function call in default argument" — é o padrão idiomático de
+    # injeção de dependência do FastAPI (Depends(...)), não um bug.
+    "B008",
+    # DTZ003/DTZ011: datetime.utcnow()/date.today() sem timezone — datas
+    # "naive" são a escolha deliberada e consistente em todo o schema (o
+    # próprio Postgres/SQLite grava DateTime/Date sem timezone aqui). Um
+    # ignore de projeto fica mais legível do que # noqa espalhado pelos
+    # muitos pontos de uso em app/services/ e nos testes.
+    "DTZ003",
+    "DTZ011",
+]

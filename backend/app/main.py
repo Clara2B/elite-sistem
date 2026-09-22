@@ -7,6 +7,7 @@ from app.api.auth import router as auth_router
 from app.api.health import router as health_router
 from app.api.laudos import router as laudos_router
 from app.api.pendencias import router as pendencias_router
+from app.api.processos import router as processos_router
 from app.api.usuarios import router as usuarios_router
 from app.config import settings
 from app.db import init_db
@@ -29,3 +30,4 @@ app.include_router(usuarios_router)
 app.include_router(laudos_router)
 app.include_router(audiencias_router)
 app.include_router(pendencias_router)
+app.include_router(processos_router)

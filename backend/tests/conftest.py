@@ -5,10 +5,23 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.auth import criar_sessao, hash_senha
-from app.db import DEFAULT_FAIXAS_AUDIENCIA, DEFAULT_SETORES, DEFAULT_TIPOS_LAUDO
+from app.db import (
+    DEFAULT_FAIXAS_AUDIENCIA,
+    DEFAULT_SETORES,
+    DEFAULT_TIPOS_EVENTO,
+    DEFAULT_TIPOS_LAUDO,
+)
 from app.db import get_db as get_db_dependency
 from app.main import app
-from app.models import Base, FaixaAudiencia, Operadora, Setor, TipoLaudo, Usuario
+from app.models import (
+    Base,
+    FaixaAudiencia,
+    Operadora,
+    Setor,
+    TipoEvento,
+    TipoLaudo,
+    Usuario,
+)
 
 
 @pytest.fixture()
@@ -33,6 +46,8 @@ def db():
         session.add(TipoLaudo(nome=nome, valor_padrao=valor))
     for inicio, fim, valor in DEFAULT_FAIXAS_AUDIENCIA:
         session.add(FaixaAudiencia(inicio=inicio, fim=fim, valor=valor))
+    for nome in DEFAULT_TIPOS_EVENTO:
+        session.add(TipoEvento(nome=nome))
 
     operadoras = {}
     for nome in ("EXIMIA", "ELITE"):

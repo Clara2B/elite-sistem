@@ -166,3 +166,47 @@ class LogAuditoria(Base):
     entidade_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     detalhes: Mapped[str | None] = mapped_column(Text, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Processo(Base):
+    """Gestão de Processos (Fase 5, ELITE) — ver DATABASE.md seção 6.1."""
+
+    __tablename__ = "processos"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    numero_processo: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    empresa_cliente_id: Mapped[int] = mapped_column(ForeignKey("empresas_clientes.id"))
+    nome_cliente: Mapped[str] = mapped_column(String(200), default="")
+    advogada: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    assistente: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    empresa_cliente: Mapped[EmpresaCliente] = relationship()
+    eventos: Mapped[list[EventoProcesso]] = relationship(back_populates="processo")
+
+
+class TipoEvento(Base):
+    __tablename__ = "tipos_evento"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    nome: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    ativo: Mapped[bool] = mapped_column(default=True)
+
+
+class EventoProcesso(Base):
+    __tablename__ = "eventos_processo"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    processo_id: Mapped[int] = mapped_column(ForeignKey("processos.id"), index=True)
+    data: Mapped[date] = mapped_column(Date, index=True)
+    tipo_evento_nome: Mapped[str] = mapped_column(String(80))
+    prazo_fatal: Mapped[bool] = mapped_column(default=False)
+    data_prazo: Mapped[date | None] = mapped_column(Date, nullable=True)
+    resolvido: Mapped[bool] = mapped_column(default=False)
+    resolvido_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    observacao: Mapped[str | None] = mapped_column(Text, nullable=True)
+    origem: Mapped[str] = mapped_column(String(20), default="IMPORT_PLANILHA")
+    criado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    processo: Mapped[Processo] = relationship(back_populates="eventos")

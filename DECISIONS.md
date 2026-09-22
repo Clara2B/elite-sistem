@@ -171,6 +171,30 @@ permissões da Fase 4), alerta de prazo dentro do sistema + e-mail (WhatsApp fic
 **Reversível:** é uma proposta ainda não implementada — aguardando aprovação da Clara antes de
 escrever qualquer código (ver plano em `ARCHITECTURE.md` seção 3.4).
 
+## 2026-09-22 — Fase 5: `advogada`/`assistente` confirmados como texto livre; implementação concluída
+
+**Contexto:** última pendência aberta da proposta da Fase 5 — se `advogada`/`assistente` deveriam
+virar FK de `usuarios` (exigindo login) ou continuar texto livre. A Clara respondeu: "Os assistentes
+não acessam o sistema, só seus líderes, mas pode manter apenas como texto pois eles aparecerão no
+relatório".
+**Decisão:** mantido como texto livre em `Processo.advogada`/`Processo.assistente` (pendência 4 da
+lista abaixo, agora fechada). Com isso, a proposta inteira da Fase 5 foi implementada: modelos
+`Processo`/`TipoEvento`/`EventoProcesso`, import da planilha real, relatório individual+geral
+(texto e PDF com identidade ELITE), "prazos próximos" e alerta por e-mail (Resend, no-op sem
+configurar `RESEND_API_KEY`/`RESEND_EMAIL_REMETENTE`).
+**Achado durante a validação:** o mesmo defeito de desalinhamento de cabeçalho que já exigia uma
+checagem de sanidade no número do processo (formato CNJ) também pôde jogar uma data de outra coluna
+dentro de `ADVOGADA`/`ASSISTENTE` — um teste com a planilha real mostrou uma "pessoa" aparecendo
+como `2025-12-03 00:00:00` no relatório. Mitigado com um guard (`_pessoa_valida`) que descarta
+valores parecidos com data nesses dois campos, em vez de gravá-los como se fossem nome de pessoa.
+**Validado com a planilha real** (`ELITE - GESTÃO DE PROCESSOS.xlsx`, 21 abas, 51.116 linhas
+brutas): 44.333 eventos importados, 5.636 processos, 6.303 prazos fatais. 49 testes automatizados,
+`ruff check .` limpo. `data_prazo` fica `None` em todo o histórico importado — só existe para
+lançamentos feitos daqui pra frente, com data informada explicitamente (não há extração de data por
+regex de texto livre, decisão já registrada na entrada anterior).
+**Reversível:** sim — trocar `advogada`/`assistente` por FK de `usuarios` mais tarde é uma migração
+de baixo risco, se/quando as assistentes também tiverem login próprio.
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante
@@ -181,7 +205,8 @@ escrever qualquer código (ver plano em `ARCHITECTURE.md` seção 3.4).
    registrado para um refinamento futuro.
 3. `criado_por` em `laudos`/`audiencias`/`cobrancas` (rastreabilidade linha a linha, hoje só o
    import/geração fica no log de auditoria, não cada registro) — `DATABASE.md` seção 9.
-4. Confirmar com a Clara: `advogada`/`assistente` como texto livre em `eventos_processo` (proposta
-   da Fase 5) — ou deveriam ser FK para `usuarios`, exigindo que assistentes também tenham login?
-5. Provedor de e-mail transacional gratuito a escolher para os alertas de prazo (Fase 5) — ainda não
-   avaliado (candidatos: Resend, Brevo — verificar limites reais do free tier antes de decidir).
+4. Configurar `RESEND_API_KEY`/`RESEND_EMAIL_REMETENTE` no Render (Resend escolhido como provedor de
+   e-mail transacional, free tier) — sem isso, o alerta por e-mail da Fase 5 fica desligado
+   silenciosamente; o painel "prazos próximos" dentro do sistema não depende disso.
+5. Validar o import de Gestão de Processos (Fase 5) via API já em produção, com a planilha real da
+   Clara — a validação até aqui foi só local.
