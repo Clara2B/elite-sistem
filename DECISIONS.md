@@ -195,6 +195,22 @@ regex de texto livre, decisão já registrada na entrada anterior).
 **Reversível:** sim — trocar `advogada`/`assistente` por FK de `usuarios` mais tarde é uma migração
 de baixo risco, se/quando as assistentes também tiverem login próprio.
 
+## 2026-09-22 — Fase 5: regra de `prazo_fatal` corrigida (bug real encontrado antes de produção)
+
+**Contexto:** a implementação original marcava `prazo_fatal = true` sempre que a célula da coluna
+`PRAZO FATAL` não estivesse vazia (`bool(texto)`) — o que faria qualquer texto, inclusive um
+eventual `"NÃO"` escrito na célula, contar como fatal. Perguntei à Clara antes de assumir a regra.
+**Resposta da Clara:** "se a coluna FATAL estiver como qualquer coisa que não seja SIM, então não é
+fatal. Obs: o status fatal é sempre referente ao evento" — confirmando também que o campo pertence
+ao evento (`eventos_processo.prazo_fatal`), não ao processo, que já era como o schema estava
+modelado.
+**Correção:** só o valor `SIM` (normalizado — ignora acento/caixa/espaço) marca o evento como fatal;
+qualquer outro valor vira `false`. Coberto por teste com planilha real gerada em memória
+(`test_import_prazo_fatal_so_quando_coluna_e_sim`, `openpyxl`), incluindo o caso `"NÃO"`. Ver
+`DATABASE.md` seção 6.1 e `app/services/processos.py::importar_planilha`.
+**Reversível:** sim, é lógica de import; não afeta dado já gravado (o dado real ainda não foi
+importado em produção — pendência 5 abaixo).
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante

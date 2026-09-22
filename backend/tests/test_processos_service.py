@@ -1,4 +1,8 @@
+import tempfile
 from datetime import date, datetime, timedelta
+from pathlib import Path
+
+import openpyxl
 
 from app.models import EventoProcesso, Processo
 from app.services.empresas import get_or_create_empresa
@@ -6,6 +10,7 @@ from app.services.processos import (
     PROCESSO_PARADO_DIAS,
     _pessoa_valida,
     gerar_relatorio,
+    importar_planilha,
     marcar_resolvido,
     status_prazo,
 )
@@ -127,6 +132,31 @@ def test_relatorio_filtra_por_pessoa(db):
     relatorio = gerar_relatorio(db, date(2026, 9, 1), date(2026, 9, 30), filtro_pessoa="danilo")
     assert len(relatorio.linhas) == 1
     assert relatorio.linhas[0].pessoa == "DANILO"
+
+
+def test_import_prazo_fatal_so_quando_coluna_e_sim(db, tmp_path):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["CLIENTE", "Nº PROCESSO", "DATA", "EVENTO", "PRAZO FATAL"])
+    numeros = [
+        "1111111-11.2026.8.11.0001",
+        "2222222-22.2026.8.11.0002",
+        "3333333-33.2026.8.11.0003",
+        "4444444-44.2026.8.11.0004",
+    ]
+    valores_prazo = ["SIM", "sim ", "NÃO", ""]
+    for numero, valor in zip(numeros, valores_prazo, strict=True):
+        ws.append(["ABSOLUTA - Fulano de Tal", numero, date(2026, 9, 1), "CUSTAS", valor])
+    path = Path(tempfile.mkdtemp()) / "processos.xlsx"
+    wb.save(path)
+
+    importar_planilha(db, str(path))
+
+    eventos = {e.processo.numero_processo: e for e in db.query(EventoProcesso).all()}
+    assert eventos[numeros[0]].prazo_fatal is True  # "SIM"
+    assert eventos[numeros[1]].prazo_fatal is True  # "sim " — normalizado
+    assert eventos[numeros[2]].prazo_fatal is False  # "NÃO" não é fatal
+    assert eventos[numeros[3]].prazo_fatal is False  # vazio não é fatal
 
 
 def test_pessoa_valida_rejeita_valores_parecidos_com_data():

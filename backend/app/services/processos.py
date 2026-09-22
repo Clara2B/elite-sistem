@@ -167,7 +167,9 @@ def importar_planilha(db: Session, path: str, usuario_id: int | None = None) -> 
             resumo.linhas_ja_existentes += 1
             continue
 
-        prazo_fatal = bool(cell_text(row.get(col_prazo))) if col_prazo else False
+        # Regra confirmada pela Clara: só "SIM" (normalizado) marca prazo
+        # fatal — qualquer outro valor (vazio, "NÃO", etc.) não é fatal.
+        prazo_fatal = (normalize(cell_text(row.get(col_prazo))) == "SIM") if col_prazo else False
 
         db.add(
             EventoProcesso(

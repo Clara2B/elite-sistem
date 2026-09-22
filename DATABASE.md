@@ -203,6 +203,12 @@ eventos_processo                      -- os "andamentos"
 └── criado_em
 ```
 
+**Regra de `prazo_fatal`** (confirmada pela Clara): é sempre um atributo do **evento**, não do
+processo — o mesmo processo pode ter eventos fatais e não-fatais ao longo do tempo, por isso o campo
+fica em `eventos_processo`, não em `processos`. No import, só o valor `SIM` (normalizado — ignora
+acento/caixa/espaço, ex. `"Sim "`, `"sim"`) na coluna `PRAZO FATAL` marca o evento como fatal;
+qualquer outro valor (vazio, `"NÃO"`, etc.) não é fatal. Ver `app/services/processos.py`.
+
 **Regra de `status_prazo`** (só se aplica quando `prazo_fatal = true`):
 - `resolvido = true` e `resolvido_em <= data_prazo` → **CUMPRIDO**
 - `resolvido = true` e `resolvido_em > data_prazo` → **CUMPRIDO COM ATRASO** (conta como perdido nas
