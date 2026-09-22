@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -44,11 +45,23 @@ def _normalizar_url(url: str) -> str:
     (`postgresql://...`, como a que o Supabase fornece) faz o SQLAlchemy
     tentar o driver antigo `psycopg2` por padrão — que não instalamos —
     e o servidor não sobe (`ModuleNotFoundError: No module named 'psycopg2'`).
+
+    Também remove o parâmetro `pgbouncer=true`, que algumas telas do
+    Supabase (a de "ORM"/Prisma) incluem na connection string do pooler —
+    é uma flag de aplicação (avisa o Prisma pra não usar prepared
+    statements), não uma opção real de conexão do Postgres; o psycopg
+    recusa a conexão se ela vier na URL
+    (`invalid connection option "pgbouncer"`).
+
     URLs de SQLite (usadas nos testes) passam direto, sem alteração."""
     if url.startswith("postgres://"):
         url = "postgresql://" + url[len("postgres://"):]
-    if url.startswith("postgresql://"):
-        url = "postgresql+psycopg://" + url[len("postgresql://"):]
+    if url.startswith(("postgresql://", "postgresql+psycopg://")):
+        if url.startswith("postgresql://"):
+            url = "postgresql+psycopg://" + url[len("postgresql://"):]
+        partes = urlsplit(url)
+        query = [(k, v) for k, v in parse_qsl(partes.query, keep_blank_values=True) if k.lower() != "pgbouncer"]
+        url = urlunsplit((partes.scheme, partes.netloc, partes.path, urlencode(query), partes.fragment))
     return url
 
 
@@ -59,7 +72,17 @@ def get_engine():
             raise RuntimeError(
                 "DATABASE_URL não configurado. Defina a variável de ambiente antes de usar o banco."
             )
-        _engine = create_engine(_normalizar_url(settings.database_url), pool_pre_ping=True)
+        url = _normalizar_url(settings.database_url)
+        _engine = create_engine(
+            url,
+            pool_pre_ping=True,
+            # O pooler do Supabase (PgBouncer/Supavisor) em modo transação
+            # não sustenta prepared statements entre conexões — desliga o
+            # cache de prepared statements do psycopg pra evitar erros
+            # ("prepared statement already exists") sob esse tipo de pooler.
+            # Inofensivo numa conexão direta; SQLite (testes) não usa isso.
+            connect_args={"prepare_threshold": None} if url.startswith("postgresql+psycopg://") else {},
+        )
     return _engine
 
 
