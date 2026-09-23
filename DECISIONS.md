@@ -358,6 +358,19 @@ inteira (contribui para os 2.654/5.636 processos sem assistente). Não é algo q
 inferir automaticamente qual coluna era a pretendida.
 **Reversível:** sim, extensão de regex sem mudança de comportamento pra abas já reconhecidas.
 
+## 2026-09-23 — Fase 5 validada em produção; encerrada
+
+**Contexto:** depois de corrigir JANEIRO26/Dra Galzo na própria planilha, a Clara testou
+`POST /processos/import` em produção (Render) com o arquivo real completo, pelo `/docs`.
+**Resultado:** `200 OK`, sem nenhum erro — 51.126 linhas lidas, ~44 mil eventos novos, 8 linhas já
+existentes (do teste anterior local não afeta produção, mas confirma que a checagem de duplicidade
+funciona), 6.278 sem número de processo válido, 484 sem empresa reconhecida (ambos os contadores de
+sanidade já esperados e documentados). Números batendo com a validação local.
+**Decisão:** Fase 5 (Gestão de Processos) encerrada — import, relatórios (individual/geral, texto e
+PDF), painel de prazos próximos e todas as correções de robustez confirmadas de ponta a ponta, em
+produção, com dado real. Modelo do relatório aprovado por ora (pendência 4 abaixo, revisar depois a
+pedido da Clara).
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante
@@ -368,8 +381,6 @@ inferir automaticamente qual coluna era a pretendida.
    registrado para um refinamento futuro.
 3. `criado_por` em `laudos`/`audiencias`/`cobrancas` (rastreabilidade linha a linha, hoje só o
    import/geração fica no log de auditoria, não cada registro) — `DATABASE.md` seção 9.
-4. Validar o import de Gestão de Processos (Fase 5) via API já em produção, com a planilha real da
-   Clara — a validação até aqui foi só local.
-5. Modelo do relatório de Gestão de Processos (layout/colunas do PDF) — a Clara viu o exemplo
+4. Modelo do relatório de Gestão de Processos (layout/colunas do PDF) — a Clara viu o exemplo
    gerado (Março/2026, geral + individual) e gostou, mas quer revisitar detalhes depois. Não é um
    pedido concreto ainda; retomar quando ela trouxer o que quer mudar.
