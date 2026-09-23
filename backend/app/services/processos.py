@@ -48,27 +48,37 @@ def _pessoa_valida(texto: str) -> str | None:
     return texto
 
 
-# Nome de mês -> abreviação de 2 dígitos do ano é como as abas reais são
-# nomeadas (ex. "SETEMBRO", "SETEMBRO26", "JUNHO 2026", "OUTUBRO-26").
-# Confirmado pela Clara: o mês de referência vem do nome da aba, não de uma
-# coluna. Abas que não são nomeadas por mês (ex. "DOCS E CUSTAS", abas
+# Nome de mês (completo ou abreviado 3 letras) + ano de 2/4 dígitos é como
+# as abas reais são nomeadas (ex. "SETEMBRO", "SETEMBRO26", "JUNHO 2026",
+# "OUTUBRO-26", ou nas abas mais antigas "JUN-25", "SET- 25"). Confirmado
+# pela Clara: o mês de referência vem do nome da aba, não de uma coluna.
+# Abas que não são nomeadas por mês (ex. "DOCS E CUSTAS", "Dra Galzo", abas
 # "fatais") não batem com o regex — ficam sem mês de referência, sem travar
 # o import (mesmo espírito das outras checagens de sanidade deste módulo).
 _MESES = (
     "JANEIRO", "FEVEREIRO", "MARCO", "ABRIL", "MAIO", "JUNHO",
     "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO",
 )
-_RE_ABA_MES = re.compile(rf"^({'|'.join(_MESES)})[\s\-_/]*(\d{{2,4}})?$")
+_ABREV_MESES = {
+    "JAN": "JANEIRO", "FEV": "FEVEREIRO", "MAR": "MARCO", "ABR": "ABRIL",
+    "MAI": "MAIO", "JUN": "JUNHO", "JUL": "JULHO", "AGO": "AGOSTO",
+    "SET": "SETEMBRO", "OUT": "OUTUBRO", "NOV": "NOVEMBRO", "DEZ": "DEZEMBRO",
+}
+_RE_ABA_MES = re.compile(
+    rf"^({'|'.join(_MESES)}|{'|'.join(_ABREV_MESES)})[\s\-_/]*(\d{{2,4}})?$"
+)
 
 
 def _mes_referencia_da_aba(nome_aba: str) -> str | None:
-    """'SETEMBRO26' -> 'SETEMBRO/2026'; 'JUNHO 2026' -> 'JUNHO/2026'; aba
-    sem ano no nome -> só o mês ('SETEMBRO'); aba que não é um nome de mês
-    -> None."""
+    """'SETEMBRO26' -> 'SETEMBRO/2026'; 'JUNHO 2026' -> 'JUNHO/2026';
+    'JUN-25' -> 'JUNHO/2025' (abreviação de 3 letras também é reconhecida);
+    aba sem ano no nome -> só o mês ('SETEMBRO'); aba que não é um nome de
+    mês -> None."""
     m = _RE_ABA_MES.match(normalize(nome_aba))
     if not m:
         return None
     mes, ano_txt = m.group(1), m.group(2)
+    mes = _ABREV_MESES.get(mes, mes)
     if not ano_txt:
         return mes
     ano = int(ano_txt)

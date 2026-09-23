@@ -185,6 +185,15 @@ def test_mes_referencia_da_aba():
     assert _mes_referencia_da_aba("FATAL") is None
 
 
+def test_mes_referencia_da_aba_aceita_abreviacao_de_3_letras():
+    assert _mes_referencia_da_aba("JUN-25") == "JUNHO/2025"
+    assert _mes_referencia_da_aba("JUL-25") == "JULHO/2025"
+    assert _mes_referencia_da_aba("AGO-25") == "AGOSTO/2025"
+    assert _mes_referencia_da_aba("SET- 25") == "SETEMBRO/2025"
+    assert _mes_referencia_da_aba("OUT- 25") == "OUTUBRO/2025"
+    assert _mes_referencia_da_aba("MAR") == "MARCO"
+
+
 def test_pessoa_valida_rejeita_valores_parecidos_com_data():
     assert _pessoa_valida("DANILO") == "DANILO"
     assert _pessoa_valida("2025-12-03 00:00:00") is None

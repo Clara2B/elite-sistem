@@ -334,6 +334,30 @@ que simplesmente guardar o texto inteiro. `Text` no Postgres não tem custo de p
 nesse volume comparado a `VARCHAR(N)`.
 **Reversível:** sim, campo mais permissivo, não descarta nem altera dado nenhum já gravado.
 
+## 2026-09-23 — Validação com a planilha "padronizada" da Clara + abreviação de mês nas abas antigas
+
+**Contexto:** a Clara padronizou a planilha real e pediu pra eu checar se isso ajudava nos problemas
+de leitura. Rodei o import completo (`importar_planilha`) localmente contra o arquivo novo.
+**Resultado:** import completo sem erro — todas as correções anteriores (N+1, memória do openpyxl,
+linhas desiguais, `Text` sem limite) seguram bem com o arquivo padronizado. Números: 44.344 eventos
+novos, 5.636 processos, 2.147 prazos fatais (bem menor que os 6.303 de antes — esperado, é o efeito
+combinado da correção da regra "só SIM é fatal" e da própria Clara ter passado a preencher "NÃO"
+explicitamente em vez de deixar em branco).
+**Achado durante a validação — corrigido:** várias abas mais antigas usam abreviação de 3 letras no
+nome (`JUN-25`, `JUL-25`, `AGO-25`, `SET- 25`, `OUT- 25`) em vez do nome completo do mês — o
+`_mes_referencia_da_aba` só reconhecia nome completo, então essas abas ficavam sem
+`mes_referencia`. Estendido pra aceitar as 12 abreviações (JAN, FEV, MAR, ABR, MAI, JUN, JUL, AGO,
+SET, OUT, NOV, DEZ). Cobertura de `mes_referencia` subiu de 61% para 76% dos eventos (o resto é
+esperado — abas não nomeadas por mês, como "DOCS E CUSTAS" e as abas por advogada, continuam sem
+esse campo por design).
+**Achado durante a validação — não corrigido, é dado da planilha, não bug do parser:** nas abas
+"JANEIRO26" e "Dra Galzo", a primeira célula do cabeçalho (que devia dizer "ASSISTENTE") tem um
+número de processo escrito nela por engano — faz essas duas abas perderem a coluna de assistente
+inteira (contribui para os 2.654/5.636 processos sem assistente). Não é algo que o parser deveria
+"adivinhar" — é um erro de digitação na própria planilha; melhor avisar a Clara do que tentar
+inferir automaticamente qual coluna era a pretendida.
+**Reversível:** sim, extensão de regex sem mudança de comportamento pra abas já reconhecidas.
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante

@@ -457,5 +457,13 @@ texto livre no `Processo` (sem login — só os líderes acessam o sistema; ver 
   (`EventoProcesso`) de `VARCHAR(N)` para `Text` (sem limite) — todos texto livre da mesma planilha,
   que se mostrou consistentemente mais "rica" em conteúdo do que o desenho original previu. Ver
   `DECISIONS.md` e `DATABASE.md` seção 6.1.
+- **Planilha "padronizada" validada localmente:** a Clara ajustou a planilha real e pediu conferência.
+  Rodei o import completo local contra o arquivo novo — passou sem erro (todas as correções acima
+  seguram bem). Achado e corrigido no caminho: abas antigas nomeadas por abreviação de 3 letras
+  (`JUN-25`, `SET-25`...) não eram reconhecidas por `_mes_referencia_da_aba` — estendido, cobertura
+  subiu de 61% para 76% dos eventos. Achado e **não** corrigido (é erro de digitação na planilha, não
+  bug do parser): abas "JANEIRO26" e "Dra Galzo" têm a célula de cabeçalho de `ASSISTENTE`
+  sobrescrita com um número de processo, perdendo essa coluna inteira nessas duas abas — avisado à
+  Clara em vez de tentar adivinhar. Ver `DECISIONS.md`.
 - **Pendente:** revalidar o import via API em produção com a planilha real depois dessa última
   correção.
