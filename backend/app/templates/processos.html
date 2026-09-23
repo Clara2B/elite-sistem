@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block titulo %}Gestão de Processos — Elite Sistem{% endblock %}
+{% block conteudo %}
+  <h1>Gestão de Processos</h1>
+  <p class="subtitulo">Andamentos, prazos fatais e relatórios da equipe.</p>
+
+  {% if mensagem %}<div class="mensagem sucesso">{{ mensagem }}</div>{% endif %}
+  {% if erro %}<div class="mensagem erro">{{ erro }}</div>{% endif %}
+
+  <div class="card">
+    <h2>Importar planilha</h2>
+    <form class="formulario" method="post" action="/app/processos/import" enctype="multipart/form-data">
+      <div class="campo">
+        <label for="arquivo">Arquivo .xlsx</label>
+        <input type="file" id="arquivo" name="arquivo" accept=".xlsx" required>
+      </div>
+      <button type="submit">Importar</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Prazos próximos (30 dias)</h2>
+    {% if prazos %}
+      <table>
+        <thead><tr><th>Processo</th><th>Cliente</th><th>Evento</th><th>Prazo</th><th>Situação</th><th>Assistente</th><th></th></tr></thead>
+        <tbody>
+          {% for p in prazos %}
+            <tr>
+              <td>{{ p.numero_processo }}</td>
+              <td>{{ p.nome_cliente }}</td>
+              <td>{{ p.tipo_evento_nome }}</td>
+              <td>{{ p.data_prazo.strftime("%d/%m/%Y") }}</td>
+              <td>
+                {% if p.dias_restantes < 0 %}
+                  <span class="badge fatal">VENCIDO há {{ -p.dias_restantes }} dia(s)</span>
+                {% else %}
+                  <span class="badge fatal">vence em {{ p.dias_restantes }} dia(s)</span>
+                {% endif %}
+              </td>
+              <td>{{ p.assistente or "-" }}</td>
+              <td>
+                <form method="post" action="/app/processos/eventos/{{ p.evento_id }}/resolver">
+                  <button type="submit" class="secundario" style="padding:6px 10px; font-size:0.8rem;">Marcar resolvido</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="vazio">Nenhum prazo fatal vencendo nos próximos 30 dias. 🎉</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Relatório</h2>
+    <form class="formulario" method="get" action="/app/processos">
+      <div class="campo">
+        <label for="periodo_ini">De</label>
+        <input type="date" id="periodo_ini" name="periodo_ini" value="{{ filtro.periodo_ini }}" required>
+      </div>
+      <div class="campo">
+        <label for="periodo_fim">Até</label>
+        <input type="date" id="periodo_fim" name="periodo_fim" value="{{ filtro.periodo_fim }}" required>
+      </div>
+      <div class="campo">
+        <label for="agrupar_por">Agrupar por</label>
+        <select id="agrupar_por" name="agrupar_por">
+          <option value="assistente" {{ "selected" if filtro.agrupar_por == "assistente" else "" }}>Assistente</option>
+          <option value="advogada" {{ "selected" if filtro.agrupar_por == "advogada" else "" }}>Advogada</option>
+        </select>
+      </div>
+      <div class="campo">
+        <label for="pessoa">Pessoa (individual — deixe em branco para o geral)</label>
+        <input type="text" id="pessoa" name="pessoa" value="{{ filtro.pessoa }}" placeholder="Ex.: DANILO">
+      </div>
+      <button type="submit">Gerar relatório</button>
+    </form>
+  </div>
+
+  {% if resultado %}
+    <div class="card">
+      <h2>
+        {{ "Relatório de " + filtro.pessoa if filtro.pessoa else "Relatório geral da equipe" }}
+        <a class="botao secundario" style="float:right; font-size:0.82rem; padding:6px 12px;"
+           href="/processos/relatorio.pdf?periodo_ini={{ filtro.periodo_ini }}&periodo_fim={{ filtro.periodo_fim }}&agrupar_por={{ filtro.agrupar_por }}&pessoa={{ filtro.pessoa }}">
+          Baixar PDF
+        </a>
+      </h2>
+      <p class="subtitulo">{{ resultado.periodo_ini.strftime("%d/%m/%Y") }} a {{ resultado.periodo_fim.strftime("%d/%m/%Y") }}</p>
+      {% if resultado.linhas %}
+        <table>
+          <thead>
+            <tr><th>Pessoa</th><th>Processos</th><th>Eventos</th><th>Cumpridos</th><th>Perdidos</th><th>Pendentes</th><th>Parados</th></tr>
+          </thead>
+          <tbody>
+            {% for l in resultado.linhas %}
+              <tr>
+                <td>{{ l.pessoa }}</td><td>{{ l.processos }}</td><td>{{ l.eventos }}</td>
+                <td>{{ l.prazos_cumpridos }}</td><td>{{ l.prazos_perdidos }}</td>
+                <td>{{ l.prazos_pendentes }}</td><td>{{ l.processos_parados }}</td>
+              </tr>
+            {% endfor %}
+            <tr class="total">
+              <td>{{ resultado.total.pessoa }}</td><td>{{ resultado.total.processos }}</td><td>{{ resultado.total.eventos }}</td>
+              <td>{{ resultado.total.prazos_cumpridos }}</td><td>{{ resultado.total.prazos_perdidos }}</td>
+              <td>{{ resultado.total.prazos_pendentes }}</td><td>{{ resultado.total.processos_parados }}</td>
+            </tr>
+          </tbody>
+        </table>
+      {% else %}
+        <p class="vazio">Nenhum evento encontrado nesse período.</p>
+      {% endif %}
+    </div>
+  {% endif %}
+{% endblock %}

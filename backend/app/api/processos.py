@@ -11,6 +11,7 @@ from app.models import Usuario
 from app.pdf_export import gerar_pdf_processos
 from app.services import processos as processos_service
 from app.services.auditoria import registrar
+from app.utils import nome_arquivo_pdf
 
 router = APIRouter(prefix="/processos", tags=["processos"])
 
@@ -73,7 +74,11 @@ def relatorio_pdf(
     titulo = f"Relatório de {pessoa}" if pessoa else "Relatório geral da equipe"
     registrar(db, usuario, "GEROU_RELATORIO_PROCESSOS_PDF", entidade="processo", detalhes=titulo)
     pdf_bytes = gerar_pdf_processos(resultado, titulo)
-    return Response(content=pdf_bytes, media_type="application/pdf")
+    nome_arquivo = nome_arquivo_pdf("processos", pessoa or "equipe", str(periodo_ini), str(periodo_fim))
+    return Response(
+        content=pdf_bytes, media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},
+    )
 
 
 @router.get("/prazos-proximos")

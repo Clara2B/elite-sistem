@@ -11,6 +11,14 @@ O token é lido via `HTTPBearer` (não um `Header()` genérico) para que o
 FastAPI registre um esquema de segurança no OpenAPI — sem isso, o botão
 "Authorize" não aparece no Swagger (`/docs`), porque ele só é desenhado
 para dependências reconhecidas como autenticação.
+
+Fase 6: as páginas HTML (`app/web/`) autenticam por cookie de sessão, não
+por cabeçalho `Authorization` (o navegador não anexa isso sozinho). Em vez
+de duplicar toda rota de relatório/PDF só para servir a versão "web",
+`_extrair_token` aceita o mesmo token vindo do cookie `sessao` como
+alternativa ao Bearer — assim um link comum (`<a href="/laudos/
+relatorio.pdf?...">`) funciona tanto para quem está logado pelo navegador
+quanto para quem chama a API direto com o cabeçalho.
 """
 from __future__ import annotations
 
@@ -18,7 +26,7 @@ import secrets
 from datetime import datetime, timedelta
 
 import bcrypt
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -28,6 +36,7 @@ from app.models import Sessao, Usuario, UsuarioSetor
 
 SESSAO_DURACAO_HORAS = 12
 PAPEIS_GLOBAIS = {"ADMIN_SUPERIOR", "ADMIN_TI"}
+COOKIE_SESSAO = "sessao"
 
 _bearer_scheme = HTTPBearer(
     auto_error=False,
@@ -57,10 +66,16 @@ def criar_sessao(db: Session, usuario: Usuario) -> Sessao:
     return sessao
 
 
-def _extrair_token(credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme)) -> str:
-    if credentials is None:
-        raise HTTPException(status_code=401, detail="Não autenticado. Envie 'Authorization: Bearer <token>'.")
-    return credentials.credentials
+def _extrair_token(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+) -> str:
+    if credentials is not None:
+        return credentials.credentials
+    token_cookie = request.cookies.get(COOKIE_SESSAO)
+    if token_cookie:
+        return token_cookie
+    raise HTTPException(status_code=401, detail="Não autenticado. Envie 'Authorization: Bearer <token>'.")
 
 
 def get_current_user(

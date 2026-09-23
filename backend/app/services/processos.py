@@ -382,6 +382,7 @@ def formatar_texto(relatorio: RelatorioProcessos, titulo: str) -> str:
 
 @dataclass
 class PrazoProximo:
+    evento_id: int
     numero_processo: str
     nome_cliente: str
     tipo_evento_nome: str
@@ -408,6 +409,7 @@ def prazos_proximos(db: Session, dias: int = 7) -> list[PrazoProximo]:
     for evento in db.scalars(query):
         resultado.append(
             PrazoProximo(
+                evento_id=evento.id,
                 numero_processo=evento.processo.numero_processo,
                 nome_cliente=evento.processo.nome_cliente,
                 tipo_evento_nome=evento.tipo_evento_nome,

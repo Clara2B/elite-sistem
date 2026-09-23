@@ -465,5 +465,52 @@ texto livre no `Processo` (sem login — só os líderes acessam o sistema; ver 
   bug do parser): abas "JANEIRO26" e "Dra Galzo" têm a célula de cabeçalho de `ASSISTENTE`
   sobrescrita com um número de processo, perdendo essa coluna inteira nessas duas abas — avisado à
   Clara em vez de tentar adivinhar. Ver `DECISIONS.md`.
-- **Pendente:** revalidar o import via API em produção com a planilha real depois dessa última
-  correção.
+- **Revalidado em produção:** a Clara testou o import via API em produção depois de todas as
+  correções acima (incluindo a padronização dela mesma na planilha) — `200 OK`, sem erro. Fase 5
+  encerrada — ver `DECISIONS.md` (entrada "Fase 5 validada em produção; encerrada").
+
+## 4. Fase 6 — Interface visual (frontend)
+
+### 4.1 Contexto e decisão (D2, fechada)
+
+Até aqui o sistema só tinha API + `/docs` (Swagger, ferramenta de desenvolvedor). A decisão D2
+original (seção 2.3/2.7) já tinha aprovado "backend API + frontend próprio", mas deixou em aberto
+a escolha entre Jinja2+HTMX (tudo em Python) ou React/Next.js. A Clara pediu a interface de verdade
+("ainda não está profissional e funcional como pedido") e decidiu: **Jinja2 + HTMX**, construir as
+telas de **todos os módulos de uma vez** (não módulo a módulo), reaproveitando a identidade visual
+já usada nos PDFs (azul-marinho `#152A40`). Ver `DECISIONS.md`.
+
+### 4.2 O que foi construído
+
+- **`app/web/`** — rotas HTML, uma por módulo (`routes_laudos.py`, `routes_audiencias.py`,
+  `routes_pendencias.py`, `routes_processos.py`, `routes_usuarios.py`), mais `routes_auth.py`
+  (login/logout) e `routes_dashboard.py` (`/`). Todas sob o prefixo `/app/...` pra não colidir com
+  as rotas JSON já existentes (ex.: `/laudos` continua JSON; `/app/laudos` é a tela).
+- **`app/templates/`** (Jinja2) + **`app/static/style.css`** — layout único (`base.html`) com
+  navegação, cores e tipografia consistentes; formulários simples (upload de planilha, filtros de
+  relatório) com navegação de página inteira (sem dependência de JavaScript pra funcionar — HTMX
+  citado na decisão fica como reforço futuro de UX, não bloqueante, porque este ambiente de
+  desenvolvimento não tem acesso à internet pra validar scripts de CDN agora).
+- **Autenticação por cookie** (`app/web/auth.py`) — ver `SECURITY.md` seção 5.1. Reaproveita a
+  mesma tabela `sessoes` e o mesmo `verificar_senha`/`criar_sessao` da API.
+- **Menu dinâmico por permissão** (`app/web/menu.py`) — mesma regra de `operadoras_acessiveis`
+  já usada pela API: quem só tem acesso à EXIMIA não vê Laudos/Gestão de Processos no menu, etc.
+- **`GET /empresas`** (novo endpoint JSON, `app/api/empresas.py`) — faltava uma forma de listar
+  empresas-clientes pra montar os seletores das telas; nenhuma rota existente fazia isso.
+- **Achados/corrigidos construindo isso:**
+  - `PrazoProximo` (Gestão de Processos) não carregava o `evento_id` — impossível montar um botão
+    "marcar resolvido" a partir do painel de prazos (nem pela API, nem pela tela). Adicionado.
+  - `response.set_cookie(..., expires=...)` do Starlette exige datetime com timezone; o projeto usa
+    datetime naive (UTC) por convenção em todo o schema. Resolvido usando `max_age` (segundos) em
+    vez de `expires`, evitando abrir uma exceção só pra essa chamada.
+  - PDFs baixados pela tela abriam inline no navegador em vez de baixar (sem
+    `Content-Disposition: attachment`) — página dizia "Baixar PDF" mas não baixava. Corrigido nas
+    três rotas de PDF (`laudos`, `audiencias`, `processos`), com nome de arquivo sensato
+    (`nome_arquivo_pdf` em `app/utils.py`).
+- **Testado:** `tests/test_web.py` (login, redirecionamento sem sessão, página 403 pra quem não é
+  admin, logout, PDF via cookie) + navegação ponta a ponta com Playwright/Chromium local (login,
+  todas as telas, gerar relatório, baixar PDF, criar usuário, ativar/desativar) contra a planilha
+  real de Gestão de Processos — capturas de tela conferidas visualmente antes de reportar como
+  pronto.
+- **Pendente:** revalidar em produção (Render) depois do deploy; a Clara ainda não viu a interface
+  rodando de verdade, só as capturas de tela que vou mandar.

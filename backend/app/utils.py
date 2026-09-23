@@ -83,3 +83,17 @@ def format_brl(value: float) -> str:
     text = f"{value:,.2f}"
     text = text.replace(",", "X").replace(".", ",").replace("X", ".")
     return f"R$ {text}"
+
+
+def nome_arquivo_pdf(*partes: str) -> str:
+    """Monta um nome de arquivo seguro para o cabeçalho `Content-Disposition`
+    (Fase 6) a partir de textos livres (ex.: nome de empresa-cliente) — troca
+    espaços por "_" e remove caracteres que poderiam quebrar o cabeçalho ou
+    virar um nome de arquivo estranho."""
+    limpas = []
+    for parte in partes:
+        texto = normalize(parte).replace(" ", "_")
+        texto = "".join(c for c in texto if c.isalnum() or c in "_-")
+        if texto:
+            limpas.append(texto)
+    return "_".join(limpas) + ".pdf"

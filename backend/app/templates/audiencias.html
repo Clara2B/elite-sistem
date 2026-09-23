@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block titulo %}Audiências — Elite Sistem{% endblock %}
+{% set meses = [(1,"Janeiro"),(2,"Fevereiro"),(3,"Março"),(4,"Abril"),(5,"Maio"),(6,"Junho"),(7,"Julho"),(8,"Agosto"),(9,"Setembro"),(10,"Outubro"),(11,"Novembro"),(12,"Dezembro")] %}
+{% block conteudo %}
+  <h1>Audiências</h1>
+  <p class="subtitulo">Relatório quinzenal (1–15 / 16–fim do mês).</p>
+
+  {% if mensagem %}<div class="mensagem sucesso">{{ mensagem }}</div>{% endif %}
+  {% if erro %}<div class="mensagem erro">{{ erro }}</div>{% endif %}
+
+  <div class="card">
+    <h2>Importar planilha</h2>
+    <form class="formulario" method="post" action="/app/audiencias/import" enctype="multipart/form-data">
+      <div class="campo">
+        <label for="arquivo">Arquivo .xlsx</label>
+        <input type="file" id="arquivo" name="arquivo" accept=".xlsx" required>
+      </div>
+      <button type="submit">Importar</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Gerar relatório</h2>
+    <form class="formulario" method="get" action="/app/audiencias">
+      <div class="campo">
+        <label for="empresa">Empresa-cliente</label>
+        <select id="empresa" name="empresa" required>
+          <option value="">Selecione...</option>
+          {% for e in empresas %}
+            <option value="{{ e.nome }}" {{ "selected" if filtro.empresa == e.nome else "" }}>{{ e.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="campo">
+        <label for="mes">Mês</label>
+        <select id="mes" name="mes" required>
+          {% for numero, nome in meses %}
+            <option value="{{ numero }}" {{ "selected" if filtro.mes == numero else ("selected" if not filtro.mes and numero == hoje.month else "") }}>{{ nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="campo">
+        <label for="ano">Ano</label>
+        <input type="number" id="ano" name="ano" value="{{ filtro.ano or hoje.year }}" required min="2020" max="2100">
+      </div>
+      <div class="campo">
+        <label for="quinzena">Quinzena</label>
+        <select id="quinzena" name="quinzena" required>
+          <option value="1" {{ "selected" if filtro.quinzena == 1 else "" }}>1ª (dia 1 a 15)</option>
+          <option value="2" {{ "selected" if filtro.quinzena == 2 else "" }}>2ª (dia 16 ao fim)</option>
+        </select>
+      </div>
+      <button type="submit">Gerar relatório</button>
+    </form>
+  </div>
+
+  {% if resultado %}
+    <div class="card">
+      <h2>
+        {{ resultado.empresa }}
+        <a class="botao secundario" style="float:right; font-size:0.82rem; padding:6px 12px;"
+           href="/audiencias/relatorio.pdf?empresa={{ filtro.empresa }}&ano={{ filtro.ano }}&mes={{ filtro.mes }}&quinzena={{ filtro.quinzena }}">
+          Baixar PDF
+        </a>
+      </h2>
+      <p class="subtitulo">
+        {{ resultado.periodo_ini.strftime("%d/%m/%Y") }} a {{ resultado.periodo_fim.strftime("%d/%m/%Y") }}
+        {% if resultado.valor_unitario is not none %} — R$ {{ "%.2f"|format(resultado.valor_unitario)|replace(".", ",") }} por audiência{% endif %}
+      </p>
+      <p class="subtitulo">Acumulado no mês: {{ resultado.quantidade_mes }}</p>
+      {% if resultado.clientes %}
+        <table>
+          <thead><tr><th>#</th><th>Cliente</th></tr></thead>
+          <tbody>
+            {% for nome in resultado.clientes %}
+              <tr><td>{{ loop.index }}</td><td>{{ nome }}</td></tr>
+            {% endfor %}
+            {% if resultado.total is not none %}
+              <tr class="total"><td colspan="1">Total</td><td>R$ {{ "%.2f"|format(resultado.total)|replace(".", ",") }}</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="vazio">Nenhuma audiência encontrada nesse período.</p>
+      {% endif %}
+    </div>
+  {% endif %}
+{% endblock %}

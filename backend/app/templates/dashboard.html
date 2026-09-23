@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block titulo %}Início — Elite Sistem{% endblock %}
+{% block conteudo %}
+  <h1>Olá, {{ usuario.nome.split(" ")[0] }}</h1>
+  <p class="subtitulo">Escolha um módulo para começar.</p>
+  <div class="grid-modulos">
+    {% for item in menu %}
+      <a class="modulo" href="{{ item.url }}">
+        <div class="titulo">{{ item.rotulo }}</div>
+        <div class="descricao">{{ item.descricao }}</div>
+      </a>
+    {% endfor %}
+  </div>
+{% endblock %}

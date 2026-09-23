@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block titulo %}Pendências — Elite Sistem{% endblock %}
+{% block conteudo %}
+  <h1>Pendências</h1>
+  <p class="subtitulo">Cobranças em aberto por empresa-cliente (EXÍMIA e ELITE).</p>
+
+  {% if mensagem %}<div class="mensagem sucesso">{{ mensagem }}</div>{% endif %}
+  {% if erro %}<div class="mensagem erro">{{ erro }}</div>{% endif %}
+
+  <div class="card">
+    <h2>Importar planilha</h2>
+    <form class="formulario" method="post" action="/app/pendencias/import" enctype="multipart/form-data">
+      <div class="campo">
+        <label for="arquivo">Arquivo .xlsx</label>
+        <input type="file" id="arquivo" name="arquivo" accept=".xlsx" required>
+      </div>
+      <button type="submit">Importar</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Ver mensagem de cobrança</h2>
+    <form class="formulario" method="get" action="/app/pendencias">
+      <div class="campo">
+        <label for="empresa">Empresa-cliente</label>
+        <select id="empresa" name="empresa" required>
+          <option value="">Selecione...</option>
+          {% for e in empresas %}
+            <option value="{{ e.nome }}" {{ "selected" if filtro.empresa == e.nome else "" }}>{{ e.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit">Ver pendências</button>
+    </form>
+  </div>
+
+  {% if mensagens is not none %}
+    {% if mensagens %}
+      {% for m in mensagens %}
+        <div class="card">
+          <h2>{{ m.cobrador }} — Total R$ {{ "%.2f"|format(m.total)|replace(".", ",") }}</h2>
+          <pre style="white-space: pre-wrap; font-family: inherit; font-size: 0.9rem; margin: 0;">{{ m.texto }}</pre>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="card"><p class="vazio">Nenhuma pendência em aberto para essa empresa.</p></div>
+    {% endif %}
+  {% endif %}
+{% endblock %}

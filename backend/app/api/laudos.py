@@ -9,6 +9,7 @@ from app.models import Usuario
 from app.pdf_export import gerar_pdf_laudos
 from app.services import laudos as laudos_service
 from app.services.auditoria import registrar
+from app.utils import nome_arquivo_pdf
 
 router = APIRouter(prefix="/laudos", tags=["laudos"])
 
@@ -79,4 +80,8 @@ def relatorio_pdf(
         raise HTTPException(status_code=404, detail=str(e))
     registrar(db, usuario, "GEROU_RELATORIO_LAUDOS_PDF", entidade="empresa_cliente", entidade_id=empresa)
     pdf_bytes = gerar_pdf_laudos(resultado)
-    return Response(content=pdf_bytes, media_type="application/pdf")
+    nome_arquivo = nome_arquivo_pdf("laudos", resultado.empresa, f"{ano}-{mes:02d}")
+    return Response(
+        content=pdf_bytes, media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},
+    )

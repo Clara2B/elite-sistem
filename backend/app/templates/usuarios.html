@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block titulo %}Usuários — Elite Sistem{% endblock %}
+{% block conteudo %}
+  <h1>Usuários</h1>
+  <p class="subtitulo">Cadastro e acesso da equipe.</p>
+
+  {% if mensagem %}<div class="mensagem sucesso">{{ mensagem }}</div>{% endif %}
+  {% if erro %}<div class="mensagem erro">{{ erro }}</div>{% endif %}
+
+  <div class="card">
+    <h2>Equipe cadastrada</h2>
+    <table>
+      <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Setores</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for u in usuarios %}
+          <tr>
+            <td>{{ u.nome }}</td>
+            <td>{{ u.email }}</td>
+            <td>{{ u.papel_global or "-" }}</td>
+            <td>
+              {% for v in u.setores %}
+                {{ v.setor.nome }} ({{ v.setor.operadora.nome }}, {{ v.papel }}){% if not loop.last %}, {% endif %}
+              {% else %}
+                -
+              {% endfor %}
+            </td>
+            <td>
+              {% if u.ativo %}<span class="badge ativo">Ativo</span>{% else %}<span class="badge inativo">Inativo</span>{% endif %}
+            </td>
+            <td>
+              <form method="post" action="/app/usuarios/{{ u.id }}/ativo?ativo={{ 'false' if u.ativo else 'true' }}">
+                <button type="submit" class="secundario" style="padding:6px 10px; font-size:0.8rem;">
+                  {{ "Desativar" if u.ativo else "Ativar" }}
+                </button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Novo usuário</h2>
+    <form method="post" action="/app/usuarios">
+      <div class="formulario" style="margin-bottom: 18px;">
+        <div class="campo">
+          <label for="nome">Nome</label>
+          <input type="text" id="nome" name="nome" required>
+        </div>
+        <div class="campo">
+          <label for="email">E-mail</label>
+          <input type="email" id="email" name="email" required>
+        </div>
+        <div class="campo">
+          <label for="senha">Senha</label>
+          <input type="password" id="senha" name="senha" required>
+        </div>
+        <div class="campo">
+          <label for="papel_global">Papel global</label>
+          <select id="papel_global" name="papel_global">
+            <option value="">Nenhum (acesso só pelos setores)</option>
+            {% for p in papeis_globais %}
+              <option value="{{ p }}">{{ p }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <h2 style="font-size: 0.95rem;">Setores</h2>
+      <table>
+        <thead><tr><th style="width:40px;"></th><th>Setor</th><th>Operadora</th><th>Papel no setor</th></tr></thead>
+        <tbody>
+          {% for s in setores %}
+            <tr>
+              <td><input type="checkbox" name="setor_{{ s.id }}"></td>
+              <td>{{ s.nome }}</td>
+              <td>{{ s.operadora.nome }}</td>
+              <td>
+                <select name="papel_{{ s.id }}">
+                  <option value="COLABORADOR">Colaborador</option>
+                  <option value="LIDER">Líder</option>
+                </select>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <button type="submit" style="margin-top: 16px;">Criar usuário</button>
+    </form>
+  </div>
+{% endblock %}

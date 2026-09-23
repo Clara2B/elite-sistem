@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block titulo %}Laudos — Elite Sistem{% endblock %}
+{% set meses = [(1,"Janeiro"),(2,"Fevereiro"),(3,"Março"),(4,"Abril"),(5,"Maio"),(6,"Junho"),(7,"Julho"),(8,"Agosto"),(9,"Setembro"),(10,"Outubro"),(11,"Novembro"),(12,"Dezembro")] %}
+{% block conteudo %}
+  <h1>Laudos</h1>
+  <p class="subtitulo">Período de referência: dia 21 de um mês ao dia 20 do seguinte.</p>
+
+  {% if mensagem %}<div class="mensagem sucesso">{{ mensagem }}</div>{% endif %}
+  {% if erro %}<div class="mensagem erro">{{ erro }}</div>{% endif %}
+
+  <div class="card">
+    <h2>Importar planilha</h2>
+    <form class="formulario" method="post" action="/app/laudos/import" enctype="multipart/form-data">
+      <div class="campo">
+        <label for="arquivo">Arquivo .xlsx</label>
+        <input type="file" id="arquivo" name="arquivo" accept=".xlsx" required>
+      </div>
+      <button type="submit">Importar</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Gerar relatório</h2>
+    <form class="formulario" method="get" action="/app/laudos">
+      <div class="campo">
+        <label for="empresa">Empresa-cliente</label>
+        <select id="empresa" name="empresa" required>
+          <option value="">Selecione...</option>
+          {% for e in empresas %}
+            <option value="{{ e.nome }}" {{ "selected" if filtro.empresa == e.nome else "" }}>{{ e.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="campo">
+        <label for="mes">Mês</label>
+        <select id="mes" name="mes" required>
+          {% for numero, nome in meses %}
+            <option value="{{ numero }}" {{ "selected" if filtro.mes == numero else ("selected" if not filtro.mes and numero == hoje.month else "") }}>{{ nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="campo">
+        <label for="ano">Ano</label>
+        <input type="number" id="ano" name="ano" value="{{ filtro.ano or hoje.year }}" required min="2020" max="2100">
+      </div>
+      <div class="campo">
+        <label for="status">Status</label>
+        <select id="status" name="status" required>
+          {% for opcao in opcoes_status %}
+            <option value="{{ opcao }}" {{ "selected" if filtro.status == opcao else "" }}>{{ opcao }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit">Gerar relatório</button>
+    </form>
+  </div>
+
+  {% if resultado %}
+    <div class="card">
+      <h2>
+        {{ resultado.empresa }}
+        <a class="botao secundario" style="float:right; font-size:0.82rem; padding:6px 12px;"
+           href="/laudos/relatorio.pdf?empresa={{ filtro.empresa }}&ano={{ filtro.ano }}&mes={{ filtro.mes }}&status={{ filtro.status }}">
+          Baixar PDF
+        </a>
+      </h2>
+      <p class="subtitulo">
+        {{ resultado.periodo_ini.strftime("%d/%m/%Y") }} a {{ resultado.periodo_fim.strftime("%d/%m/%Y") }}
+        — {{ resultado.status }}
+      </p>
+      {% if resultado.tipos_sem_valor %}
+        <div class="mensagem erro">
+          Tipo(s) de laudo sem valor cadastrado: {{ resultado.tipos_sem_valor | join(", ") }}
+          (contados como R$ 0,00 — cadastre o valor em Administração).
+        </div>
+      {% endif %}
+      {% if resultado.linhas %}
+        <table>
+          <thead>
+            <tr><th>Data</th><th>Cliente</th><th>Tipo</th><th>Status</th><th>Valor</th></tr>
+          </thead>
+          <tbody>
+            {% for l in resultado.linhas %}
+              <tr>
+                <td>{{ l.data.strftime("%d/%m/%Y") }}</td>
+                <td>{{ l.cliente }}</td>
+                <td>{{ l.tipo }}</td>
+                <td>{{ l.status }}</td>
+                <td>R$ {{ "%.2f"|format(l.valor)|replace(".", ",") }}</td>
+              </tr>
+            {% endfor %}
+            <tr class="total">
+              <td colspan="4">Total</td>
+              <td>R$ {{ "%.2f"|format(resultado.total)|replace(".", ",") }}</td>
+            </tr>
+          </tbody>
+        </table>
+      {% else %}
+        <p class="vazio">Nenhum laudo encontrado nesse período.</p>
+      {% endif %}
+    </div>
+  {% endif %}
+{% endblock %}

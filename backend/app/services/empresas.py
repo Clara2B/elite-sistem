@@ -35,3 +35,12 @@ def get_or_create_empresa(
     if cache is not None:
         cache[alvo] = empresa
     return empresa
+
+
+def listar_empresas(db: Session, apenas_ativas: bool = True) -> list[EmpresaCliente]:
+    """Usada pelas telas (Fase 6) para montar o seletor de empresa-cliente
+    nos módulos de relatório."""
+    query = select(EmpresaCliente).order_by(EmpresaCliente.nome)
+    if apenas_ativas:
+        query = query.where(EmpresaCliente.ativo.is_(True))
+    return list(db.scalars(query))

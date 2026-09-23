@@ -1,0 +1,88 @@
+"""Páginas HTML (Fase 6) — autenticação por cookie, navegação e permissões.
+Testes de API JSON continuam em test_auth.py/test_permissoes.py; aqui só o
+que é específico do fluxo de navegador (login por formulário, redirecionamento,
+página 403)."""
+from app.auth import hash_senha
+from app.models import Setor, Usuario, UsuarioSetor
+
+
+def test_login_form_carrega(client):
+    resposta = client.get("/login")
+    assert resposta.status_code == 200
+    assert "Entrar" in resposta.text
+
+
+def test_pagina_protegida_sem_login_redireciona(client):
+    resposta = client.get("/app/processos", follow_redirects=False)
+    assert resposta.status_code == 303
+    assert resposta.headers["location"] == "/login"
+
+
+def test_login_senha_errada_mostra_erro(client, db):
+    db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa")))
+    db.commit()
+    resposta = client.post("/login", data={"email": "fulano@teste.local", "senha": "errada"})
+    assert resposta.status_code == 401
+    assert "incorretos" in resposta.text
+
+
+def test_login_certo_seta_cookie_e_leva_ao_dashboard(client, db):
+    db.add(Usuario(nome="Fulano de Tal", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    db.commit()
+
+    resposta = client.post("/login", data={"email": "fulano@teste.local", "senha": "certa"}, follow_redirects=False)
+    assert resposta.status_code == 303
+    assert resposta.headers["location"] == "/"
+    assert "sessao" in resposta.cookies
+
+    dashboard = client.get("/")
+    assert dashboard.status_code == 200
+    assert "Fulano" in dashboard.text
+    assert "Usuários" in dashboard.text  # admin vê o módulo de usuários no menu
+
+
+def test_usuario_sem_papel_global_nao_ve_usuarios_no_menu_e_leva_403(client, db):
+    setor = db.query(Setor).first()
+    usuario = Usuario(nome="Colaboradora", email="colab@teste.local", senha_hash=hash_senha("certa"))
+    db.add(usuario)
+    db.flush()
+    db.add(UsuarioSetor(usuario_id=usuario.id, setor_id=setor.id, papel="COLABORADOR"))
+    db.commit()
+
+    client.post("/login", data={"email": "colab@teste.local", "senha": "certa"})
+
+    dashboard = client.get("/")
+    assert "Usuários" not in dashboard.text
+
+    resposta = client.get("/app/usuarios")
+    assert resposta.status_code == 403
+    assert "restrit" in resposta.text.lower()
+
+
+def test_logout_limpa_sessao(client, db):
+    db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    db.commit()
+    client.post("/login", data={"email": "fulano@teste.local", "senha": "certa"})
+    assert client.get("/").status_code == 200
+
+    resposta = client.post("/logout", follow_redirects=False)
+    assert resposta.status_code == 303
+    assert resposta.headers["location"] == "/login"
+
+    resposta = client.get("/app/processos", follow_redirects=False)
+    assert resposta.status_code == 303
+    assert resposta.headers["location"] == "/login"
+
+
+def test_pdf_via_cookie_de_sessao_funciona_sem_bearer(client, db):
+    """O mesmo cookie que autentica as páginas HTML também autentica a API
+    JSON usada por elas (ex.: o link "Baixar PDF") — ver app/auth.py
+    `_extrair_token`."""
+    db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    db.commit()
+    client.post("/login", data={"email": "fulano@teste.local", "senha": "certa"})
+
+    resposta = client.get("/processos/relatorio.pdf?periodo_ini=2026-01-01&periodo_fim=2026-01-31")
+    assert resposta.status_code == 200
+    assert resposta.headers["content-type"] == "application/pdf"
+    assert "attachment" in resposta.headers["content-disposition"]

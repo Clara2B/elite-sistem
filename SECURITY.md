@@ -83,6 +83,30 @@ banco de verdade) — nunca aqui no chat.
 - **Ainda não implementado, sem risco relevante no volume atual (10-20 usuários):** rate limiting /
   bloqueio de tentativas de login repetidas.
 
+## 5.1 Autenticação por cookie para as páginas HTML (Fase 6, 2026-09-23)
+
+A interface visual (`app/web/`) não usa `Authorization: Bearer` (o navegador não anexa isso
+sozinho em navegação comum) — usa o **mesmo token opaco** da seção 5, guardado num cookie:
+
+- **`HttpOnly`:** JavaScript no navegador não consegue ler o cookie — mitiga roubo de token via
+  XSS (mesmo que algum campo escapasse do escape automático do Jinja2, o token em si não é
+  exfiltrável por um script injetado).
+- **`Secure` dinâmico:** ligado quando a requisição é HTTPS (produção, Render), desligado em HTTP
+  (dev local) — calculado a partir do esquema da própria requisição, sem precisar de uma variável
+  de ambiente extra pra diferenciar dev/produção.
+- **`SameSite=Lax`:** o navegador não envia o cookie em requisições `POST`/`PUT`/etc. disparadas por
+  **outro site** (só em navegação de topo, tipo clicar num link) — isso já barra o vetor principal
+  de CSRF (um site malicioso não consegue forjar um `POST /app/usuarios/{id}/ativo` usando a sessão
+  de quem está logado) sem precisar de um token CSRF separado. Suficiente para uma ferramenta
+  interna com esse volume de usuários; token CSRF explícito fica como possível reforço futuro (não
+  bloqueante).
+- **A API JSON aceita os dois:** `_extrair_token` (`app/auth.py`) primeiro tenta o cabeçalho
+  `Authorization: Bearer`, e cai pro cookie de sessão se não vier — assim um link comum da
+  interface (ex. "Baixar PDF") funciona batendo direto nas mesmas rotas que o Swagger/scripts usam,
+  sem duplicar rota nenhuma só pra servir HTML vs. JSON.
+- **Mesma tabela `sessoes`, mesmo "sair":** login pela tela cria uma linha em `sessoes` igual ao
+  login pela API; logout apaga a linha de verdade, não só o cookie do navegador.
+
 ## 6. Em aberto (a decidir nas próximas fases)
 
 - Política de retenção de dados pessoais (LGPD: por quanto tempo manter CPF/nome de clientes após o

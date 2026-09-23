@@ -9,6 +9,7 @@ from app.models import Usuario
 from app.pdf_export import gerar_pdf_audiencias
 from app.services import audiencias as audiencias_service
 from app.services.auditoria import registrar
+from app.utils import nome_arquivo_pdf
 
 router = APIRouter(prefix="/audiencias", tags=["audiencias"])
 
@@ -79,4 +80,8 @@ def relatorio_pdf(
         raise HTTPException(status_code=404, detail=str(e))
     registrar(db, usuario, "GEROU_RELATORIO_AUDIENCIAS_PDF", entidade="empresa_cliente", entidade_id=empresa)
     pdf_bytes = gerar_pdf_audiencias(resultado)
-    return Response(content=pdf_bytes, media_type="application/pdf")
+    nome_arquivo = nome_arquivo_pdf("audiencias", resultado.empresa, f"{ano}-{mes:02d}", f"q{quinzena}")
+    return Response(
+        content=pdf_bytes, media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},
+    )

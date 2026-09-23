@@ -3,7 +3,7 @@
 API do novo sistema (FastAPI), decisão D2 em `../ARCHITECTURE.md`. Laudos, audiências e cobrança de
 pendências portados do sistema atual (`leitor-relatorio`), persistindo no banco. Login individual,
 setores/operadoras e segregação de acesso implementados (Fase 4). Gestão de Processos (Fase 5)
-implementada.
+implementada. Interface visual (Fase 6) implementada — ver seção "Interface visual" abaixo.
 
 ## Autenticação
 
@@ -43,6 +43,19 @@ Documentação interativa em `/docs` quando o servidor está rodando, com um bot
 2. Clique em **Authorize** e cole **só o token**, sem o prefixo `Bearer` (o Swagger acrescenta
    sozinho) — depois clique em "Authorize" de novo e "Close".
 3. A partir daí, toda rota testada pelo `/docs` já sai autenticada.
+
+## Interface visual
+
+Além da API, o servidor serve páginas HTML (`app/web/`, Jinja2 + HTMX — ver `ARCHITECTURE.md`
+seção 4 e `SECURITY.md` seção 5.1):
+
+- `GET /login` — entrar (e-mail + senha, mesmo login da API)
+- `GET /` — painel inicial, com os módulos que o usuário tem acesso
+- `GET /app/laudos`, `/app/audiencias`, `/app/pendencias`, `/app/processos`, `/app/usuarios` — uma
+  tela por módulo (import de planilha, relatório, ações do dia a dia)
+
+A sessão da tela usa um cookie (não o cabeçalho `Authorization` do `/docs`) — é outro jeito de
+autenticar a **mesma** sessão, não duas contas diferentes.
 
 ## Rodar localmente
 

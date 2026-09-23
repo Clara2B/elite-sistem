@@ -371,6 +371,40 @@ PDF), painel de prazos próximos e todas as correções de robustez confirmadas 
 produção, com dado real. Modelo do relatório aprovado por ora (pendência 4 abaixo, revisar depois a
 pedido da Clara).
 
+## 2026-09-23 — D2 (frontend): Jinja2 + HTMX, todas as telas de uma vez
+
+**Contexto:** o sistema só tinha API + `/docs` (Swagger) até aqui — a Clara pediu a parte visual de
+verdade, dizendo que o sistema ainda não está "profissional e funcional" como pedido. A decisão D2
+original (`ARCHITECTURE.md` seção 2.3/2.7) já tinha aprovado "backend API + frontend próprio", mas
+deixou em aberto a escolha entre Jinja2+HTMX (tudo em Python) ou React/Next.js.
+**Decisão da Clara:** Jinja2 + HTMX (recomendado — sem stack JS separada, permissão por rota
+reaproveitada do backend, menos custo de manutenção); construir as telas de todos os módulos de uma
+vez (Laudos, Audiências, Pendências, Gestão de Processos, Administração), não módulo a módulo;
+reaproveitar a identidade visual já usada nos PDFs (azul-marinho `#152A40`, logos ELITE/EXIMIA).
+**Plano:** layout base (navegação, cores) + login com sessão por cookie HttpOnly primeiro; depois
+uma tela por módulo, reaproveitando os endpoints de API já prontos (nenhuma rota de negócio nova
+necessária — a interface só consome o que já existe).
+**Reversível:** sim, é a camada de apresentação; a API por trás fica intacta e continua funcionando
+para automações futuras (Fase 7) independente do frontend.
+
+## 2026-09-23 — Fase 6 (interface visual) implementada, validada localmente
+
+**Construído:** login por cookie de sessão, menu dinâmico por permissão, e uma tela por módulo
+(Laudos, Audiências, Pendências, Gestão de Processos, Usuários) — todas consumindo os endpoints de
+API já existentes, sem duplicar regra de negócio. Ver `ARCHITECTURE.md` seção 4 pro detalhe completo
+do que foi construído e dos três bugs achados e corrigidos no caminho (`PrazoProximo` sem
+`evento_id`, cookie `expires` exigindo timezone, PDF não baixando de verdade).
+**Validação:** `tests/test_web.py` (7 testes novos, 63 no total) + navegação ponta a ponta com
+Playwright/Chromium local, usando a planilha real de Gestão de Processos como dado de teste —
+login, as 5 telas, gerar relatório, baixar PDF pelo navegador (via cookie, não Bearer), criar
+usuário com setor, ativar/desativar usuário. Capturas de tela conferidas visualmente antes de
+reportar como pronto (instrução do projeto: nunca declarar uma mudança de UI pronta sem ver rodando
+num navegador).
+**Ainda não visto pela Clara:** a interface roda só localmente até aqui — falta ela ver rodando em
+produção depois do deploy.
+**Reversível:** sim, mudanças aditivas (rotas novas sob `/app/...`, um endpoint `GET /empresas`
+novo); nada do que já existia foi alterado em comportamento.
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante

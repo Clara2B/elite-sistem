@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}Elite Sistem{% endblock %}</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topo">
+    <div class="marca">ELITE SISTEM</div>
+    <nav class="menu">
+      {% for item in menu %}
+        <a href="{{ item.url }}" class="{{ 'ativo' if request.url.path.startswith(item.url) else '' }}">{{ item.rotulo }}</a>
+      {% endfor %}
+    </nav>
+    <div class="usuario-area">
+      <span>{{ usuario.nome }}</span>
+      <form method="post" action="/logout">
+        <button type="submit" class="sair">Sair</button>
+      </form>
+    </div>
+  </header>
+  <main>
+    {% block conteudo %}{% endblock %}
+  </main>
+</body>
+</html>
