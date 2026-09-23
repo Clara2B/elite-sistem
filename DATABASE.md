@@ -180,6 +180,7 @@ processos
 ├── nome_cliente         -- pessoa física atendida (Text, sem limite — ver nota abaixo)
 ├── advogada             -- texto livre por enquanto (Text, ver nota abaixo)
 ├── assistente            -- texto livre por enquanto (Text, ver nota abaixo)
+├── assessoria            -- derivado de `advogada` no import (Text, nullable) — ver nota abaixo
 └── criado_em
 
 tipos_evento                          -- catálogo (igual tipos_laudo), com "Gerenciar valores"
@@ -223,6 +224,25 @@ qualquer outro valor (vazio, `"NÃO"`, etc.) não é fatal. Ver `app/services/pr
 `processo_id`. Proposta: considerar "parado" acima de **15 dias sem novo evento** — número
 inicial, ajustável depois que a Clara validar com uso real (não é uma regra que estava documentada
 em lugar nenhum, é uma proposta para começar).
+
+**`assessoria`** (a pedido da Clara, 2026-09-23): a equipe/escritório terceirizado que atua no
+processo — sempre a primeira palavra antes do nome, dentro da própria coluna `ADVOGADA` da planilha
+(ex.: `"HUNTING - Fulana de Tal"` → assessoria `"HUNTING"`). `advogada` continua gravado com o texto
+original, sem o prefixo removido — `assessoria` é só um valor derivado a mais, usado pra
+filtrar/agrupar o relatório (`agrupar_por=assessoria`), igual já existia pra assistente/advogada.
+Fica `None` quando a coluna `ADVOGADA` não tem esse padrão de prefixo. Ver
+`app/services/processos.py::_separar_assessoria`.
+
+**Import "upsert" de andamento já existente** (a pedido da Clara, 2026-09-23): antes, uma linha da
+planilha cuja chave (`processo_id`, `data`, `tipo_evento_nome` normalizado) já batia com um
+`eventos_processo` existente era só contada como duplicada e ignorada — mesmo que a linha trouxesse
+`OBSERVAÇÃO`/`PRAZO FATAL`/aba (mês de referência) diferentes do que já estava gravado. Agora essa
+linha atualiza `observacao`/`prazo_fatal`/`mes_referencia` com o que vier preenchido na planilha
+(só quando vier preenchido — uma linha sem `OBSERVAÇÃO`, por exemplo, não apaga uma já cadastrada).
+`nome_cliente`/`advogada`/`assistente`/`assessoria` do `processos` já seguiam essa mesma lógica de
+"última informação vista no import vale" (ver nota de `advogada`/`assistente` logo abaixo) —
+`nome_cliente` foi incluído nela agora também. Nunca toca em `resolvido`/`resolvido_em`/`data_prazo`
+— são controlados manualmente dentro do sistema, não vêm da planilha.
 
 **Nota sobre `advogada`/`assistente` como texto livre, não `usuarios`:** confirmado pela Clara —
 "os assistentes não acessam o sistema, só seus líderes, mas pode manter apenas como texto pois eles

@@ -10,6 +10,7 @@ from app.services.processos import (
     PROCESSO_PARADO_DIAS,
     _mes_referencia_da_aba,
     _pessoa_valida,
+    _separar_assessoria,
     gerar_relatorio,
     importar_planilha,
     marcar_resolvido,
@@ -212,3 +213,150 @@ def test_processo_parado_conta_dias_sem_evento_novo(db):
 
     relatorio = gerar_relatorio(db, data_antiga, data_antiga)
     assert relatorio.linhas[0].processos_parados == 1
+
+
+def test_separar_assessoria():
+    assert _separar_assessoria("HUNTING - Fulana de Tal (CONTR. Beltrano)") == "HUNTING"
+    assert _separar_assessoria("DRA KELLY") is None  # sem "-", não tem assessoria
+    assert _separar_assessoria(None) is None
+    assert _separar_assessoria("") is None
+
+
+def test_import_extrai_assessoria_da_advogada_sem_alterar_advogada(db):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["CLIENTE", "Nº PROCESSO", "DATA", "EVENTO", "ADVOGADA"])
+    numero = "6666666-66.2026.8.11.0006"
+    ws.append(["ABSOLUTA - Fulano de Tal", numero, date(2026, 9, 1), "CUSTAS", "HUNTING - Fulana de Tal"])
+    path = Path(tempfile.mkdtemp()) / "processos.xlsx"
+    wb.save(path)
+
+    importar_planilha(db, str(path))
+
+    processo = db.query(Processo).filter_by(numero_processo=numero).one()
+    assert processo.advogada == "HUNTING - Fulana de Tal"
+    assert processo.assessoria == "HUNTING"
+
+
+def test_relatorio_agrupa_por_assessoria(db):
+    p1 = _processo(db, numero="7777777-77.2026.8.11.0007", advogada="HUNTING - Fulana")
+    p1.assessoria = "HUNTING"
+    p2 = _processo(db, numero="8888888-88.2026.8.11.0008", advogada="DRA KELLY")
+    db.add_all(
+        [
+            EventoProcesso(processo_id=p1.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
+            EventoProcesso(processo_id=p2.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
+        ]
+    )
+    db.commit()
+
+    relatorio = gerar_relatorio(db, date(2026, 9, 1), date(2026, 9, 30), agrupar_por="assessoria")
+    pessoas = {linha.pessoa for linha in relatorio.linhas}
+    assert "HUNTING" in pessoas
+    assert "(sem assessoria informado)" in pessoas  # p2 não tem assessoria
+
+
+def test_import_reimportacao_atualiza_evento_existente_com_dado_novo(db, tmp_path):
+    numero = "9999999-99.2026.8.11.0009"
+
+    def _planilha(nome_arquivo, observacao, prazo_fatal):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["CLIENTE", "Nº PROCESSO", "DATA", "EVENTO", "PRAZO FATAL", "OBSERVAÇÃO"])
+        ws.append(["ABSOLUTA - Fulano de Tal", numero, date(2026, 9, 1), "CUSTAS", prazo_fatal, observacao])
+        caminho = tmp_path / nome_arquivo
+        wb.save(caminho)
+        return str(caminho)
+
+    resumo1 = importar_planilha(db, _planilha("v1.xlsx", "observação original", ""))
+    assert resumo1.linhas_novas == 1
+    assert resumo1.linhas_atualizadas == 0
+
+    evento = db.query(EventoProcesso).join(Processo).filter(Processo.numero_processo == numero).one()
+    assert evento.observacao == "observação original"
+    assert evento.prazo_fatal is False
+
+    # Reimporta o mesmo andamento (mesmo processo+data+evento), agora com
+    # observação corrigida e PRAZO FATAL marcado — a Clara pediu que isso
+    # atualize o registro em vez de ser ignorado como "já existente".
+    resumo2 = importar_planilha(db, _planilha("v2.xlsx", "observação corrigida", "SIM"))
+    assert resumo2.linhas_novas == 0
+    assert resumo2.linhas_ja_existentes == 1
+    assert resumo2.linhas_atualizadas == 1
+
+    db.refresh(evento)
+    assert evento.observacao == "observação corrigida"
+    assert evento.prazo_fatal is True
+
+
+def test_import_reimportacao_nao_apaga_dado_quando_planilha_vem_vazia(db, tmp_path):
+    numero = "1010101-01.2026.8.11.0010"
+
+    wb1 = openpyxl.Workbook()
+    ws1 = wb1.active
+    ws1.append(["CLIENTE", "Nº PROCESSO", "DATA", "EVENTO", "OBSERVAÇÃO"])
+    ws1.append(["ABSOLUTA - Fulano de Tal", numero, date(2026, 9, 1), "CUSTAS", "observação importante"])
+    path1 = tmp_path / "v1.xlsx"
+    wb1.save(path1)
+    importar_planilha(db, str(path1))
+
+    wb2 = openpyxl.Workbook()
+    ws2 = wb2.active
+    ws2.append(["CLIENTE", "Nº PROCESSO", "DATA", "EVENTO", "OBSERVAÇÃO"])
+    ws2.append(["ABSOLUTA - Fulano de Tal", numero, date(2026, 9, 1), "CUSTAS", ""])
+    path2 = tmp_path / "v2.xlsx"
+    wb2.save(path2)
+    resumo2 = importar_planilha(db, str(path2))
+    assert resumo2.linhas_atualizadas == 0  # nada mudou — observação vazia não sobrescreve
+
+    evento = db.query(EventoProcesso).join(Processo).filter(Processo.numero_processo == numero).one()
+    assert evento.observacao == "observação importante"
+
+
+def test_import_reimportacao_nao_mexe_em_resolvido(db, tmp_path):
+    numero = "1212121-21.2026.8.11.0011"
+    wb1 = openpyxl.Workbook()
+    ws1 = wb1.active
+    ws1.append(["CLIENTE", "Nº PROCESSO", "DATA", "EVENTO"])
+    ws1.append(["ABSOLUTA - Fulano de Tal", numero, date(2026, 9, 1), "CUSTAS"])
+    path1 = tmp_path / "v1.xlsx"
+    wb1.save(path1)
+    importar_planilha(db, str(path1))
+
+    evento = db.query(EventoProcesso).join(Processo).filter(Processo.numero_processo == numero).one()
+    marcar_resolvido(db, evento.id)
+    assert evento.resolvido is True
+
+    wb2 = openpyxl.Workbook()
+    ws2 = wb2.active
+    ws2.append(["CLIENTE", "Nº PROCESSO", "DATA", "EVENTO", "OBSERVAÇÃO"])
+    ws2.append(["ABSOLUTA - Fulano de Tal", numero, date(2026, 9, 1), "CUSTAS", "nova observação"])
+    path2 = tmp_path / "v2.xlsx"
+    wb2.save(path2)
+    importar_planilha(db, str(path2))
+
+    db.refresh(evento)
+    assert evento.resolvido is True  # reimport nunca desfaz isso
+    assert evento.observacao == "nova observação"  # mas outros campos seguem atualizando
+
+
+def test_import_reimportacao_atualiza_nome_cliente_do_processo(db, tmp_path):
+    numero = "1313131-31.2026.8.11.0012"
+    wb1 = openpyxl.Workbook()
+    ws1 = wb1.active
+    ws1.append(["CLIENTE", "Nº PROCESSO", "DATA", "EVENTO"])
+    ws1.append(["ABSOLUTA - Fulano de Tal", numero, date(2026, 9, 1), "CUSTAS"])
+    path1 = tmp_path / "v1.xlsx"
+    wb1.save(path1)
+    importar_planilha(db, str(path1))
+
+    wb2 = openpyxl.Workbook()
+    ws2 = wb2.active
+    ws2.append(["CLIENTE", "Nº PROCESSO", "DATA", "EVENTO"])
+    ws2.append(["ABSOLUTA - Fulano de Tal Corrigido", numero, date(2026, 9, 2), "DOCUMENTOS"])
+    path2 = tmp_path / "v2.xlsx"
+    wb2.save(path2)
+    importar_planilha(db, str(path2))
+
+    processo = db.query(Processo).filter_by(numero_processo=numero).one()
+    assert processo.nome_cliente == "Fulano de Tal Corrigido"

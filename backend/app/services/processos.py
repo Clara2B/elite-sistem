@@ -48,6 +48,23 @@ def _pessoa_valida(texto: str) -> str | None:
     return texto
 
 
+def _separar_assessoria(advogada: str | None) -> str | None:
+    """'HUNTING - Fulana de Tal (CONTR. Beltrano)' -> 'HUNTING' — a
+    assessoria/escritório terceirizado é sempre a primeira palavra antes do
+    nome, na coluna ADVOGADA (confirmado pela Clara). Mesma tolerância de
+    formatação que `_separar_empresa_cliente` (não exige espaço ao redor do
+    "-"). `advogada` em si não é alterado, fica com o texto original — isso
+    só extrai um valor derivado pra permitir filtrar/agrupar relatório por
+    assessoria."""
+    if not advogada or "-" not in advogada:
+        return None
+    prefixo, _, resto = advogada.partition("-")
+    prefixo, resto = prefixo.strip(), resto.strip()
+    if not prefixo or not resto:
+        return None
+    return prefixo
+
+
 # Nome de mês (completo ou abreviado 3 letras) + ano de 2/4 dígitos é como
 # as abas reais são nomeadas (ex. "SETEMBRO", "SETEMBRO26", "JUNHO 2026",
 # "OUTUBRO-26", ou nas abas mais antigas "JUN-25", "SET- 25"). Confirmado
@@ -118,6 +135,7 @@ class ImportResumo:
     linhas_lidas: int = 0
     linhas_novas: int = 0
     linhas_ja_existentes: int = 0
+    linhas_atualizadas: int = 0
     linhas_sem_numero_valido: int = 0
     linhas_sem_empresa_reconhecida: int = 0
 
@@ -139,8 +157,12 @@ def importar_planilha(db: Session, path: str, usuario_id: int | None = None) -> 
     col_assistente = _col_optional(df, "ASSISTENTE")
 
     processos_existentes = {p.numero_processo: p for p in db.scalars(select(Processo))}
+    # Mapeia pro objeto (não só um set de chaves): uma linha "já existente"
+    # ainda pode trazer dado atualizado (observação corrigida, PRAZO FATAL
+    # marcado depois, aba renomeada) — sem guardar o objeto não dá pra
+    # atualizar, só pra contar. Ver bloco abaixo.
     eventos_existentes = {
-        (e.processo_id, e.data, normalize(e.tipo_evento_nome))
+        (e.processo_id, e.data, normalize(e.tipo_evento_nome)): e
         for e in db.scalars(select(EventoProcesso))
     }
     # Cache de empresa-cliente pro import inteiro (ver docstring de
@@ -170,26 +192,33 @@ def importar_planilha(db: Session, path: str, usuario_id: int | None = None) -> 
 
         empresa = get_or_create_empresa(db, empresa_nome, cache=empresa_cache)
 
+        advogada_valida = _pessoa_valida(cell_text(row.get(col_advogada))) if col_advogada else None
+        assessoria = _separar_assessoria(advogada_valida)
+
         processo = processos_existentes.get(numero)
         if processo is None:
             processo = Processo(
                 numero_processo=numero,
                 empresa_cliente_id=empresa.id,
                 nome_cliente=nome_cliente,
-                advogada=_pessoa_valida(cell_text(row.get(col_advogada))) if col_advogada else None,
+                advogada=advogada_valida,
                 assistente=_pessoa_valida(cell_text(row.get(col_assistente))) if col_assistente else None,
+                assessoria=assessoria,
             )
             db.add(processo)
             db.flush()
             processos_existentes[numero] = processo
         else:
-            # Atualiza advogada/assistente com o lançamento mais recente
-            # (planilha real mostra a mesma pessoa reatribuída ao longo do
-            # tempo; fica sempre com a última informação vista no import).
-            if col_advogada:
-                pessoa = _pessoa_valida(cell_text(row.get(col_advogada)))
-                if pessoa:
-                    processo.advogada = pessoa
+            # Atualiza nome/advogada/assistente/assessoria com o lançamento
+            # mais recente (planilha real mostra o mesmo cliente/pessoa
+            # reatribuída ao longo do tempo; fica sempre com a última
+            # informação vista no import — pedido explícito da Clara: mesmo
+            # cliente já citado antes, a última atualização é que vale).
+            if nome_cliente:
+                processo.nome_cliente = nome_cliente
+            if advogada_valida:
+                processo.advogada = advogada_valida
+                processo.assessoria = assessoria
             if col_assistente:
                 pessoa = _pessoa_valida(cell_text(row.get(col_assistente)))
                 if pessoa:
@@ -199,31 +228,53 @@ def importar_planilha(db: Session, path: str, usuario_id: int | None = None) -> 
         if not tipo_evento:
             tipo_evento = "(SEM TIPO INFORMADO)"
 
-        chave = (processo.id, data_val, normalize(tipo_evento))
-        if chave in eventos_existentes:
-            resumo.linhas_ja_existentes += 1
-            continue
-
         # Regra confirmada pela Clara: só "SIM" (normalizado) marca prazo
         # fatal — qualquer outro valor (vazio, "NÃO", etc.) não é fatal.
         prazo_fatal = (normalize(cell_text(row.get(col_prazo))) == "SIM") if col_prazo else False
-
+        observacao = (cell_text(row.get(col_observacao)) or None) if col_observacao else None
         aba_nome = row.get("_ABA")
         mes_referencia = _mes_referencia_da_aba(str(aba_nome)) if aba_nome else None
 
-        db.add(
-            EventoProcesso(
-                processo_id=processo.id,
-                data=data_val,
-                tipo_evento_nome=tipo_evento.upper(),
-                mes_referencia=mes_referencia,
-                prazo_fatal=prazo_fatal,
-                data_prazo=None,  # não extraído do histórico — ver docstring do módulo
-                observacao=(cell_text(row.get(col_observacao)) or None) if col_observacao else None,
-                criado_por=usuario_id,
-            )
+        chave = (processo.id, data_val, normalize(tipo_evento))
+        evento_existente = eventos_existentes.get(chave)
+        if evento_existente is not None:
+            resumo.linhas_ja_existentes += 1
+            # O mesmo andamento (processo+data+tipo) pode voltar numa
+            # planilha mais nova com detalhe corrigido/completado — atualiza
+            # só o que veio preenchido nessa linha, sem apagar o que já
+            # estava lá (ex.: linha sem OBSERVAÇÃO não some com uma já
+            # cadastrada) e nunca mexe em `resolvido`/`resolvido_em`/
+            # `data_prazo`, que são controlados manualmente dentro do
+            # sistema, não pela planilha.
+            atualizado = False
+            if col_prazo and evento_existente.prazo_fatal != prazo_fatal:
+                evento_existente.prazo_fatal = prazo_fatal
+                atualizado = True
+            if observacao and evento_existente.observacao != observacao:
+                evento_existente.observacao = observacao
+                atualizado = True
+            if mes_referencia and evento_existente.mes_referencia != mes_referencia:
+                evento_existente.mes_referencia = mes_referencia
+                atualizado = True
+            if atualizado:
+                resumo.linhas_atualizadas += 1
+            continue
+
+        novo_evento = EventoProcesso(
+            processo_id=processo.id,
+            data=data_val,
+            tipo_evento_nome=tipo_evento.upper(),
+            mes_referencia=mes_referencia,
+            prazo_fatal=prazo_fatal,
+            data_prazo=None,  # não extraído do histórico — ver docstring do módulo
+            observacao=observacao,
+            criado_por=usuario_id,
         )
-        eventos_existentes.add(chave)
+        db.add(novo_evento)
+        # Guarda o objeto (não só a chave): se uma linha mais adiante nesse
+        # mesmo import bater na mesma chave, precisa cair no ramo de
+        # atualização acima, não criar outro evento duplicado.
+        eventos_existentes[chave] = novo_evento
         resumo.linhas_novas += 1
 
         # Planilha real tem dezenas de milhares de linhas — sem isso, tudo
@@ -287,7 +338,7 @@ class RelatorioProcessos:
 
 def _agrupar_por(processo: Processo, agrupar_por: str) -> str:
     valor = getattr(processo, agrupar_por)
-    return valor.strip() if valor else "(sem assistente informado)"
+    return valor.strip() if valor else f"(sem {agrupar_por} informado)"
 
 
 def gerar_relatorio(
@@ -297,11 +348,11 @@ def gerar_relatorio(
     agrupar_por: str = "assistente",
     filtro_pessoa: str | None = None,
 ) -> RelatorioProcessos:
-    """`agrupar_por`: 'assistente' ou 'advogada'. `filtro_pessoa`: se
-    informado, só essa pessoa entra no relatório (relatório individual);
-    senão, todas (relatório geral)."""
-    if agrupar_por not in {"assistente", "advogada"}:
-        raise ValueError("agrupar_por precisa ser 'assistente' ou 'advogada'.")
+    """`agrupar_por`: 'assistente', 'advogada' ou 'assessoria'. `filtro_pessoa`:
+    se informado, só essa pessoa/assessoria entra no relatório (relatório
+    individual); senão, todas (relatório geral)."""
+    if agrupar_por not in {"assistente", "advogada", "assessoria"}:
+        raise ValueError("agrupar_por precisa ser 'assistente', 'advogada' ou 'assessoria'.")
 
     hoje = date.today()
     limite_parado = hoje - timedelta(days=PROCESSO_PARADO_DIAS)

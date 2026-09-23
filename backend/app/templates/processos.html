@@ -73,11 +73,12 @@
         <select id="agrupar_por" name="agrupar_por">
           <option value="assistente" {{ "selected" if filtro.agrupar_por == "assistente" else "" }}>Assistente</option>
           <option value="advogada" {{ "selected" if filtro.agrupar_por == "advogada" else "" }}>Advogada</option>
+          <option value="assessoria" {{ "selected" if filtro.agrupar_por == "assessoria" else "" }}>Assessoria</option>
         </select>
       </div>
       <div class="campo">
-        <label for="pessoa">Pessoa (individual — deixe em branco para o geral)</label>
-        <input type="text" id="pessoa" name="pessoa" value="{{ filtro.pessoa }}" placeholder="Ex.: DANILO">
+        <label for="pessoa">Pessoa/assessoria (individual — deixe em branco para o geral)</label>
+        <input type="text" id="pessoa" name="pessoa" value="{{ filtro.pessoa }}" placeholder="Ex.: DANILO ou HUNTING">
       </div>
       <button type="submit">Gerar relatório</button>
     </form>

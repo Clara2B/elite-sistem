@@ -183,6 +183,11 @@ class Processo(Base):
     nome_cliente: Mapped[str] = mapped_column(Text, default="")
     advogada: Mapped[str | None] = mapped_column(Text, nullable=True)
     assistente: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Extraído da coluna ADVOGADA (ex.: "HUNTING - Fulana de Tal" -> "HUNTING")
+    # — a equipe/escritório terceirizado, distinto do nome da advogada em si.
+    # `advogada` continua com o texto original da planilha, sem alteração —
+    # ver services/processos.py::_separar_assessoria.
+    assessoria: Mapped[str | None] = mapped_column(Text, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     empresa_cliente: Mapped[EmpresaCliente] = relationship()

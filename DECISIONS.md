@@ -521,6 +521,36 @@ modal volta a renderizar estilizado.
 **Reversível:** sim, mudança de infraestrutura (cache-busting e logging), sem efeito em dado ou
 comportamento de negócio.
 
+## 2026-09-23 — Reimport de andamento vira "upsert" + filtro por assessoria
+
+**Contexto:** a Clara reimportou a planilha de Gestão de Processos e viu "0 evento(s) novo(s), 44353
+já existiam de antes" — apontou que mesmo um cliente já citado antes deve ter sua última
+atualização puxada para o período em questão. Junto, pediu um filtro de relatório por assessoria
+(primeira palavra antes do nome, na coluna `ADVOGADA`).
+**Risco considerado antes de implementar:** essa é uma mudança em como o import lida com ~44 mil
+registros de produção já gravados (prazos de processos judiciais reais) — errar a semântica poderia
+sobrescrever silenciosamente um dado correto ou desfazer um `resolvido` marcado manualmente pela
+equipe. Por isso a regra ficou deliberadamente conservadora: só atualiza um campo quando a linha
+nova traz valor preenchido (célula vazia nunca apaga o que já estava lá) e nunca toca em
+`resolvido`/`resolvido_em`/`data_prazo`, que são estado operacional controlado dentro do sistema,
+não vindo da planilha.
+**Import "upsert":** `eventos_existentes` (usado pra detectar duplicata) deixou de ser um set de
+chaves e virou um dict pro objeto, permitindo atualizar `observacao`/`prazo_fatal`/`mes_referencia`
+quando a chave (processo+data+tipo de evento) já existe, em vez de só contar e ignorar.
+`Processo.nome_cliente` passou a ser atualizado com o lançamento mais recente, estendendo o mesmo
+padrão que `advogada`/`assistente` já seguiam desde a Fase 5.
+**Campo `assessoria`:** extraído da coluna `ADVOGADA` no import (`_separar_assessoria`,
+`"HUNTING - Fulana de Tal"` → `"HUNTING"`) — `advogada` continua com o texto original, sem o prefixo
+removido. Adicionado como terceiro valor de `agrupar_por` no relatório, reaproveitando o campo de
+filtro "pessoa" já existente na tela em vez de criar um controle novo.
+**Validação:** 7 testes novos em `tests/test_processos_service.py` (75 no total) cobrindo a extração
+de assessoria, o agrupamento por assessoria no relatório, a atualização de evento existente com dado
+novo, a proteção contra célula vazia apagando dado, `resolvido` nunca desfeito pelo import, e a
+atualização de `nome_cliente` — + verificação visual local do filtro e da mensagem de import.
+**Reversível:** sim — campo novo aditivo (migração idempotente, mesmo padrão já usado pra
+`mes_referencia`) e o import fica mais permissivo (atualiza em vez de ignorar), nunca menos seguro:
+nenhum dado é apagado, e o estado operacional (`resolvido`/prazo) segue imune ao import.
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante

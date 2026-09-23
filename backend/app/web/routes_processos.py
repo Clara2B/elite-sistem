@@ -88,7 +88,8 @@ async def importar(
         registrar(db, usuario, "IMPORTOU_PROCESSOS", entidade="processo", detalhes=str(resumo))
         contexto["mensagem"] = (
             f"{resumo.linhas_novas} evento(s) novo(s) importado(s) "
-            f"({resumo.linhas_ja_existentes} já existiam de antes)."
+            f"({resumo.linhas_ja_existentes} já existiam de antes, "
+            f"{resumo.linhas_atualizadas} desses com dado atualizado agora)."
         )
         contexto["prazos"] = processos_service.prazos_proximos(db, dias=30)
     return templates.TemplateResponse(request, "processos.html", contexto)

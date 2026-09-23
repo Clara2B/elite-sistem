@@ -469,6 +469,36 @@ texto livre no `Processo` (sem login — só os líderes acessam o sistema; ver 
   correções acima (incluindo a padronização dela mesma na planilha) — `200 OK`, sem erro. Fase 5
   encerrada — ver `DECISIONS.md` (entrada "Fase 5 validada em produção; encerrada").
 
+### 3.6 Reimport "upsert" + filtro por assessoria (a pedido da Clara, 2026-09-23)
+
+Depois de um reimport da planilha completa, a notificação mostrou "0 evento(s) novo(s), 44353 já
+existiam de antes" — a Clara apontou que isso está errado: mesmo um andamento já citado antes deve
+ser atualizado com a informação mais recente da planilha, referente àquele registro específico.
+Junto, pediu um terceiro filtro de relatório: assessoria, sempre a primeira palavra antes do nome
+na coluna `ADVOGADA` (ex.: `"HUNTING - Fulana de Tal"` → assessoria `"HUNTING"`).
+
+- **Import agora atualiza andamento já existente:** antes, uma linha cuja chave
+  (`processo`+`data`+`tipo_evento`) já batia com um `eventos_processo` gravado era só contada como
+  duplicada — mesmo que trouxesse `OBSERVAÇÃO`/`PRAZO FATAL`/mês de referência diferentes.
+  `eventos_existentes` deixou de ser um set de chaves e virou um dict pro objeto, pra poder ser
+  atualizado; cada campo só é sobrescrito quando a linha nova traz um valor preenchido (uma linha
+  sem `OBSERVAÇÃO` não apaga uma já cadastrada) e `resolvido`/`resolvido_em`/`data_prazo` nunca são
+  tocados pelo import (são controlados manualmente dentro do sistema). `Processo.nome_cliente`
+  também passou a ser atualizado com o lançamento mais recente, igual já acontecia com
+  advogada/assistente. Contador novo `linhas_atualizadas` no resumo, refletido na mensagem da tela.
+- **Campo `assessoria`:** coluna nova em `processos` (migração aditiva, mesmo padrão de
+  `_garantir_coluna` já usado pra `mes_referencia`), extraída de `ADVOGADA` no import
+  (`_separar_assessoria`) sem alterar `advogada` em si. Novo valor válido de `agrupar_por` no
+  relatório (`assistente`/`advogada`/`assessoria`), reaproveitando o mesmo campo de filtro
+  "pessoa/assessoria" já existente na tela — sem precisar de um controle de UI novo.
+- **Testado:** 7 testes novos em `tests/test_processos_service.py` (extração de assessoria,
+  relatório agrupado por assessoria, atualização de evento já existente com dado novo, proteção
+  contra apagar dado com célula vazia, `resolvido` nunca é desfeito pelo import, atualização de
+  `nome_cliente` — 75 testes no total) + verificação visual local (dropdown "Assessoria" na tela,
+  relatório filtrado por "HUNTING", mensagem de import mostrando o contador de atualizados).
+- **Reversível:** sim — campo novo aditivo e comportamento de import mais permissivo (atualiza em
+  vez de ignorar), sem apagar nenhum dado existente; `resolvido`/prazo seguem só sob controle manual.
+
 ## 4. Fase 6 — Interface visual (frontend)
 
 ### 4.1 Contexto e decisão (D2, fechada)
