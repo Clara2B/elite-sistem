@@ -1,3 +1,5 @@
+import logging
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -40,6 +42,28 @@ app = FastAPI(title="Elite Sistem API", lifespan=lifespan)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+# Sem isso, uma mensagem de nível INFO sem handler configurado não aparece
+# em lugar nenhum (o "last resort" padrão do Python só mostra WARNING+) —
+# ou seja, os logs de tempo de requisição abaixo ficariam mudos nos logs do
+# Render sem essa linha.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+_logger_requisicoes = logging.getLogger("elite_sistem.requisicoes")
+
+
+@app.middleware("http")
+async def _medir_tempo_de_requisicao(request: Request, call_next):
+    """Só para diagnóstico ("sistema todo devagar", relatado pela Clara sem
+    detalhes suficientes pra reproduzir) — sem isso, a próxima vez que algo
+    estiver lento só dá pra adivinhar onde. Fica nos logs do Render
+    (stdout), sem persistir em banco nem expor nada pra fora."""
+    inicio = time.perf_counter()
+    resposta = await call_next(request)
+    duracao_ms = (time.perf_counter() - inicio) * 1000
+    _logger_requisicoes.info(
+        "%s %s -> %s em %.0fms", request.method, request.url.path, resposta.status_code, duracao_ms
+    )
+    return resposta
 
 
 @app.exception_handler(PrecisaLogin)

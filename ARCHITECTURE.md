@@ -576,3 +576,39 @@ homepage mais produzida no menu lateral, e exclusão definitiva de empresa-clien
   dados/planilha específicos ou os logs do Render do momento do problema não dá pra reproduzir nem
   diagnosticar; segue como pendência em aberto até ela mandar mais detalhes (qual módulo, qual
   arquivo, quanto tempo esperou, e/ou os logs).
+
+### 4.4 Terceira rodada: CSS em cache após deploy + lentidão geral (2026-09-23)
+
+A Clara testou o deploy da seção 4.3 e mandou print do modal de exclusão sem nenhum estilo (borda
+preta padrão do navegador, sem sombra, sem cantos arredondados, sem o ícone estilizado) — só os
+botões (`.perigo`/`.secundario`, que já existiam antes desse deploy) apareciam certos. Isso é a
+marca registrada de CSS em cache: o navegador (ou um proxy no caminho) continuou servindo a versão
+anterior de `style.css` mesmo depois do deploy, porque o link sempre aponta pra mesma URL
+(`/static/style.css`, sem nenhuma marca de versão) — localmente, com Playwright, o mesmo arquivo
+renderizava perfeito (ver captura da seção 4.3), então o CSS em si nunca esteve errado.
+
+- **Corrigido:** `app/web/templates.py` agora calcula um hash do conteúdo de `style.css`/`app.js`
+  na inicialização do processo (`versao_estatico`, injetado como global do Jinja, disponível em
+  toda página sem precisar passar no contexto) e `base.html`/`login.html` usam
+  `/static/style.css?v=<hash>` / `/static/app.js?v=<hash>`. Como o hash muda sempre que o conteúdo
+  muda, cada deploy gera uma URL nova — nenhum cache antigo (navegador ou proxy) pode ser
+  reaproveitado por engano de novo.
+- **Também relatado:** "o sistema todo está muito devagar, tudo que clico demora muito pra
+  carregar" — mais amplo que só o import. Sem conseguir reproduzir localmente (aqui está rápido) e
+  sem acesso a métricas de produção, a causa mais provável é o **plano gratuito do Render**
+  (`ARCHITECTURE.md` seção 2.8): o serviço "dorme" depois de um período de inatividade e a
+  primeira requisição depois disso demora dezenas de segundos pra "acordar" — o que bateria com
+  "tudo demora", não um módulo específico. Não dá pra confirmar isso sem ver o padrão real (ex.: só
+  o primeiro clique depois de um tempo parado é lento, ou é lento o tempo todo).
+- **Adicionado pra próxima vez que isso acontecer:** um middleware simples em `app/main.py`
+  (`_medir_tempo_de_requisicao`) loga método, caminho, status e duração de toda requisição nos logs
+  do Render (stdout) — antes não existia nenhum log de tempo, só dava pra adivinhar onde estava a
+  lentidão. Da próxima vez, os logs do Render do momento do problema já mostram exatamente qual
+  requisição demorou e quanto.
+- **Testado:** `ruff check`/`pytest -q` (68 testes, sem mudança na contagem — isso é
+  infraestrutura, não comportamento) + verificação visual local confirmando a URL do CSS agora
+  carrega `?v=<hash>` e o modal renderiza igual à captura da seção 4.3.
+- **Pendente:** confirmar com a Clara, depois desse deploy, (1) se o modal aparece estilizado após
+  um refresh normal (sem precisar de Ctrl+Shift+R) e (2) se a lentidão segue o padrão de "só o
+  primeiro clique depois de um tempo parado" — o que apontaria pro plano gratuito do Render como
+  causa raiz, decisão de custo que caberia a ela.

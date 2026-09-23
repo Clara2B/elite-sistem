@@ -489,6 +489,38 @@ incluindo a captura que comprovou o bug da validação nativa antes da correçã
 **Reversível:** sim — mudança de camada de apresentação, mais um recurso administrativo aditivo e
 irreversível apenas quando o próprio usuário confirma explicitamente no modal.
 
+## 2026-09-23 — Cache-busting de estáticos + log de tempo de requisição
+
+**Contexto:** a Clara testou o deploy anterior (exclusão de empresa) e mandou print do modal de
+exclusão sem nenhum estilo — borda preta padrão do navegador, sem sombra, cantos arredondados nem
+ícone colorido, só os botões com o CSS antigo (`.perigo`/`.secundario`, que já existiam antes desse
+deploy). Isso é a marca registrada de CSS em cache — localmente, com Playwright, o mesmo arquivo
+renderizava perfeito (mesma captura já mandada antes pra ela), então o problema nunca foi o CSS em
+si, foi o navegador (ou algum proxy no caminho) continuar servindo a versão anterior de
+`/static/style.css`, porque a URL nunca mudava entre deploys.
+**Decisão:** hash do conteúdo de `style.css`/`app.js`, calculado uma vez na inicialização do
+processo (`app/web/templates.py::_versao_estatico`) e usado como `?v=<hash>` nos links desses
+arquivos em `base.html`/`login.html`. Cada deploy que muda o conteúdo gera uma URL nova
+automaticamente — não depende de lembrar de bumpar uma versão manualmente, nem depende de
+configurar headers de cache num CDN que eu não controlo diretamente.
+**Log de tempo de requisição:** a mesma mensagem trouxe "o sistema todo está muito devagar, tudo
+que clico demora muito pra carregar" — mais amplo que só o import, e sem conseguir reproduzir
+localmente. Como não existia nenhum log de tempo, cada relato de lentidão até agora dependia de
+pedir pra Clara copiar o log do Render manualmente e adivinhar onde olhar. Adicionado um middleware
+simples (`app/main.py::_medir_tempo_de_requisicao`) que loga método, caminho, status e duração de
+toda requisição — aparece direto nos logs do Render (stdout), sem precisar instrumentar nada extra
+da próxima vez que isso for reportado.
+**Hipótese não confirmada:** o padrão descrito ("tudo demora") é consistente com o plano gratuito
+do Render "dormir" por inatividade (`ARCHITECTURE.md` seção 2.8) — a primeira requisição depois de
+um tempo parado pode levar dezenas de segundos pra acordar o serviço. Não é uma correção de código;
+se for confirmado, é uma decisão de custo (upgrade de plano) que cabe à Clara, não algo que eu
+resolvo sozinho.
+**Validação:** `ruff check`/`pytest -q` (68 testes, sem mudança de contagem — é infraestrutura, não
+comportamento novo) + verificação visual local confirmando que a URL do CSS carrega `?v=<hash>` e o
+modal volta a renderizar estilizado.
+**Reversível:** sim, mudança de infraestrutura (cache-busting e logging), sem efeito em dado ou
+comportamento de negócio.
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante
@@ -502,7 +534,10 @@ irreversível apenas quando o próprio usuário confirma explicitamente no modal
 4. Modelo do relatório de Gestão de Processos (layout/colunas do PDF) — a Clara viu o exemplo
    gerado (Março/2026, geral + individual) e gostou, mas quer revisitar detalhes depois. Não é um
    pedido concreto ainda; retomar quando ela trouxer o que quer mudar.
-5. "Quando clico em importar começa a carregar e não para" (relatado 2026-09-23) — sem os dados
-   específicos (qual módulo/planilha, quanto tempo esperou) ou os logs do Render do momento do
-   problema não dá pra reproduzir localmente nem diagnosticar a causa. Precisa desses detalhes da
-   Clara antes de investigar.
+5. Lentidão geral relatada pela Clara ("tudo que clico demora muito pra carregar") — log de tempo
+   de requisição já adicionado (ver entrada 2026-09-23 acima); falta ela confirmar se o padrão é
+   "só o primeiro clique depois de um tempo parado" (apontaria pro plano gratuito do Render
+   dormindo por inatividade — decisão de custo, não bug) ou se é lento o tempo todo (aí sim
+   investigar os logs de duração).
+6. Confirmar com a Clara que o modal de exclusão de empresa aparece estilizado depois do deploy do
+   cache-busting (ela viu sem estilo por causa de CSS em cache — ver entrada 2026-09-23 acima).

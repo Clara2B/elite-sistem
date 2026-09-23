@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block titulo %}Elite Sistem{% endblock %}</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v={{ versao_estatico }}">
 </head>
 <body>
   {% import "_icones.html" as icones %}
@@ -41,6 +41,6 @@
       </main>
     </div>
   </div>
-  <script src="/static/app.js" defer></script>
+  <script src="/static/app.js?v={{ versao_estatico }}" defer></script>
 </body>
 </html>
