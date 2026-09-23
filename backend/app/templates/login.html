@@ -12,9 +12,8 @@
     <div class="login-card">
       <div class="marca"><span class="ponto"></span> ELITE SISTEM</div>
       <p class="subtitulo">Entre com seu e-mail e senha.</p>
-      {% if erro %}
-        <div class="mensagem erro">{{ erro }}</div>
-      {% endif %}
+      {% import "_flash.html" as flash %}
+      {{ flash.toast('erro', erro) }}
       <form method="post" action="/login">
         <div class="campo">
           <label for="email">E-mail</label>

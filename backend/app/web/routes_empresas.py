@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Usuario
+from app.models import EmpresaCliente, Usuario
 from app.services.auditoria import registrar
 from app.services.empresas import (
     alterar_ativo_empresa,
     atualizar_empresa,
     criar_empresa,
+    excluir_empresa,
     listar_empresas,
 )
 from app.web.auth import admin_logado_web
@@ -33,10 +36,19 @@ def _contexto_base(db: Session, usuario: Usuario) -> dict:
 @router.get("")
 def tela(
     request: Request,
+    erro: str | None = None,
+    mensagem: str | None = None,
     usuario: Usuario = Depends(admin_logado_web),
     db: Session = Depends(get_db),
 ):
-    return templates.TemplateResponse(request, "empresas.html", _contexto_base(db, usuario))
+    contexto = _contexto_base(db, usuario)
+    # erro/mensagem por query string: só usado depois de um redirect (ex.:
+    # excluir, que precisa de POST + redirect, então não pode simplesmente
+    # devolver a página com o erro no corpo da mesma resposta como os
+    # outros formulários desta tela fazem).
+    contexto["erro"] = erro
+    contexto["mensagem"] = mensagem
+    return templates.TemplateResponse(request, "empresas.html", contexto)
 
 
 @router.post("")
@@ -105,3 +117,22 @@ def alterar_ativo(
             entidade="empresa_cliente", entidade_id=empresa_id,
         )
     return RedirectResponse("/app/empresas", status_code=303)
+
+
+@router.post("/{empresa_id}/excluir")
+def excluir(
+    empresa_id: int,
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Exclusão definitiva — a confirmação (obrigatória) acontece no
+    navegador, num modal, antes desse POST ser disparado (ver empresas.html
+    e static/app.js). O backend também recusa se houver dado vinculado."""
+    empresa = db.get(EmpresaCliente, empresa_id)
+    nome = empresa.nome if empresa else str(empresa_id)
+    try:
+        excluir_empresa(db, empresa_id)
+    except ValueError as e:
+        return RedirectResponse(f"/app/empresas?erro={quote(str(e))}", status_code=303)
+    registrar(db, usuario, "EXCLUIU_EMPRESA", entidade="empresa_cliente", entidade_id=empresa_id)
+    return RedirectResponse(f"/app/empresas?mensagem={quote(f'Empresa {nome} excluída definitivamente.')}", status_code=303)

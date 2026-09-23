@@ -461,6 +461,34 @@ Playwright/Chromium local antes de reportar como pronto.
 **Reversível:** sim, mudança de camada de apresentação e um recurso administrativo aditivo — nada
 do que já existia foi alterado em comportamento.
 
+## 2026-09-23 — Polimento de UI (upload, toasts, exclusão de empresa) + bug de validação nativa
+
+**Contexto:** feedback pós-deploy do redesign: botão de voltar em toda tela, upload de planilha
+"muito feio", pop-up de erro "antigo de sistema velho" (a bolha nativa do navegador), homepage mais
+produzida no menu, e exclusão definitiva de empresa-cliente com confirmação de perigo.
+**Toasts vs. aviso inline:** ao transformar `.mensagem` de banner fixo em toast flutuante,
+identifiquei que um uso existente (tipo de laudo sem valor cadastrado, dentro do card de
+resultado do relatório) precisa continuar fixo no lugar — não faz sentido ele flutuar e desaparecer
+como um toast de sucesso/erro de ação. Criada a classe separada `.aviso-inline` pra esse caso, sem
+virar toast.
+**Bug real achado ao trocar a bolha nativa por toast:** a validação HTML5 nativa do navegador nunca
+dispara o evento `submit` de um formulário quando um campo `required` está vazio — ela intercepta e
+aborta antes disso. Um listener de `submit` que só mostrasse o toast nesse momento nunca seria
+chamado. Corrigido com `form.noValidate = true` nos formulários de import (únicos com esse padrão;
+não têm outro campo obrigatório além do arquivo) + validação manual em `app.js`, confirmado com
+Playwright que o toast aparece de verdade agora (antes o teste visual mostrava a mesma tela, sem
+toast, comprovando o bug).
+**Exclusão definitiva de empresa-cliente:** a pedido explícito da Clara ("apagar por completo").
+Ficou de fora da tela de "ativar/desativar" já existente porque apagar é irreversível — bloqueado
+no backend se houver laudo/audiência/cobrança/processo vinculado (evita apagar histórico que não
+era o alvo direto do pedido), com confirmação obrigatória num `<dialog>` estilizado (não
+`window.confirm()`, que não é estilizável) antes do POST.
+**Validação:** `tests/test_web.py` ganhou 2 testes novos (exclusão sem vínculos, exclusão bloqueada
+com laudo vinculado — 68 testes no total) + verificação visual com Playwright/Chromium local,
+incluindo a captura que comprovou o bug da validação nativa antes da correção.
+**Reversível:** sim — mudança de camada de apresentação, mais um recurso administrativo aditivo e
+irreversível apenas quando o próprio usuário confirma explicitamente no modal.
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante
@@ -474,3 +502,7 @@ do que já existia foi alterado em comportamento.
 4. Modelo do relatório de Gestão de Processos (layout/colunas do PDF) — a Clara viu o exemplo
    gerado (Março/2026, geral + individual) e gostou, mas quer revisitar detalhes depois. Não é um
    pedido concreto ainda; retomar quando ela trouxer o que quer mudar.
+5. "Quando clico em importar começa a carregar e não para" (relatado 2026-09-23) — sem os dados
+   específicos (qual módulo/planilha, quanto tempo esperou) ou os logs do Render do momento do
+   problema não dá pra reproduzir localmente nem diagnosticar a causa. Precisa desses detalhes da
+   Clara antes de investigar.

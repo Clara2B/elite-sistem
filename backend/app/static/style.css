@@ -193,6 +193,55 @@ h2 {
 
 /* ---------- dashboard ---------- */
 
+.hero {
+  background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+  border-radius: 16px;
+  padding: 34px 36px;
+  margin-bottom: 28px;
+  color: #fff;
+  box-shadow: var(--shadow-md);
+  position: relative;
+  overflow: hidden;
+}
+.hero::after {
+  content: "";
+  position: absolute;
+  top: -60px;
+  right: -60px;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+}
+.hero h1 {
+  color: #fff;
+  font-size: 1.65rem;
+  margin-bottom: 6px;
+}
+.hero .subtitulo {
+  color: #c7d2e0;
+  margin-bottom: 0;
+  font-size: 0.94rem;
+  position: relative;
+}
+.hero .data-hoje {
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #9fb3cc;
+  margin-bottom: 10px;
+}
+
+.secao-titulo {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin: 0 0 14px;
+}
+
 .grid-modulos {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
@@ -374,25 +423,74 @@ tbody tr:hover {
 .card thead th:first-child { border-top-left-radius: var(--radius-sm); }
 .card thead th:last-child { border-top-right-radius: var(--radius-sm); }
 
-.mensagem {
+/* aviso contextual dentro de um card (ex.: "tipo sem valor cadastrado") —
+   fica no lugar, ao contrário de .mensagem (toast flutuante no topo). */
+.aviso-inline {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
-  padding: 13px 16px;
+  padding: 12px 14px;
   border-radius: var(--radius-sm);
-  margin-bottom: 20px;
-  font-size: 0.88rem;
-  font-weight: 500;
-}
-.mensagem.erro {
+  margin-bottom: 16px;
+  font-size: 0.85rem;
   background: var(--danger-soft);
   color: var(--danger);
   border: 1px solid #f3cfca;
 }
+
+.mensagem {
+  position: fixed;
+  top: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 320px;
+  max-width: min(90vw, 520px);
+  padding: 14px 14px 14px 18px;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  font-size: 0.88rem;
+  font-weight: 500;
+  animation: toast-entrar 0.22s ease-out;
+}
+@keyframes toast-entrar {
+  from { opacity: 0; transform: translate(-50%, -14px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+.mensagem span {
+  flex: 1;
+}
+.mensagem .fechar-toast {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0 2px;
+  margin: 0;
+  color: inherit;
+  opacity: 0.55;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.mensagem .fechar-toast:hover {
+  opacity: 1;
+  background: none;
+  box-shadow: none;
+}
+.mensagem.erro {
+  background: #fff;
+  color: var(--danger);
+  border: 1px solid #f3cfca;
+  border-left: 4px solid var(--danger);
+}
 .mensagem.sucesso {
-  background: var(--ok-soft);
+  background: #fff;
   color: var(--ok);
   border: 1px solid #c8e9d3;
+  border-left: 4px solid var(--ok);
 }
 
 /* ---------- login / erro ---------- */
@@ -489,6 +587,146 @@ tbody tr:hover {
 }
 .card-header h2 {
   margin: 0;
+}
+
+/* ---------- link "voltar ao início" ---------- */
+
+.link-voltar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+.link-voltar:hover {
+  color: var(--navy);
+  text-decoration: none;
+}
+.link-voltar .icone {
+  width: 15px;
+  height: 15px;
+}
+
+/* separador simples entre "Início" e o resto do menu */
+.sidebar nav.menu .separador {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 8px 12px;
+}
+
+/* ---------- upload de planilha ---------- */
+
+.upload-zona {
+  position: relative;
+}
+.upload-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+}
+.upload-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius);
+  background: #fafbfd;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 500;
+  transition: border-color 0.14s, background 0.14s, color 0.14s;
+  min-width: 320px;
+}
+.upload-label:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--navy);
+  text-decoration: none;
+}
+.upload-label .icone-wrap {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.upload-zona.upload-erro .upload-label {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.upload-zona.upload-com-arquivo .upload-label {
+  border-style: solid;
+  border-color: var(--ok);
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.upload-zona.upload-com-arquivo .upload-label .icone-wrap {
+  background: #fff;
+  color: var(--ok);
+}
+
+/* ---------- modal de confirmação ---------- */
+
+dialog.modal-confirmacao {
+  border: none;
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  padding: 0;
+  max-width: 420px;
+  width: 92vw;
+}
+dialog.modal-confirmacao::backdrop {
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(1px);
+}
+dialog.modal-confirmacao .modal-corpo {
+  padding: 26px 26px 22px;
+}
+dialog.modal-confirmacao .modal-icone {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--danger-soft);
+  color: var(--danger);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+dialog.modal-confirmacao .modal-icone .icone {
+  width: 22px;
+  height: 22px;
+}
+dialog.modal-confirmacao h3 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+  color: var(--navy);
+}
+dialog.modal-confirmacao p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+dialog.modal-confirmacao .modal-acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 26px;
+  background: #f8f9fb;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 14px 14px;
 }
 
 /* ---------- responsivo ---------- */

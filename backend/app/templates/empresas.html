@@ -1,11 +1,13 @@
 {% extends "base.html" %}
 {% block titulo %}Empresas-clientes — Elite Sistem{% endblock %}
 {% block conteudo %}
+  {% import "_icones.html" as icones %}
+  {% import "_flash.html" as flash %}
   <h1>Empresas-clientes</h1>
   <p class="subtitulo">Cadastro, CNPJ e ativação das empresas atendidas por ELITE e EXÍMIA.</p>
 
-  {% if mensagem %}<div class="mensagem sucesso">{{ mensagem }}</div>{% endif %}
-  {% if erro %}<div class="mensagem erro">{{ erro }}</div>{% endif %}
+  {{ flash.toast('sucesso', mensagem) }}
+  {{ flash.toast('erro', erro) }}
 
   <div class="card">
     <div class="card-header"><h2>Cadastradas ({{ empresas|length }})</h2></div>
@@ -38,6 +40,11 @@
                         {{ "Desativar" if e.ativo else "Ativar" }}
                       </button>
                     </form>
+                    <button type="button" class="perigo" style="padding:7px 10px; font-size:0.8rem;"
+                            data-abrir-confirmacao="modal-excluir-{{ e.id }}" data-nome-alvo="{{ e.nome }}"
+                            aria-label="Excluir {{ e.nome }}">
+                      {{ icones.icone('lixeira') }}
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -45,6 +52,25 @@
           </tbody>
         </table>
       </div>
+      {% for e in empresas %}
+        <dialog id="modal-excluir-{{ e.id }}" class="modal-confirmacao">
+          <div class="modal-corpo">
+            <div class="modal-icone">{{ icones.icone('alerta') }}</div>
+            <h3>Excluir empresa-cliente?</h3>
+            <p>
+              Isso vai apagar <strong data-nome-alvo-destino>{{ e.nome }}</strong> definitivamente,
+              sem volta. Se houver laudo, audiência, cobrança ou processo vinculado a ela, a exclusão
+              será recusada — nesse caso, desative em vez de excluir.
+            </p>
+          </div>
+          <div class="modal-acoes">
+            <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
+            <form method="post" action="/app/empresas/{{ e.id }}/excluir">
+              <button type="submit" class="perigo">Excluir definitivamente</button>
+            </form>
+          </div>
+        </dialog>
+      {% endfor %}
     {% else %}
       <p class="vazio">Nenhuma empresa-cliente cadastrada ainda.</p>
     {% endif %}

@@ -1,11 +1,12 @@
 {% extends "base.html" %}
 {% block titulo %}Usuários — Elite Sistem{% endblock %}
 {% block conteudo %}
+  {% import "_flash.html" as flash %}
   <h1>Usuários</h1>
   <p class="subtitulo">Cadastro e acesso da equipe.</p>
 
-  {% if mensagem %}<div class="mensagem sucesso">{{ mensagem }}</div>{% endif %}
-  {% if erro %}<div class="mensagem erro">{{ erro }}</div>{% endif %}
+  {{ flash.toast('sucesso', mensagem) }}
+  {{ flash.toast('erro', erro) }}
 
   <div class="card">
     <h2>Equipe cadastrada</h2>

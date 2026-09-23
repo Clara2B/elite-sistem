@@ -4,10 +4,10 @@ Não confundir com `operadoras` (EXÍMIA/ELITE) — ver ARCHITECTURE.md seção 
 """
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import EmpresaCliente
+from app.models import Audiencia, Cobranca, EmpresaCliente, Laudo, Processo
 from app.utils import normalize
 
 
@@ -84,3 +84,31 @@ def alterar_ativo_empresa(db: Session, empresa_id: int, ativo: bool) -> EmpresaC
     empresa.ativo = ativo
     db.commit()
     return empresa
+
+
+def excluir_empresa(db: Session, empresa_id: int) -> None:
+    """Exclusão definitiva (a pedido da Clara — a tela pede confirmação
+    antes de chamar isso). Bloqueada se a empresa tiver laudo/audiência/
+    cobrança/processo vinculado: apagar apagaria esse histórico junto
+    (violaria "nunca modificar/apagar sem autorização explícita" do
+    prompt mestre para dado que não foi o alvo direto do pedido) — nesses
+    casos, desativar (`alterar_ativo_empresa`) é o caminho seguro."""
+    empresa = db.get(EmpresaCliente, empresa_id)
+    if empresa is None:
+        raise ValueError(f"Empresa-cliente {empresa_id} não encontrada.")
+
+    vinculos = {
+        "laudos": db.scalar(select(func.count()).select_from(Laudo).where(Laudo.empresa_cliente_id == empresa_id)),
+        "audiências": db.scalar(select(func.count()).select_from(Audiencia).where(Audiencia.empresa_cliente_id == empresa_id)),
+        "cobranças": db.scalar(select(func.count()).select_from(Cobranca).where(Cobranca.empresa_cliente_id == empresa_id)),
+        "processos": db.scalar(select(func.count()).select_from(Processo).where(Processo.empresa_cliente_id == empresa_id)),
+    }
+    presentes = [f"{qtd} {nome}" for nome, qtd in vinculos.items() if qtd]
+    if presentes:
+        raise ValueError(
+            f"Não é possível excluir '{empresa.nome}': existe {', '.join(presentes)} vinculado(s) a ela. "
+            "Desative em vez de excluir, se quiser tirá-la das telas de relatório."
+        )
+
+    db.delete(empresa)
+    db.commit()

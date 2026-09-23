@@ -536,4 +536,43 @@ já usada nos PDFs (azul-marinho `#152A40`). Ver `DECISIONS.md`.
 - **Testado:** `tests/test_web.py` (10 testes, cobrindo login/permissões/PDF/empresas) + navegação
   ponta a ponta com Playwright/Chromium local (dashboard, processos, empresas — criar, editar,
   desativar — confirmado também via chamada HTTP direta com cookie de sessão).
-- **Pendente:** a Clara revalidar a velocidade e o visual novo em produção depois desse deploy.
+
+### 4.3 Segunda rodada de polimento (a pedido da Clara, 2026-09-23)
+
+Feedback depois do deploy do redesign: botão de voltar em toda tela, upload de planilha "muito
+feio", pop-up de erro "antigo de sistema velho" (a bolha nativa do navegador de campo obrigatório),
+homepage mais produzida no menu lateral, e exclusão definitiva de empresa-cliente com confirmação.
+
+- **Link "Voltar ao início"** em `base.html` — aparece em toda página exceto o próprio dashboard,
+  sem precisar repetir em cada template.
+- **Dropzone de upload redesenhada** (`.upload-zona`/`.upload-label` em `style.css`, ícone SVG,
+  nome do arquivo escolhido aparece no lugar do texto padrão) — substitui o `<input type="file">`
+  puro nos quatro formulários de importação (laudos, audiências, pendências, processos).
+- **Toasts em vez de banner fixo:** `.mensagem` virou um toast flutuante no topo (com botão de
+  fechar), via macro `_flash.html`; um aviso contextual que precisa ficar dentro do card (ex.: tipo
+  de laudo sem valor cadastrado) usa a classe separada `.aviso-inline`, que não é um toast.
+- **Bolha nativa de validação do navegador eliminada:** a bolha "Selecione um arquivo." (HTML5)
+  aparecia porque o campo de arquivo é `required`. Trocada por um toast estilizado — achado um bug
+  real nessa troca: a validação nativa do navegador nunca dispara o evento `submit` quando um campo
+  obrigatório está vazio (ela aborta o envio antes disso), então um listener de `submit` sozinho
+  nunca seria chamado pra mostrar o toast. Corrigido desligando a validação nativa desse formulário
+  específico (`form.noValidate = true`, só nos formulários de import, que não têm outro campo
+  obrigatório além do arquivo) e validando à mão em `app.js`.
+- **Homepage (`dashboard.html`) redesenhada:** banner "hero" com data por extenso e saudação, grade
+  de módulos com ícone/descrição — e adicionada como "Início" no topo do menu lateral (antes não
+  aparecia como item de menu).
+- **Exclusão definitiva de empresa-cliente** (a pedido explícito da Clara — "apagar por completo"):
+  `DELETE /empresas/{id}` (API) e `POST /app/empresas/{id}/excluir` (tela), com confirmação
+  obrigatória num modal (`<dialog>` nativo estilizado, não `window.confirm()`) antes do POST ser
+  disparado. Bloqueada no backend (`excluir_empresa` em `app/services/empresas.py`) se houver
+  laudo, audiência, cobrança ou processo vinculado — apagar apagaria esse histórico junto, o que
+  violaria a regra de nunca modificar/apagar dado que não foi alvo direto do pedido; nesse caso a
+  orientação na tela é desativar em vez de excluir.
+- **Testado:** dois testes novos em `tests/test_web.py` (exclusão bem-sucedida sem vínculos;
+  exclusão bloqueada com laudo vinculado — 68 testes no total) + verificação visual ponta a ponta
+  com Playwright/Chromium local (dashboard, dropzone de upload, modal de exclusão, toast de erro
+  substituindo a bolha nativa — capturas conferidas antes de reportar como pronto).
+- **Pendente:** a Clara relatou "quando clico em importar começa a carregar e não para" — sem os
+  dados/planilha específicos ou os logs do Render do momento do problema não dá pra reproduzir nem
+  diagnosticar; segue como pendência em aberto até ela mandar mais detalhes (qual módulo, qual
+  arquivo, quanto tempo esperou, e/ou os logs).

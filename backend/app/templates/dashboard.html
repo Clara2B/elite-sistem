@@ -2,8 +2,13 @@
 {% block titulo %}Início — Elite Sistem{% endblock %}
 {% block conteudo %}
   {% import "_icones.html" as icones %}
-  <h1>Olá, {{ usuario.nome.split(" ")[0] }}</h1>
-  <p class="subtitulo">Escolha um módulo para começar.</p>
+  <div class="hero">
+    <div class="data-hoje">{{ data_hoje }}</div>
+    <h1>Olá, {{ usuario.nome.split(" ")[0] }}</h1>
+    <p class="subtitulo">Escolha um módulo abaixo para começar.</p>
+  </div>
+
+  <p class="secao-titulo">Módulos</p>
   <div class="grid-modulos">
     {% for item in menu %}
       <a class="modulo" href="{{ item.url }}">

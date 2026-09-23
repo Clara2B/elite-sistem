@@ -2,8 +2,10 @@
 Testes de API JSON continuam em test_auth.py/test_permissoes.py; aqui só o
 que é específico do fluxo de navegador (login por formulário, redirecionamento,
 página 403)."""
+from datetime import date
+
 from app.auth import hash_senha
-from app.models import Setor, Usuario, UsuarioSetor
+from app.models import EmpresaCliente, Laudo, Setor, Usuario, UsuarioSetor
 
 
 def test_login_form_carrega(client):
@@ -120,6 +122,39 @@ def test_empresas_nome_duplicado_mostra_erro(client, db):
     resposta = client.post("/app/empresas", data={"nome": "Duplicada Ltda"})
     assert resposta.status_code == 400
     assert "já existe" in resposta.text.lower()
+
+
+def test_empresas_exclusao_definitiva_funciona_sem_vinculos(client, db):
+    db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    db.commit()
+    client.post("/login", data={"email": "fulano@teste.local", "senha": "certa"})
+
+    client.post("/app/empresas", data={"nome": "Excluível Ltda"})
+    empresa_id = next(e["id"] for e in client.get("/empresas").json() if e["nome"] == "Excluível Ltda")
+
+    resposta = client.post(f"/app/empresas/{empresa_id}/excluir", follow_redirects=False)
+    assert resposta.status_code == 303
+    assert resposta.headers["location"].startswith("/app/empresas?mensagem=")
+
+    ids = [e["id"] for e in client.get("/empresas").json()]
+    assert empresa_id not in ids
+
+
+def test_empresas_exclusao_bloqueada_se_tiver_laudo_vinculado(client, db):
+    db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    empresa = EmpresaCliente(nome="Com Laudo Ltda")
+    db.add(empresa)
+    db.flush()
+    db.add(Laudo(empresa_cliente_id=empresa.id, tipo_laudo_nome="Perícia", data=date(2026, 1, 10), status="SOLICITACAO"))
+    db.commit()
+    client.post("/login", data={"email": "fulano@teste.local", "senha": "certa"})
+
+    resposta = client.post(f"/app/empresas/{empresa.id}/excluir", follow_redirects=False)
+    assert resposta.status_code == 303
+    assert resposta.headers["location"].startswith("/app/empresas?erro=")
+
+    ids = [e["id"] for e in client.get("/empresas").json()]
+    assert empresa.id in ids
 
 
 def test_empresas_pagina_restrita_a_admin(client, db):

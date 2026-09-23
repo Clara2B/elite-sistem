@@ -1,18 +1,23 @@
 {% extends "base.html" %}
 {% block titulo %}Pendências — Elite Sistem{% endblock %}
 {% block conteudo %}
+  {% import "_icones.html" as icones %}
+  {% import "_flash.html" as flash %}
   <h1>Pendências</h1>
   <p class="subtitulo">Cobranças em aberto por empresa-cliente (EXÍMIA e ELITE).</p>
 
-  {% if mensagem %}<div class="mensagem sucesso">{{ mensagem }}</div>{% endif %}
-  {% if erro %}<div class="mensagem erro">{{ erro }}</div>{% endif %}
+  {{ flash.toast('sucesso', mensagem) }}
+  {{ flash.toast('erro', erro) }}
 
   <div class="card">
     <h2>Importar planilha</h2>
     <form class="formulario" method="post" action="/app/pendencias/import" enctype="multipart/form-data">
-      <div class="campo">
-        <label for="arquivo">Arquivo .xlsx</label>
-        <input type="file" id="arquivo" name="arquivo" accept=".xlsx" required>
+      <div class="campo upload-zona" data-upload>
+        <input type="file" id="arquivo" name="arquivo" accept=".xlsx" required class="upload-input" data-upload-input>
+        <label for="arquivo" class="upload-label">
+          <span class="icone-wrap">{{ icones.icone('upload') }}</span>
+          <span data-upload-texto>Clique para escolher a planilha (.xlsx)</span>
+        </label>
       </div>
       <button type="submit">Importar</button>
     </form>

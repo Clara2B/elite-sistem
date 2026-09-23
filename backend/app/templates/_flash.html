@@ -1,0 +1,8 @@
+{% macro toast(tipo, texto) %}
+{% if texto %}
+<div class="mensagem {{ tipo }}" role="alert">
+  <span>{{ texto }}</span>
+  <button type="button" class="fechar-toast" onclick="this.closest('.mensagem').remove()" aria-label="Fechar">&times;</button>
+</div>
+{% endif %}
+{% endmacro %}
