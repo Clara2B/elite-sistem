@@ -118,15 +118,21 @@ faixas_audiencia
 audiencias
 ├── id
 ├── empresa_cliente_id  -- FK empresas_clientes
-├── nome_cliente
+├── nome_cliente         -- Text, sem limite (ver nota abaixo)
 ├── cpf                 -- dado pessoal — ver SECURITY.md sobre tratamento
 ├── data_recebimento
-├── data_agendamento
-├── conciliadora
-├── advogada
+├── data_agendamento     -- Text, sem limite (ver nota abaixo)
+├── conciliadora          -- Text, sem limite (ver nota abaixo)
+├── advogada              -- Text, sem limite (ver nota abaixo)
 ├── origem              -- 'IMPORT_PLANILHA' | 'MANUAL'
 └── criado_em
 ```
+
+**Por que `nome_cliente`/`data_agendamento`/`conciliadora`/`advogada` são `Text`, não
+`VARCHAR(N)`:** mesmo motivo já documentado pra `processos` (seção 6.1) — texto livre vindo da
+mesma planilha/equipe, que já se mostrou mais "rica" em conteúdo do que um VARCHAR(N) previsto (ex.:
+`advogada` com `"HUNTING - Fulana de Tal (CONTR. Beltrano)"`, 84+ caracteres). Corrigido depois que
+a Clara relatou um "Internal Server Error" ao importar audiências — ver `DECISIONS.md`.
 
 ## 5. Cobrança de pendências
 

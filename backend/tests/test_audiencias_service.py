@@ -1,7 +1,16 @@
+import tempfile
 from datetime import date
+from pathlib import Path
+
+import openpyxl
+from sqlalchemy import Text
 
 from app.models import Audiencia
-from app.services.audiencias import gerar_relatorio, periodo_quinzenal
+from app.services.audiencias import (
+    gerar_relatorio,
+    importar_planilha,
+    periodo_quinzenal,
+)
 from app.services.empresas import get_or_create_empresa
 
 
@@ -68,3 +77,31 @@ def test_empresa_normalizada_sem_acento_e_caixa(db):
     ini, fim = periodo_quinzenal(2026, 9, 1)
     result = gerar_relatorio(db, "alfa", ini, fim)
     assert result.quantidade_mes == 5
+
+
+def test_campos_de_texto_livre_sao_text_nao_varchar():
+    """Regressão: `advogada`/`conciliadora`/`data_agendamento`/`nome_cliente`
+    já causaram `StringDataRightTruncation` em produção como VARCHAR(N) em
+    `processos` (mesma planilha, mesmo padrão de texto composto tipo
+    "HUNTING - Fulana de Tal (CONTR. Beltrano)", 84+ caracteres) — o SQLite
+    dos testes não aplica limite de VARCHAR de verdade, então só uma
+    checagem de schema pega esse tipo de regressão de volta pra VARCHAR(N)."""
+    for nome_coluna in ("nome_cliente", "data_agendamento", "conciliadora", "advogada"):
+        coluna = Audiencia.__table__.c[nome_coluna]
+        assert isinstance(coluna.type, Text), f"{nome_coluna} devia ser Text, não {coluna.type}"
+
+
+def test_import_advogada_com_texto_longo_nao_quebra(db):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["EMPRESA", "NOME COMPLETO", "DATA DE RECEBIMENTO", "ADVOGADA"])
+    advogada_longa = "HUNTING - Fulana de Tal da Silva Pereira Santos (CONTRATADA POR Beltrano de Souza)"
+    ws.append(["ALFA", "Cliente Teste", date(2026, 9, 1), advogada_longa])
+    path = Path(tempfile.mkdtemp()) / "audiencias.xlsx"
+    wb.save(path)
+
+    resumo = importar_planilha(db, str(path))
+    assert resumo.linhas_novas == 1
+
+    audiencia = db.query(Audiencia).one()
+    assert audiencia.advogada == advogada_longa

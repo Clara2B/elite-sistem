@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.audiencias import router as audiencias_router
@@ -78,6 +78,38 @@ async def _sem_permissao(request: Request, exc: SemPermissao):
         {"titulo": "Acesso restrito", "mensagem": "Você não tem permissão para acessar esta página."},
         status_code=403,
     )
+
+
+def _e_rota_html(path: str) -> bool:
+    return path == "/" or path.startswith(("/app", "/login", "/logout"))
+
+
+_logger_erros = logging.getLogger("elite_sistem.erros")
+
+
+@app.exception_handler(Exception)
+async def _erro_nao_tratado(request: Request, exc: Exception):
+    """Sem isso, qualquer erro inesperado (ex.: o `StringDataRightTruncation`
+    que já pegou `processos` uma vez — ver DECISIONS.md) derruba a página
+    inteira numa "Internal Server Error" em branco, sem estilo nenhum e sem
+    dizer nada pra Clara — a mesma queixa dela sobre avisos feios de sistema
+    velho, só que pior (nem um aviso é). Loga o traceback completo (aparece
+    nos logs do Render, com o middleware de tempo de requisição já em uso
+    pra diagnóstico) e devolve uma página de erro estilizada pras rotas de
+    tela; pras rotas de API/JSON, devolve um JSON genérico em vez de uma
+    página HTML, que quebraria qualquer cliente esperando JSON."""
+    _logger_erros.error("Erro não tratado em %s %s", request.method, request.url.path, exc_info=exc)
+    if _e_rota_html(request.url.path):
+        return templates.TemplateResponse(
+            request, "erro.html",
+            {
+                "titulo": "Algo deu errado",
+                "mensagem": "Não conseguimos concluir essa ação. Tente de novo — se continuar "
+                "acontecendo, chame o suporte técnico.",
+            },
+            status_code=500,
+        )
+    return JSONResponse({"detail": "Internal Server Error"}, status_code=500)
 
 
 app.include_router(health_router)

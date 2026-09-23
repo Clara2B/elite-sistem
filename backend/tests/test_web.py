@@ -168,3 +168,61 @@ def test_empresas_pagina_restrita_a_admin(client, db):
 
     resposta = client.get("/app/empresas")
     assert resposta.status_code == 403
+
+
+def test_erro_nao_tratado_em_rota_html_mostra_pagina_estilizada(client, db, monkeypatch):
+    """A Clara reportou 'Internal Server Error' em branco ao importar
+    audiências (era StringDataRightTruncation, já corrigido) — mas qualquer
+    erro inesperado numa rota de tela merece a mesma página estilizada, não
+    o crash cru do servidor. Simula um erro genérico (não é o bug real, só
+    prova que o handler funciona pra qualquer exceção não tratada)."""
+    db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    db.commit()
+    client.post("/login", data={"email": "fulano@teste.local", "senha": "certa"})
+
+    import app.web.routes_audiencias as rotas
+
+    def _quebra(*args, **kwargs):
+        raise RuntimeError("erro inesperado simulado")
+
+    monkeypatch.setattr(rotas.audiencias_service, "importar_planilha", _quebra)
+
+    # Starlette registra um handler pra `Exception` na camada mais externa
+    # (ServerErrorMiddleware) — funciona certinho contra um navegador/uvicorn
+    # de verdade (devolve a resposta certa pro cliente), mas o TestClient por
+    # padrão (`raise_server_exceptions=True`) relança a exceção mesmo assim,
+    # como um alarme pra bug não tratado. Aqui o "não tratado" é
+    # intencional — o teste é sobre o handler, não sobre deixar passar.
+    from starlette.testclient import TestClient
+
+    from app.main import app as fastapi_app
+
+    cliente_sem_relancar = TestClient(fastapi_app, raise_server_exceptions=False)
+    cliente_sem_relancar.cookies = client.cookies
+
+    resposta = cliente_sem_relancar.post(
+        "/app/audiencias/import",
+        files={"arquivo": ("planilha.xlsx", b"conteudo", "application/vnd.ms-excel")},
+    )
+    assert resposta.status_code == 500
+    assert "algo deu errado" in resposta.text.lower()
+    assert "internal server error" not in resposta.text.lower()
+    assert "ELITE SISTEM" in resposta.text  # página da marca, não o crash cru
+
+
+def test_erro_nao_tratado_em_rota_json_devolve_json(client, admin_token, monkeypatch):
+    import app.api.empresas as api_empresas
+
+    def _quebra(*args, **kwargs):
+        raise RuntimeError("erro inesperado simulado")
+
+    monkeypatch.setattr(api_empresas, "listar_empresas", _quebra)
+
+    from starlette.testclient import TestClient
+
+    from app.main import app as fastapi_app
+
+    cliente_sem_relancar = TestClient(fastapi_app, raise_server_exceptions=False)
+    resposta = cliente_sem_relancar.get("/empresas", headers={"Authorization": f"Bearer {admin_token}"})
+    assert resposta.status_code == 500
+    assert resposta.headers["content-type"].startswith("application/json")

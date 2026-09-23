@@ -178,6 +178,7 @@ def init_db() -> None:
     _garantir_coluna(engine, "processos", "assessoria", "TEXT")
     _garantir_texto_ilimitado(engine, "processos", "nome_cliente", "advogada", "assistente")
     _garantir_texto_ilimitado(engine, "eventos_processo", "tipo_evento_nome")
+    _garantir_texto_ilimitado(engine, "audiencias", "nome_cliente", "data_agendamento", "conciliadora", "advogada")
     session_factory = get_session_factory()
     with session_factory() as db:
         if db.scalar(select(TipoLaudo.id).limit(1)) is None:

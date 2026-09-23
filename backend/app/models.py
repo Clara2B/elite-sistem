@@ -75,12 +75,18 @@ class Audiencia(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     empresa_cliente_id: Mapped[int] = mapped_column(ForeignKey("empresas_clientes.id"))
-    nome_cliente: Mapped[str] = mapped_column(String(200))
+    # Text (sem limite), não VARCHAR(N): mesmo texto livre da mesma planilha
+    # real que já causou StringDataRightTruncation em `processos` (ver
+    # DECISIONS.md) — nome_cliente/data_agendamento/conciliadora/advogada
+    # vêm sem validação de tamanho da planilha. `advogada` em especial já
+    # tem exemplo real de 84+ caracteres em outra aba da mesma planilha
+    # ("HUNTING - Fulana de Tal (CONTR. Beltrano)").
+    nome_cliente: Mapped[str] = mapped_column(Text)
     cpf: Mapped[str | None] = mapped_column(String(20), nullable=True)
     data_recebimento: Mapped[date] = mapped_column(Date, index=True)
-    data_agendamento: Mapped[str | None] = mapped_column(String(60), nullable=True)
-    conciliadora: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    advogada: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    data_agendamento: Mapped[str | None] = mapped_column(Text, nullable=True)
+    conciliadora: Mapped[str | None] = mapped_column(Text, nullable=True)
+    advogada: Mapped[str | None] = mapped_column(Text, nullable=True)
     origem: Mapped[str] = mapped_column(String(20), default="IMPORT_PLANILHA")
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

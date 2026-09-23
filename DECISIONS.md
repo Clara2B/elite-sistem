@@ -551,6 +551,40 @@ atualização de `nome_cliente` — + verificação visual local do filtro e da 
 `mes_referencia`) e o import fica mais permissivo (atualiza em vez de ignorar), nunca menos seguro:
 nenhum dado é apagado, e o estado operacional (`resolvido`/prazo) segue imune ao import.
 
+## 2026-09-23 — "Internal Server Error" em branco no import de audiências
+
+**Contexto:** a Clara importou uma planilha de audiências e recebeu uma página em branco do
+navegador com só "Internal Server Error" — sem estilo, sem mensagem, sem nada. Sem acesso ao log do
+Render do momento exato, não dá pra confirmar 100% a causa, mas o padrão bate exatamente com um bug
+já resolvido uma vez neste projeto.
+**Hipótese forte (não 100% confirmada):** `Audiencia.nome_cliente`/`data_agendamento`/
+`conciliadora`/`advogada` continuavam `VARCHAR(N)`, e a Fase 5 já mostrou que a coluna `ADVOGADA`
+dessa mesma planilha/equipe carrega texto tipo `"HUNTING - Fulana de Tal (CONTR. Beltrano)"`
+(84+ caracteres) — exatamente o que já causou `StringDataRightTruncation` em `processos` antes.
+Ninguém tinha auditado se `audiencias` (planilha de origem diferente, mas provavelmente preenchida
+pela mesma equipe) tinha o mesmo padrão de dado. Convertidos os quatro campos pra `Text`, mesmo
+tratamento e mesma migração aditiva (`_garantir_texto_ilimitado`) já usada em `processos`.
+**Corrigido também, independente de confirmar a causa raiz acima:** a rota só capturava
+`ValueError` — qualquer outro erro (esse `DataError` incluído) derrubava a request sem handler
+nenhum. Adicionado `@app.exception_handler(Exception)` global (`app/main.py`) que loga o traceback
+completo nos logs do Render e devolve `erro.html` (a mesma página estilizada já usada pro 403) em
+rotas de tela, e JSON genérico em rotas de API (pra não quebrar clientes que esperam JSON). Efeito:
+qualquer bug futuro não tratado — não só esse — já aparece decente pra Clara e com traceback
+completo pra mim, em vez de repetir esse susto.
+**Achado ao testar:** um handler registrado pra `Exception` (a classe base) no Starlette vai pra
+`ServerErrorMiddleware`, a camada mais externa — funciona certinho contra um navegador/uvicorn de
+verdade, mas o `TestClient` dos testes, por padrão, relança a exceção mesmo assim (é um alarme
+deliberado de "bug não tratado"). Os dois testes desse handler usam `TestClient(...,
+raise_server_exceptions=False)` especificamente, pra testar o comportamento real (resposta pro
+cliente), não o alarme de debug.
+**Validação:** 2 testes novos em `tests/test_web.py` (erro genérico em rota de tela vs. rota de
+API) + 2 testes novos em `tests/test_audiencias_service.py` (schema `Text` não `VARCHAR`; import
+com `ADVOGADA` longa não quebra) — 79 testes no total. Verificação visual local: import de
+audiências com `ADVOGADA` de 90+ caracteres funcionando ponta a ponta; `erro.html` (caso 403)
+continua igual.
+**Reversível:** sim — campo mais permissivo (nunca menos seguro) e handler de erro aditivo, que só
+muda o que acontece quando já ia dar erro sem tratamento nenhum.
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante

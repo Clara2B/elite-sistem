@@ -642,3 +642,37 @@ renderizava perfeito (ver captura da seção 4.3), então o CSS em si nunca este
   um refresh normal (sem precisar de Ctrl+Shift+R) e (2) se a lentidão segue o padrão de "só o
   primeiro clique depois de um tempo parado" — o que apontaria pro plano gratuito do Render como
   causa raiz, decisão de custo que caberia a ela.
+
+### 4.5 "Internal Server Error" em branco no import de audiências (2026-09-23)
+
+A Clara importou uma planilha de audiências e recebeu uma página em branco do navegador dizendo só
+"Internal Server Error", sem nenhum estilo — o mesmo tipo de experiência feia que ela já tinha
+reclamado antes (item "pop-up estilizado", seção 4.3), só que nem chegando a ser um pop-up: era o
+próprio servidor quebrando sem tratamento nenhum.
+
+- **Causa raiz (hipótese forte, sem acesso a log do Render pra confirmar 100%, mas é o mesmo padrão
+  já provado uma vez):** `Audiencia.nome_cliente`/`data_agendamento`/`conciliadora`/`advogada`
+  continuavam `VARCHAR(N)` — exatamente o mesmo defeito que já causou `StringDataRightTruncation`
+  em `processos` na Fase 5 (`advogada` com texto tipo `"HUNTING - Fulana de Tal (CONTR. Beltrano)"`,
+  84+ caracteres). Ninguém tinha auditado se o mesmo padrão de dado (mesma planilha/equipe) também
+  aparecia na planilha de audiências — aparentemente aparece. Corrigido convertendo os quatro campos
+  pra `Text` (sem limite), mesmo tratamento e mesma migração aditiva (`_garantir_texto_ilimitado`)
+  já usada em `processos`.
+- **Corrigido também, independente da causa raiz acima:** a rota só capturava `ValueError` — qualquer
+  outro tipo de erro (incluindo esse `DataError` do Postgres) derrubava a request inteira sem handler
+  nenhum, virando a página em branco do navegador. Adicionado um `@app.exception_handler(Exception)`
+  global em `app/main.py`: loga o traceback completo (nos logs do Render, aparece junto com o tempo
+  de requisição já instrumentado) e devolve a página `erro.html` já estilizada (mesma usada pra 403)
+  em vez do crash cru — só pras rotas de tela (`/`, `/login`, `/app/...`); rotas de API/JSON continuam
+  devolvendo JSON, pra não quebrar nenhum cliente que espere isso. Efeito prático: qualquer bug
+  futuro não tratado (não só esse) já aparece com uma tela decente pra Clara e um traceback completo
+  no log pra mim, em vez de repetir esse mesmo susto.
+- **Testado:** 2 testes novos em `tests/test_web.py` simulando um erro genérico numa rota de tela e
+  numa rota de API (confirma página estilizada vs. JSON, respectivamente) + 2 testes novos em
+  `tests/test_audiencias_service.py` (schema dos campos é `Text`, não `VARCHAR`; import com
+  `ADVOGADA` de texto longo não quebra) — 79 testes no total. Verificação visual local confirmando
+  o import de audiências com um valor de `ADVOGADA` de 90+ caracteres funcionando de ponta a ponta,
+  e a página `erro.html` (caso 403) continua igual depois da mudança no link do CSS.
+- **Reversível:** sim — campo mais permissivo (`Text` em vez de `VARCHAR(N)`) e um handler de erro
+  aditivo, que só muda o que acontece quando já ia dar erro sem tratamento nenhum.
+
