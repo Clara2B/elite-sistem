@@ -534,10 +534,12 @@ comportamento de negócio.
 4. Modelo do relatório de Gestão de Processos (layout/colunas do PDF) — a Clara viu o exemplo
    gerado (Março/2026, geral + individual) e gostou, mas quer revisitar detalhes depois. Não é um
    pedido concreto ainda; retomar quando ela trouxer o que quer mudar.
-5. Lentidão geral relatada pela Clara ("tudo que clico demora muito pra carregar") — log de tempo
-   de requisição já adicionado (ver entrada 2026-09-23 acima); falta ela confirmar se o padrão é
-   "só o primeiro clique depois de um tempo parado" (apontaria pro plano gratuito do Render
-   dormindo por inatividade — decisão de custo, não bug) ou se é lento o tempo todo (aí sim
-   investigar os logs de duração).
+5. Lentidão geral relatada pela Clara ("tudo que clico demora muito pra carregar") — ela confirmou
+   (2026-09-23) que é lento o tempo todo, não só no primeiro clique depois de um tempo parado, o
+   que descarta o "sleep" por inatividade do Render como explicação sozinha (esse só afetaria a
+   primeira requisição). Log de tempo de requisição já está no ar (ver entrada 2026-09-23 acima) —
+   falta ela reproduzir a lentidão e mandar o trecho correspondente do log do Render (agora mostra
+   duração de cada requisição) pra eu conseguir ver de verdade onde o tempo está indo, em vez de
+   adivinhar.
 6. Confirmar com a Clara que o modal de exclusão de empresa aparece estilizado depois do deploy do
    cache-busting (ela viu sem estilo por causa de CSS em cache — ver entrada 2026-09-23 acima).
