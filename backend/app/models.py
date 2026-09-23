@@ -77,12 +77,18 @@ class Audiencia(Base):
     empresa_cliente_id: Mapped[int] = mapped_column(ForeignKey("empresas_clientes.id"))
     # Text (sem limite), não VARCHAR(N): mesmo texto livre da mesma planilha
     # real que já causou StringDataRightTruncation em `processos` (ver
-    # DECISIONS.md) — nome_cliente/data_agendamento/conciliadora/advogada
-    # vêm sem validação de tamanho da planilha. `advogada` em especial já
-    # tem exemplo real de 84+ caracteres em outra aba da mesma planilha
-    # ("HUNTING - Fulana de Tal (CONTR. Beltrano)").
+    # DECISIONS.md) — nome_cliente/cpf/data_agendamento/conciliadora/advogada
+    # vêm sem validação de tamanho da planilha. `cpf` em VARCHAR(20) foi o
+    # que realmente estourou em produção (a Clara mandou o log) — a célula
+    # de CPF às vezes tem mais que um CPF formatado (14 caracteres); os
+    # outros três (nome_cliente/data_agendamento/conciliadora/advogada)
+    # foram convertidos preventivamente no mesmo commit, por precaução (não
+    # foi confirmado que estouraram, mas são o mesmo tipo de texto livre da
+    # mesma planilha/equipe que já mostrou o mesmo problema em `advogada`
+    # de `processos`, "HUNTING - Fulana de Tal (CONTR. Beltrano)", 84+
+    # caracteres).
     nome_cliente: Mapped[str] = mapped_column(Text)
-    cpf: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    cpf: Mapped[str | None] = mapped_column(Text, nullable=True)
     data_recebimento: Mapped[date] = mapped_column(Date, index=True)
     data_agendamento: Mapped[str | None] = mapped_column(Text, nullable=True)
     conciliadora: Mapped[str | None] = mapped_column(Text, nullable=True)

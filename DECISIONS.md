@@ -585,6 +585,25 @@ continua igual.
 **Reversível:** sim — campo mais permissivo (nunca menos seguro) e handler de erro aditivo, que só
 muda o que acontece quando já ia dar erro sem tratamento nenhum.
 
+## 2026-09-23 — Causa raiz confirmada: era `cpf`, não `advogada`
+
+**Contexto:** a Clara mandou o log real do Render pouco depois da entrada acima — o import de
+audiências deu erro de novo, mesmo depois do deploy que converteu `nome_cliente`/
+`data_agendamento`/`conciliadora`/`advogada` pra `Text`.
+**O log mostrou a causa exata:** `StringDataRightTruncation: value too long for type character
+varying(20)`. De todos os campos de `audiencias`, só `cpf` continuava `VARCHAR(20)` — os outros
+quatro (já convertidos na entrada anterior) não bateriam com esse "(20)" no erro. A célula de CPF na
+planilha real às vezes tem mais que um CPF formatado (14 caracteres) — provavelmente dois titulares
+na mesma linha, ou uma anotação junto. Minha suposição inicial (que seria `advogada`, pelo padrão já
+visto em `processos`) não estava de todo errada como raciocínio — só não era a coluna certa dessa
+vez. `cpf` também virou `Text`.
+**Lição:** quando a causa exata não está confirmada (sem acesso a log de produção), vale registrar
+isso como hipótese explicitamente — o que a entrada anterior já fazia — e corrigir de novo, rápido,
+assim que o dado real (o log) chegar, em vez de insistir na hipótese original.
+**Validação:** teste novo em `tests/test_audiencias_service.py` (import com `CPF` de texto longo,
+reproduzindo o caso real — 80 testes no total) + `cpf` incluído na checagem de schema já existente.
+**Reversível:** sim — mesmo campo mais permissivo, mesma categoria de mudança da entrada anterior.
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante

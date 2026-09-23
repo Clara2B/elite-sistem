@@ -80,13 +80,16 @@ def test_empresa_normalizada_sem_acento_e_caixa(db):
 
 
 def test_campos_de_texto_livre_sao_text_nao_varchar():
-    """Regressão: `advogada`/`conciliadora`/`data_agendamento`/`nome_cliente`
-    já causaram `StringDataRightTruncation` em produção como VARCHAR(N) em
-    `processos` (mesma planilha, mesmo padrão de texto composto tipo
-    "HUNTING - Fulana de Tal (CONTR. Beltrano)", 84+ caracteres) — o SQLite
+    """Regressão: `cpf` como VARCHAR(20) foi o que realmente causou
+    `StringDataRightTruncation` em produção (log real da Clara — a célula de
+    CPF às vezes tem mais que um CPF formatado); os outros quatro
+    (nome_cliente/data_agendamento/conciliadora/advogada) foram convertidos
+    junto por precaução, mesmo padrão de texto livre da mesma planilha/
+    equipe que já estourou em `processos` (`advogada` =
+    "HUNTING - Fulana de Tal (CONTR. Beltrano)", 84+ caracteres). O SQLite
     dos testes não aplica limite de VARCHAR de verdade, então só uma
     checagem de schema pega esse tipo de regressão de volta pra VARCHAR(N)."""
-    for nome_coluna in ("nome_cliente", "data_agendamento", "conciliadora", "advogada"):
+    for nome_coluna in ("nome_cliente", "cpf", "data_agendamento", "conciliadora", "advogada"):
         coluna = Audiencia.__table__.c[nome_coluna]
         assert isinstance(coluna.type, Text), f"{nome_coluna} devia ser Text, não {coluna.type}"
 
@@ -102,6 +105,21 @@ def test_import_advogada_com_texto_longo_nao_quebra(db):
 
     resumo = importar_planilha(db, str(path))
     assert resumo.linhas_novas == 1
+    assert db.query(Audiencia).one().advogada == advogada_longa
 
-    audiencia = db.query(Audiencia).one()
-    assert audiencia.advogada == advogada_longa
+
+def test_import_cpf_com_texto_longo_nao_quebra(db):
+    """Reprodução do bug real reportado pela Clara: a célula de CPF na
+    planilha às vezes tem mais que um CPF formatado (14 caracteres),
+    estourando o antigo VARCHAR(20)."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["EMPRESA", "NOME COMPLETO", "DATA DE RECEBIMENTO", "CPF"])
+    cpf_longo = "110.883.414-03 / 220.994.525-14 (dois titulares)"
+    ws.append(["ALFA", "Cliente Teste", date(2026, 9, 1), cpf_longo])
+    path = Path(tempfile.mkdtemp()) / "audiencias.xlsx"
+    wb.save(path)
+
+    resumo = importar_planilha(db, str(path))
+    assert resumo.linhas_novas == 1
+    assert db.query(Audiencia).one().cpf == cpf_longo

@@ -119,7 +119,7 @@ audiencias
 ├── id
 ├── empresa_cliente_id  -- FK empresas_clientes
 ├── nome_cliente         -- Text, sem limite (ver nota abaixo)
-├── cpf                 -- dado pessoal — ver SECURITY.md sobre tratamento
+├── cpf                 -- Text, sem limite (ver nota abaixo) — dado pessoal, ver SECURITY.md
 ├── data_recebimento
 ├── data_agendamento     -- Text, sem limite (ver nota abaixo)
 ├── conciliadora          -- Text, sem limite (ver nota abaixo)
@@ -128,11 +128,14 @@ audiencias
 └── criado_em
 ```
 
-**Por que `nome_cliente`/`data_agendamento`/`conciliadora`/`advogada` são `Text`, não
+**Por que `nome_cliente`/`cpf`/`data_agendamento`/`conciliadora`/`advogada` são `Text`, não
 `VARCHAR(N)`:** mesmo motivo já documentado pra `processos` (seção 6.1) — texto livre vindo da
-mesma planilha/equipe, que já se mostrou mais "rica" em conteúdo do que um VARCHAR(N) previsto (ex.:
-`advogada` com `"HUNTING - Fulana de Tal (CONTR. Beltrano)"`, 84+ caracteres). Corrigido depois que
-a Clara relatou um "Internal Server Error" ao importar audiências — ver `DECISIONS.md`.
+mesma planilha/equipe, que já se mostrou mais "rica" em conteúdo do que um VARCHAR(N) previsto.
+`cpf` era `VARCHAR(20)` e foi o que realmente estourou em produção (log real confirmou
+`StringDataRightTruncation` em `character varying(20)`) — a célula de CPF na planilha às vezes tem
+mais que um CPF formatado. Os outros quatro foram convertidos junto por precaução (mesmo padrão de
+texto composto já visto em `processos`/`advogada`, ex. `"HUNTING - Fulana de Tal (CONTR.
+Beltrano)"`, 84+ caracteres). Ver `DECISIONS.md`.
 
 ## 5. Cobrança de pendências
 

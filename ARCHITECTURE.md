@@ -650,13 +650,14 @@ A Clara importou uma planilha de audiências e recebeu uma página em branco do 
 reclamado antes (item "pop-up estilizado", seção 4.3), só que nem chegando a ser um pop-up: era o
 próprio servidor quebrando sem tratamento nenhum.
 
-- **Causa raiz (hipótese forte, sem acesso a log do Render pra confirmar 100%, mas é o mesmo padrão
-  já provado uma vez):** `Audiencia.nome_cliente`/`data_agendamento`/`conciliadora`/`advogada`
-  continuavam `VARCHAR(N)` — exatamente o mesmo defeito que já causou `StringDataRightTruncation`
-  em `processos` na Fase 5 (`advogada` com texto tipo `"HUNTING - Fulana de Tal (CONTR. Beltrano)"`,
-  84+ caracteres). Ninguém tinha auditado se o mesmo padrão de dado (mesma planilha/equipe) também
-  aparecia na planilha de audiências — aparentemente aparece. Corrigido convertendo os quatro campos
-  pra `Text` (sem limite), mesmo tratamento e mesma migração aditiva (`_garantir_texto_ilimitado`)
+- **Causa raiz — confirmada pelo log do Render que a Clara mandou depois:** `character varying(20)`
+  no `StringDataRightTruncation`. De todos os campos de `audiencias`, só `cpf` era `VARCHAR(20)` —
+  a célula de CPF na planilha real às vezes tem mais que um CPF formatado (14 caracteres), e foi
+  isso que estourou, não `advogada` como eu tinha suposto de início (essa suposição não estava de
+  todo errada — é o mesmo padrão de texto livre que já causou `StringDataRightTruncation` em
+  `processos`/`advogada` — só não era a coluna que quebrou dessa vez). `cpf` virou `Text`, e os
+  outros quatro campos (`nome_cliente`/`data_agendamento`/`conciliadora`/`advogada`) continuam
+  convertidos também, por precaução, com a mesma migração aditiva (`_garantir_texto_ilimitado`)
   já usada em `processos`.
 - **Corrigido também, independente da causa raiz acima:** a rota só capturava `ValueError` — qualquer
   outro tipo de erro (incluindo esse `DataError` do Postgres) derrubava a request inteira sem handler
@@ -668,11 +669,11 @@ próprio servidor quebrando sem tratamento nenhum.
   futuro não tratado (não só esse) já aparece com uma tela decente pra Clara e um traceback completo
   no log pra mim, em vez de repetir esse mesmo susto.
 - **Testado:** 2 testes novos em `tests/test_web.py` simulando um erro genérico numa rota de tela e
-  numa rota de API (confirma página estilizada vs. JSON, respectivamente) + 2 testes novos em
-  `tests/test_audiencias_service.py` (schema dos campos é `Text`, não `VARCHAR`; import com
-  `ADVOGADA` de texto longo não quebra) — 79 testes no total. Verificação visual local confirmando
-  o import de audiências com um valor de `ADVOGADA` de 90+ caracteres funcionando de ponta a ponta,
-  e a página `erro.html` (caso 403) continua igual depois da mudança no link do CSS.
+  numa rota de API (confirma página estilizada vs. JSON, respectivamente) + 3 testes novos em
+  `tests/test_audiencias_service.py` (schema dos cinco campos é `Text`, não `VARCHAR`; import com
+  `ADVOGADA` e com `CPF` de texto longo não quebra) — 80 testes no total. Verificação visual local
+  confirmando o import de audiências com um valor de `ADVOGADA` de 90+ caracteres funcionando de
+  ponta a ponta, e a página `erro.html` (caso 403) continua igual depois da mudança no link do CSS.
 - **Reversível:** sim — campo mais permissivo (`Text` em vez de `VARCHAR(N)`) e um handler de erro
   aditivo, que só muda o que acontece quando já ia dar erro sem tratamento nenhum.
 
