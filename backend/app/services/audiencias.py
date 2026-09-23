@@ -9,6 +9,8 @@ as audiências novas, sem recalcular a 1ª quinzena.
 from __future__ import annotations
 
 import calendar
+import logging
+import time
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -19,6 +21,8 @@ from app.excel_reader import load_data_sheets
 from app.models import Audiencia, EmpresaCliente, FaixaAudiencia
 from app.services.empresas import get_or_create_empresa
 from app.utils import cell_text, normalize, parse_date_cell
+
+_logger = logging.getLogger("elite_sistem.import")
 
 REQUIRED_HEADERS = ["EMPRESA", "NOME COMPLETO", "DATA DE RECEBIMENTO"]
 CHAVE_DUPLICIDADE = ["DATA DE RECEBIMENTO", "EMPRESA", "NOME COMPLETO", "CPF"]
@@ -53,6 +57,7 @@ class ImportResumo:
 
 
 def importar_planilha(db: Session, path: str) -> ImportResumo:
+    inicio = time.perf_counter()
     df = load_data_sheets(path, REQUIRED_HEADERS, chave_duplicidade=CHAVE_DUPLICIDADE)
     if df.empty:
         raise ValueError(
@@ -110,6 +115,7 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
         resumo.linhas_novas += 1
 
     db.commit()
+    _logger.info("import audiencias: %.1fs total — %s", time.perf_counter() - inicio, resumo)
     return resumo
 
 

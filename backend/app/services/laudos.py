@@ -11,6 +11,8 @@ Mesmas regras de negócio já auditadas em ARCHITECTURE.md seção 1.4:
 """
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -21,6 +23,8 @@ from app.excel_reader import load_data_sheets
 from app.models import Laudo, TipoLaudo
 from app.services.empresas import get_or_create_empresa
 from app.utils import cell_text, normalize, parse_date_cell
+
+_logger = logging.getLogger("elite_sistem.import")
 
 STATUS_MAP = {
     "SOLICITACAO": "SOLICITAÇÃO",
@@ -75,6 +79,7 @@ class ImportResumo:
 
 
 def importar_planilha(db: Session, path: str) -> ImportResumo:
+    inicio = time.perf_counter()
     df = load_data_sheets(path, REQUIRED_HEADERS, chave_duplicidade=CHAVE_DUPLICIDADE)
     if df.empty:
         raise ValueError(
@@ -135,6 +140,7 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
         resumo.linhas_novas += 1
 
     db.commit()
+    _logger.info("import laudos: %.1fs total — %s", time.perf_counter() - inicio, resumo)
     return resumo
 
 

@@ -360,3 +360,30 @@ def test_import_reimportacao_atualiza_nome_cliente_do_processo(db, tmp_path):
 
     processo = db.query(Processo).filter_by(numero_processo=numero).one()
     assert processo.nome_cliente == "Fulano de Tal Corrigido"
+
+
+def test_import_varios_eventos_do_mesmo_processo_novo_na_mesma_planilha(db, tmp_path):
+    """Regressão de performance: o import parou de dar `db.flush()` logo
+    depois de criar um `Processo` novo (fazia isso pra cada processo novo —
+    ~1/3 do tempo total de um import de ~45 mil linhas, medido localmente).
+    Isso só funciona se múltiplos eventos de um MESMO processo, ainda sem
+    `.id` (não foi pro banco ainda), conseguirem se ligar a ele corretamente
+    via o relacionamento do SQLAlchemy — em vez de `processo_id=processo.id`
+    (que seria `None` nesse momento). Esse teste cobre exatamente esse caso:
+    dois eventos do mesmo processo novo, na mesma planilha, no mesmo import."""
+    numero = "1414141-41.2026.8.11.0013"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["CLIENTE", "Nº PROCESSO", "DATA", "EVENTO"])
+    ws.append(["ABSOLUTA - Fulano de Tal", numero, date(2026, 9, 1), "CUSTAS"])
+    ws.append(["ABSOLUTA - Fulano de Tal", numero, date(2026, 9, 10), "DOCUMENTOS"])
+    path = tmp_path / "processos.xlsx"
+    wb.save(path)
+
+    resumo = importar_planilha(db, str(path))
+    assert resumo.linhas_novas == 2
+
+    processos = db.query(Processo).filter_by(numero_processo=numero).all()
+    assert len(processos) == 1  # não duplicou o processo
+    eventos = db.query(EventoProcesso).filter_by(processo_id=processos[0].id).all()
+    assert {e.tipo_evento_nome for e in eventos} == {"CUSTAS", "DOCUMENTOS"}

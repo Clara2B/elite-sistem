@@ -677,3 +677,47 @@ próprio servidor quebrando sem tratamento nenhum.
 - **Reversível:** sim — campo mais permissivo (`Text` em vez de `VARCHAR(N)`) e um handler de erro
   aditivo, que só muda o que acontece quando já ia dar erro sem tratamento nenhum.
 
+### 4.6 Import de planilha lento — dois achados reais (2026-09-23)
+
+A Clara reportou "o sistema precisa ler os arquivos em planilha mais rápido". Em vez de adivinhar,
+gerei planilhas sintéticas no tamanho da planilha real (~45 mil linhas / ~5.600 processos, seção
+3.5) e no formato real (21 abas, a maioria sem os cabeçalhos exigidos) e medi o import ponta a
+ponta localmente, antes e depois de cada correção.
+
+- **Achado 1 — `db.flush()` por processo novo:** `importar_planilha` (Gestão de Processos) dava
+  `db.flush()` logo depois de criar cada `Processo` novo, só pra ter `.id` disponível na mesma linha
+  (pra montar a chave de evento e pro `processo_id` do evento novo). Com ~5.600 processos novos
+  num import, isso é ~5.600 idas e vindas ao banco em vez de umas poucas dúzias (as comissões
+  periódicas já existentes, a cada 2.000 eventos). Corrigido em duas partes: (1) a chave de
+  deduplicação de evento passou a usar `numero_processo` (já disponível na própria linha) em vez de
+  `processo.id`; (2) o evento novo é criado com `EventoProcesso(processo=processo, ...)` — o
+  relacionamento do SQLAlchemy, não `processo_id=processo.id` — deixando o próprio SQLAlchemy
+  resolver a chave estrangeira sozinho no próximo flush (o periódico, não um por linha), mesmo que o
+  processo ainda não tenha `.id` no momento em que o evento é criado. Medido localmente (SQLite, sem
+  nenhuma rede — Supabase em produção deve ganhar proporcionalmente mais, já que cada flush ali é
+  uma ida e volta de rede de verdade, não só disco local): import de ~45 mil linhas caiu de 17,7s
+  para 14,3s.
+- **Achado 2 — abas irrelevantes lidas por inteiro antes de descartadas:** `load_data_sheets`
+  (`app/excel_reader.py`, usado pelos quatro importadores) lia **cada aba inteira** do arquivo pra
+  só depois checar se ela tinha os cabeçalhos exigidos — numa planilha real com ~21 abas (mensais,
+  por advogada, "fatais", dashboard/resumo — ver DATABASE.md seção 6), a maioria não bate com os
+  cabeçalhos e era descartada, mas só depois de já ter sido inteiramente lida e convertida em linhas
+  Python. Corrigido: agora só as 5 primeiras linhas de cada aba (o quanto a checagem de cabeçalho já
+  olhava) são lidas antes de decidir se vale a pena continuar lendo o resto daquela aba. Medido
+  localmente com um arquivo de 21 abas (6 relevantes, 15 não): `load_data_sheets` sozinho caiu de
+  4,96s para 3,29s; o import completo (parse + gravação no banco) caiu de 31,3s para 15,9s — quase
+  metade do tempo.
+- **Log de diagnóstico adicionado:** `load_data_sheets` e os quatro `importar_planilha` agora logam
+  sua própria duração (nos logs do Render, mesmo canal do middleware de tempo de requisição já
+  existente) — separando quanto tempo foi parse do arquivo vs. resto do import (consultar dados já
+  existentes, gravar no banco). Sem isso, "a planilha demora" só dava pra investigar adivinhando;
+  agora, se continuar lento com a planilha real dela, o log já mostra exatamente qual fase.
+- **Testado:** 1 teste novo em `tests/test_processos_service.py` (dois eventos de um processo novo
+  na mesma planilha continuam corretamente ligados a um único processo, sem duplicar nem perder a
+  ligação — o cenário exato que a mudança do `db.flush()` afeta) — 81 testes no total, nenhum
+  existente quebrou. Verificação de ponta a ponta local via navegador (Playwright) com um arquivo de
+  21 abas/36 mil linhas: import completo em ~18s (incluindo renderizar a tela de volta), log
+  confirmando a duração de cada fase separadamente.
+- **Reversível:** sim — mesmo comportamento de import, só menos idas e vindas ao banco e menos
+  leitura desperdiçada de aba que não interessa.
+

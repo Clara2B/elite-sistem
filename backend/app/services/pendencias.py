@@ -7,7 +7,9 @@ do cobrador (tipo contendo "AUDIÊNCIA" -> EXIMIA, resto -> ELITE).
 """
 from __future__ import annotations
 
+import logging
 import re
+import time
 from dataclasses import dataclass, field
 
 import pandas as pd
@@ -18,6 +20,8 @@ from app.excel_reader import load_data_sheets
 from app.models import Cobranca, EmpresaCliente
 from app.services.empresas import get_or_create_empresa
 from app.utils import cell_text, format_brl, normalize, parse_date_cell
+
+_logger = logging.getLogger("elite_sistem.import")
 
 REQUIRED_HEADERS = ["EMPRESA", "TIPO DE COBRANÇA", "VALOR"]
 CHAVE_DUPLICIDADE = ["DATA", "EMPRESA", "TIPO DE COBRANÇA", "VALOR"]
@@ -109,6 +113,7 @@ class ImportResumo:
 
 
 def importar_planilha(db: Session, path: str) -> ImportResumo:
+    inicio = time.perf_counter()
     df = load_data_sheets(path, REQUIRED_HEADERS)
     if df.empty:
         raise ValueError(
@@ -166,6 +171,7 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
         resumo.linhas_novas += 1
 
     db.commit()
+    _logger.info("import pendencias: %.1fs total — %s", time.perf_counter() - inicio, resumo)
     return resumo
 
 

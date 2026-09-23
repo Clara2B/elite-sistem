@@ -10,7 +10,9 @@ preenchida só quando lançada estruturadamente (manual, dali em diante).
 """
 from __future__ import annotations
 
+import logging
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
@@ -21,6 +23,8 @@ from app.excel_reader import load_data_sheets
 from app.models import EmpresaCliente, EventoProcesso, Processo, TipoEvento
 from app.services.empresas import get_or_create_empresa
 from app.utils import cell_text, normalize, parse_date_cell
+
+_logger = logging.getLogger("elite_sistem.import")
 
 REQUIRED_HEADERS = ["CLIENTE", "Nº PROCESSO"]
 CHAVE_DUPLICIDADE = ["Nº PROCESSO", "DATA", "EVENTO", "CLIENTE"]
@@ -141,6 +145,7 @@ class ImportResumo:
 
 
 def importar_planilha(db: Session, path: str, usuario_id: int | None = None) -> ImportResumo:
+    inicio = time.perf_counter()
     df = load_data_sheets(path, REQUIRED_HEADERS, chave_duplicidade=CHAVE_DUPLICIDADE)
     if df.empty:
         raise ValueError(
@@ -157,13 +162,23 @@ def importar_planilha(db: Session, path: str, usuario_id: int | None = None) -> 
     col_assistente = _col_optional(df, "ASSISTENTE")
 
     processos_existentes = {p.numero_processo: p for p in db.scalars(select(Processo))}
-    # Mapeia pro objeto (não só um set de chaves): uma linha "já existente"
-    # ainda pode trazer dado atualizado (observação corrigida, PRAZO FATAL
-    # marcado depois, aba renomeada) — sem guardar o objeto não dá pra
-    # atualizar, só pra contar. Ver bloco abaixo.
+    # Chave por `numero_processo` (não `processo.id`): um processo novo só
+    # tem `.id` depois de um flush no banco — chavear por ele forçaria um
+    # `db.flush()` logo após criar cada `Processo` só pra conseguir montar a
+    # chave do evento na mesma linha, e isso sozinho já foi ~1/3 do tempo
+    # total de um import de ~45 mil linhas (medido localmente: um flush por
+    # processo novo vira milhares de idas e vindas ao banco em vez de
+    # poucas, nas comissões periódicas abaixo). `numero_processo` já está
+    # disponível na própria linha, sem custo nenhum. Mapeia pro objeto (não
+    # só um set de chaves): uma linha "já existente" ainda pode trazer dado
+    # atualizado (observação corrigida, PRAZO FATAL marcado depois, aba
+    # renomeada) — sem guardar o objeto não dá pra atualizar, só pra contar.
+    # Ver bloco abaixo.
     eventos_existentes = {
-        (e.processo_id, e.data, normalize(e.tipo_evento_nome)): e
-        for e in db.scalars(select(EventoProcesso))
+        (numero_processo, evento.data, normalize(evento.tipo_evento_nome)): evento
+        for evento, numero_processo in db.execute(
+            select(EventoProcesso, Processo.numero_processo).join(Processo, EventoProcesso.processo_id == Processo.id)
+        )
     }
     # Cache de empresa-cliente pro import inteiro (ver docstring de
     # get_or_create_empresa) — sem isso, cada uma das dezenas de milhares de
@@ -206,7 +221,6 @@ def importar_planilha(db: Session, path: str, usuario_id: int | None = None) -> 
                 assessoria=assessoria,
             )
             db.add(processo)
-            db.flush()
             processos_existentes[numero] = processo
         else:
             # Atualiza nome/advogada/assistente/assessoria com o lançamento
@@ -235,7 +249,7 @@ def importar_planilha(db: Session, path: str, usuario_id: int | None = None) -> 
         aba_nome = row.get("_ABA")
         mes_referencia = _mes_referencia_da_aba(str(aba_nome)) if aba_nome else None
 
-        chave = (processo.id, data_val, normalize(tipo_evento))
+        chave = (numero, data_val, normalize(tipo_evento))
         evento_existente = eventos_existentes.get(chave)
         if evento_existente is not None:
             resumo.linhas_ja_existentes += 1
@@ -261,7 +275,13 @@ def importar_planilha(db: Session, path: str, usuario_id: int | None = None) -> 
             continue
 
         novo_evento = EventoProcesso(
-            processo_id=processo.id,
+            # `processo=` (relacionamento), não `processo_id=processo.id`:
+            # pra um processo recém-criado nesta mesma linha, `.id` só
+            # existe depois de um flush no banco — usar o relacionamento
+            # deixa o SQLAlchemy resolver a FK sozinho no próximo flush
+            # (periódico, não um por linha), sem precisar que o processo já
+            # tenha sido gravado antes do evento.
+            processo=processo,
             data=data_val,
             tipo_evento_nome=tipo_evento.upper(),
             mes_referencia=mes_referencia,
@@ -286,6 +306,7 @@ def importar_planilha(db: Session, path: str, usuario_id: int | None = None) -> 
             db.commit()
 
     db.commit()
+    _logger.info("import processos: %.1fs total — %s", time.perf_counter() - inicio, resumo)
     return resumo
 
 

@@ -7,10 +7,16 @@ mudança de comportamento.
 """
 from __future__ import annotations
 
+import itertools
+import logging
+import time
+
 import openpyxl
 import pandas as pd
 
 from app.utils import normalize
+
+_logger = logging.getLogger("elite_sistem.import")
 
 HEADER_ALIASES = {
     normalize("ENTRADA DO LAUDO"): normalize("ENTRADA DE LAUDO"),
@@ -77,18 +83,29 @@ def load_data_sheets(
     somente leitura lê linha a linha, sem esse custo; só leitura de valor
     de célula (`iter_rows(values_only=True)`) é usada aqui, então não perde
     nada."""
+    inicio = time.perf_counter()
+    abas_aproveitadas = 0
     wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
     try:
         frames = []
         for sheet_name in wb.sheetnames:
             ws = wb[sheet_name]
-            rows = list(ws.iter_rows(values_only=True))
-            if not rows:
+            iterador = ws.iter_rows(values_only=True)
+            # Só as 5 primeiras linhas (o quanto `_find_header_row` olha)
+            # pra decidir se essa aba interessa, antes de puxar o resto do
+            # arquivo pra memória. Uma planilha real tem ~21 abas (mensais,
+            # por advogada, "fatais", dashboard) e a maioria não bate com os
+            # cabeçalhos exigidos — sem esse corte, cada uma delas era lida
+            # (e transformada em linha Python) por inteiro só pra ser
+            # descartada logo depois, o que pesa bastante numa aba grande
+            # que acaba não servindo pra nada.
+            primeiras_linhas = list(itertools.islice(iterador, 5))
+            if not primeiras_linhas:
                 continue
-            rows = _normalizar_larguras(rows)
-            header_idx = _find_header_row(rows, required_headers)
+            header_idx = _find_header_row(primeiras_linhas, required_headers)
             if header_idx is None:
                 continue
+            rows = _normalizar_larguras(primeiras_linhas + list(iterador))
             header = [
                 _canonical_header(c) if c is not None else f"col_{i}"
                 for i, c in enumerate(rows[header_idx])
@@ -103,9 +120,14 @@ def load_data_sheets(
             df["_ABA"] = sheet_name
             df = df.dropna(how="all", subset=[c for c in cols if c != "_ABA"])
             frames.append(df)
+            abas_aproveitadas += 1
     finally:
         wb.close()  # modo read_only mantém o arquivo aberto até fechar explicitamente
     if not frames:
+        _logger.info(
+            "load_data_sheets: %.1fs, nenhuma aba com os cabeçalhos exigidos (de %d abas no arquivo)",
+            time.perf_counter() - inicio, len(wb.sheetnames),
+        )
         return pd.DataFrame()
     resultado = pd.concat(frames, ignore_index=True)
     if chave_duplicidade:
@@ -116,4 +138,13 @@ def load_data_sheets(
     if not colunas_chave:
         colunas_chave = [c for c in resultado.columns if c != "_ABA"]
     resultado = resultado.drop_duplicates(subset=colunas_chave, keep="first")
-    return resultado.reset_index(drop=True)
+    resultado = resultado.reset_index(drop=True)
+    # Diagnóstico pra próxima vez que "ler a planilha" for reportado como
+    # lento (ver DECISIONS.md) — sem isso só dava pra adivinhar se o tempo
+    # estava indo no parse do arquivo ou no resto do import (gravar no
+    # banco).
+    _logger.info(
+        "load_data_sheets: %.1fs, %d linha(s) em %d/%d aba(s) aproveitada(s)",
+        time.perf_counter() - inicio, len(resultado), abas_aproveitadas, len(wb.sheetnames),
+    )
+    return resultado
