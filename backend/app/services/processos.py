@@ -336,7 +336,11 @@ def gerar_relatorio(
         if ultimo_evento < limite_parado:
             processos_parados_contados.setdefault(pessoa, set()).add(processo.id)
 
-    total = LinhaRelatorioPessoa(pessoa="EQUIPE (GERAL)")
+    # "EQUIPE (GERAL)" só faz sentido no relatório geral (todo mundo); no
+    # individual (filtro_pessoa preenchido) a linha de total é só a mesma
+    # pessoa duplicada — rótulo "TOTAL" evita a confusão de ler "EQUIPE
+    # (GERAL)" com apenas uma pessoa no relatório.
+    total = LinhaRelatorioPessoa(pessoa="TOTAL" if filtro_pessoa else "EQUIPE (GERAL)")
     for pessoa, linha in por_pessoa.items():
         linha.processos = len(processos_contados.get(pessoa, ()))
         linha.processos_parados = len(processos_parados_contados.get(pessoa, ()))

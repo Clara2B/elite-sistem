@@ -117,6 +117,7 @@ def test_relatorio_conta_processos_eventos_e_prazos(db):
     assert linha.prazos_perdidos == 1
     assert relatorio.total.processos == 1
     assert relatorio.total.eventos == 2
+    assert relatorio.total.pessoa == "EQUIPE (GERAL)"
 
 
 def test_relatorio_filtra_por_pessoa(db):
@@ -133,6 +134,7 @@ def test_relatorio_filtra_por_pessoa(db):
     relatorio = gerar_relatorio(db, date(2026, 9, 1), date(2026, 9, 30), filtro_pessoa="danilo")
     assert len(relatorio.linhas) == 1
     assert relatorio.linhas[0].pessoa == "DANILO"
+    assert relatorio.total.pessoa == "TOTAL"  # não "EQUIPE (GERAL)" — só uma pessoa no relatório
 
 
 def test_import_prazo_fatal_so_quando_coluna_e_sim(db, tmp_path):
