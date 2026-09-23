@@ -439,6 +439,28 @@ progresso, uma espera de vários minutos parece uma tela travada).
 Audiências especificamente para confirmar se "não estava gerando" era só isso ou se tem outro
 problema por trás.
 
+## 2026-09-23 — Tela de Empresas-clientes + redesign visual (sidebar, ícones, cards)
+
+**Contexto:** a mesma mensagem que reportou a lentidão trouxe dois outros pedidos: faltava uma tela
+pra gerenciar empresas-clientes (nome, CNPJ, ativar/desativar) e o visual estava "esteticamente
+muito simples, nada moderno".
+**Empresas-clientes:** só existia leitura (`GET /empresas`, usada pelos seletores das telas de
+relatório). Adicionado `POST /empresas`, `PATCH /empresas/{id}` e `PATCH /empresas/{id}/ativo`
+(`app/api/empresas.py`, `app/services/empresas.py`) — restrito a Admin Superior/T.I., mesma regra
+já usada em `/usuarios`/`/setores` (dado compartilhado por todo o sistema, não específico de um
+módulo). Tela em `/app/empresas` com edição inline por linha da tabela.
+**Redesign visual:** troquei a navegação de barra no topo para uma sidebar fixa à esquerda (padrão
+mais comum em ferramentas internas modernas — Linear, Stripe dashboard, etc.), com ícones SVG
+inline por módulo (sem depender de fonte de ícone externa, que precisaria de CDN). Refinei sombras,
+raio de borda, hierarquia tipográfica e paleta (mantendo o azul-marinho como cor primária, por
+decisão já fechada). Como a mudança ficou concentrada em `style.css`/`base.html`, as páginas dos
+módulos herdaram o visual novo automaticamente, sem precisar reescrever cada uma.
+**Validação:** `tests/test_web.py` ganhou 3 testes novos (criar/editar/desativar empresa, nome
+duplicado, página restrita a admin — 66 testes no total) + navegação visual conferida com
+Playwright/Chromium local antes de reportar como pronto.
+**Reversível:** sim, mudança de camada de apresentação e um recurso administrativo aditivo — nada
+do que já existia foi alterado em comportamento.
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante

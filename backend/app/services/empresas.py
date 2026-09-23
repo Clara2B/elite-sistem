@@ -44,3 +44,43 @@ def listar_empresas(db: Session, apenas_ativas: bool = True) -> list[EmpresaClie
     if apenas_ativas:
         query = query.where(EmpresaCliente.ativo.is_(True))
     return list(db.scalars(query))
+
+
+def criar_empresa(db: Session, nome: str, cnpj: str | None = None) -> EmpresaCliente:
+    """Cadastro manual (Fase 6, tela de Administração) — os imports usam
+    `get_or_create_empresa`; aqui é o caminho explícito, com checagem de
+    nome duplicado (a coluna `nome` é `unique`, mas checar antes dá um erro
+    claro em vez de deixar o banco recusar sem contexto)."""
+    nome = nome.strip()
+    alvo = normalize(nome)
+    for existente in db.scalars(select(EmpresaCliente)):
+        if normalize(existente.nome) == alvo:
+            raise ValueError(f"Já existe uma empresa-cliente chamada '{existente.nome}'.")
+    empresa = EmpresaCliente(nome=nome, cnpj=(cnpj or "").strip() or None)
+    db.add(empresa)
+    db.commit()
+    return empresa
+
+
+def atualizar_empresa(db: Session, empresa_id: int, nome: str, cnpj: str | None) -> EmpresaCliente:
+    empresa = db.get(EmpresaCliente, empresa_id)
+    if empresa is None:
+        raise ValueError(f"Empresa-cliente {empresa_id} não encontrada.")
+    nome = nome.strip()
+    alvo = normalize(nome)
+    for existente in db.scalars(select(EmpresaCliente)):
+        if existente.id != empresa_id and normalize(existente.nome) == alvo:
+            raise ValueError(f"Já existe uma empresa-cliente chamada '{existente.nome}'.")
+    empresa.nome = nome
+    empresa.cnpj = (cnpj or "").strip() or None
+    db.commit()
+    return empresa
+
+
+def alterar_ativo_empresa(db: Session, empresa_id: int, ativo: bool) -> EmpresaCliente:
+    empresa = db.get(EmpresaCliente, empresa_id)
+    if empresa is None:
+        raise ValueError(f"Empresa-cliente {empresa_id} não encontrada.")
+    empresa.ativo = ativo
+    db.commit()
+    return empresa

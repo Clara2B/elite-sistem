@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block titulo %}Empresas-clientes — Elite Sistem{% endblock %}
+{% block conteudo %}
+  <h1>Empresas-clientes</h1>
+  <p class="subtitulo">Cadastro, CNPJ e ativação das empresas atendidas por ELITE e EXÍMIA.</p>
+
+  {% if mensagem %}<div class="mensagem sucesso">{{ mensagem }}</div>{% endif %}
+  {% if erro %}<div class="mensagem erro">{{ erro }}</div>{% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2>Cadastradas ({{ empresas|length }})</h2></div>
+    {% if empresas %}
+      {% for e in empresas %}
+        <form id="empresa-{{ e.id }}" method="post" action="/app/empresas/{{ e.id }}"></form>
+      {% endfor %}
+      <div class="tabela-wrap">
+        <table>
+          <thead><tr><th>Nome</th><th>CNPJ</th><th>Status</th><th style="width:1%;"></th></tr></thead>
+          <tbody>
+            {% for e in empresas %}
+              <tr>
+                <td>
+                  <input type="text" name="nome" value="{{ e.nome }}" required form="empresa-{{ e.id }}"
+                         style="min-width:200px; padding:6px 9px; border:1px solid var(--border); border-radius:7px; font-size:0.86rem;">
+                </td>
+                <td>
+                  <input type="text" name="cnpj" value="{{ e.cnpj or '' }}" placeholder="CNPJ" form="empresa-{{ e.id }}"
+                         style="min-width:150px; padding:6px 9px; border:1px solid var(--border); border-radius:7px; font-size:0.86rem;">
+                </td>
+                <td>
+                  {% if e.ativo %}<span class="badge ativo">Ativa</span>{% else %}<span class="badge inativo">Inativa</span>{% endif %}
+                </td>
+                <td>
+                  <div class="acoes-linha">
+                    <button type="submit" form="empresa-{{ e.id }}" class="secundario" style="padding:7px 12px; font-size:0.8rem;">Salvar</button>
+                    <form method="post" action="/app/empresas/{{ e.id }}/ativo?ativo={{ 'false' if e.ativo else 'true' }}">
+                      <button type="submit" class="{{ 'perigo' if e.ativo else 'secundario' }}" style="padding:7px 12px; font-size:0.8rem;">
+                        {{ "Desativar" if e.ativo else "Ativar" }}
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="vazio">Nenhuma empresa-cliente cadastrada ainda.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Nova empresa-cliente</h2></div>
+    <form class="formulario" method="post" action="/app/empresas">
+      <div class="campo">
+        <label for="nome">Nome</label>
+        <input type="text" id="nome" name="nome" required placeholder="Ex.: ABSOLUTA">
+      </div>
+      <div class="campo">
+        <label for="cnpj">CNPJ (opcional)</label>
+        <input type="text" id="cnpj" name="cnpj" placeholder="00.000.000/0000-00">
+      </div>
+      <button type="submit">Cadastrar</button>
+    </form>
+  </div>
+{% endblock %}

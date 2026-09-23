@@ -12,12 +12,13 @@ def itens_menu(db: Session, usuario: Usuario) -> list[dict]:
     acessiveis = operadoras_acessiveis(db, usuario)
     itens = []
     if "ELITE" in acessiveis:
-        itens.append({"url": "/app/laudos", "rotulo": "Laudos", "descricao": "Importar planilha e gerar relatório por empresa-cliente."})
-        itens.append({"url": "/app/processos", "rotulo": "Gestão de Processos", "descricao": "Andamentos, prazos fatais e relatórios da equipe."})
+        itens.append({"url": "/app/laudos", "rotulo": "Laudos", "icone": "laudos", "descricao": "Importar planilha e gerar relatório por empresa-cliente."})
+        itens.append({"url": "/app/processos", "rotulo": "Gestão de Processos", "icone": "processos", "descricao": "Andamentos, prazos fatais e relatórios da equipe."})
     if "EXIMIA" in acessiveis:
-        itens.append({"url": "/app/audiencias", "rotulo": "Audiências", "descricao": "Importar planilha e gerar relatório quinzenal."})
+        itens.append({"url": "/app/audiencias", "rotulo": "Audiências", "icone": "audiencias", "descricao": "Importar planilha e gerar relatório quinzenal."})
     if acessiveis:
-        itens.append({"url": "/app/pendencias", "rotulo": "Pendências", "descricao": "Cobranças em aberto por empresa-cliente."})
+        itens.append({"url": "/app/pendencias", "rotulo": "Pendências", "icone": "pendencias", "descricao": "Cobranças em aberto por empresa-cliente."})
     if usuario.papel_global in PAPEIS_GLOBAIS:
-        itens.append({"url": "/app/usuarios", "rotulo": "Usuários", "descricao": "Cadastrar e gerenciar acessos da equipe."})
+        itens.append({"url": "/app/usuarios", "rotulo": "Usuários", "icone": "usuarios", "descricao": "Cadastrar e gerenciar acessos da equipe."})
+        itens.append({"url": "/app/empresas", "rotulo": "Empresas-clientes", "icone": "empresas", "descricao": "Cadastro, CNPJ e ativação das empresas atendidas."})
     return itens

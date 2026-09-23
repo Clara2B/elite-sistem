@@ -517,4 +517,23 @@ já usada nos PDFs (azul-marinho `#152A40`). Ver `DECISIONS.md`.
   `evento.processo`) sem eager loading — com ~5.636 processos isso é até ~11 mil consultas
   separadas numa única requisição. Corrigido com `selectinload`; medido localmente: 13 consultas no
   total pro relatório do ano inteiro, não cresce com o número de processos. Ver `DECISIONS.md`.
-- **Pendente:** a Clara revalidar a velocidade em produção depois desse deploy.
+- **Mesmo N+1 achado nos outros três importadores:** a lentidão continuava depois da correção
+  acima — `laudos.py`, `audiencias.py` e `pendencias.py` tinham o mesmo bug de `processos.py`
+  (`get_or_create_empresa` sem cache dentro do loop de import), só não tinha sido corrigido neles
+  ainda. Corrigido nos quatro. Provável explicação também do "Audiências não está gerando" — import
+  muito lento, não necessariamente quebrado. Ver `DECISIONS.md`.
+- **Tela de Empresas-clientes (a pedido da Clara):** cadastro, edição de nome/CNPJ e
+  ativar/desativar — antes só existia `GET /empresas` (leitura); adicionado `POST /empresas`,
+  `PATCH /empresas/{id}` e `PATCH /empresas/{id}/ativo` (`app/api/empresas.py`, só Admin
+  Superior/T.I., mesma regra de `/usuarios`/`/setores`) e a tela `/app/empresas`.
+- **Redesign visual (a pedido da Clara — "esteticamente muito simples, nada moderno"):** layout
+  trocado de navbar no topo para sidebar fixa à esquerda, com ícones (SVG inline, sem depender de
+  fonte de ícone externa) por módulo; cards com sombra e cantos mais arredondados; paleta
+  refinada (mantendo o azul-marinho como cor primária); tabelas com cabeçalho em caixa alta;
+  responsivo (sidebar vira barra horizontal em telas estreitas). Só `app/static/style.css` e
+  `app/templates/base.html` mudaram estruturalmente — as demais páginas herdam o novo visual sem
+  precisar reescrever cada uma.
+- **Testado:** `tests/test_web.py` (10 testes, cobrindo login/permissões/PDF/empresas) + navegação
+  ponta a ponta com Playwright/Chromium local (dashboard, processos, empresas — criar, editar,
+  desativar — confirmado também via chamada HTTP direta com cookie de sessão).
+- **Pendente:** a Clara revalidar a velocidade e o visual novo em produção depois desse deploy.
