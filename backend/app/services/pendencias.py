@@ -127,6 +127,9 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
         (c.empresa_cliente_id, c.data, normalize(c.tipo_cobranca), c.valor)
         for c in db.scalars(select(Cobranca))
     }
+    # Cache de empresa-cliente pro import inteiro — ver nota equivalente em
+    # app/services/laudos.py e app/services/processos.py.
+    empresa_cache: dict = {}
 
     resumo = ImportResumo()
     for _, row in df.iterrows():
@@ -143,7 +146,7 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
             continue  # sem data não dá para gravar (coluna DATA obrigatória no schema)
         status_pago = (cell_text(row.get(col_pago)) or None) if col_pago else None
 
-        empresa = get_or_create_empresa(db, empresa_nome)
+        empresa = get_or_create_empresa(db, empresa_nome, cache=empresa_cache)
         chave = (empresa.id, data_val, normalize(tipo), valor)
         if chave in existentes:
             resumo.linhas_ja_existentes += 1

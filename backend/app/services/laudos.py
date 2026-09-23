@@ -91,6 +91,12 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
         (l.empresa_cliente_id, normalize(l.tipo_laudo_nome), l.data, normalize(l.nome_cliente))
         for l in db.scalars(select(Laudo))
     }
+    # Cache de empresa-cliente pro import inteiro — sem isso,
+    # get_or_create_empresa faz uma consulta ao banco varrendo todas as
+    # empresas a cada linha (N+1 real, mesmo problema já corrigido em
+    # app/services/processos.py; aqui é o mesmo bug, encontrado depois da
+    # Clara reportar lentidão generalizada no sistema — ver DECISIONS.md).
+    empresa_cache: dict = {}
 
     resumo = ImportResumo()
     for _, row in df.iterrows():
@@ -110,7 +116,7 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
 
         cliente = cell_text(row.get(col_cliente)) if col_cliente else ""
 
-        empresa = get_or_create_empresa(db, empresa_nome)
+        empresa = get_or_create_empresa(db, empresa_nome, cache=empresa_cache)
         chave = (empresa.id, normalize(tipo), data_val, normalize(cliente))
         if chave in existentes:
             resumo.linhas_ja_existentes += 1

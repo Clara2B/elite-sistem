@@ -71,6 +71,9 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
         (a.empresa_cliente_id, a.data_recebimento, normalize(a.nome_cliente), (a.cpf or "").strip())
         for a in db.scalars(select(Audiencia))
     }
+    # Cache de empresa-cliente pro import inteiro — ver nota equivalente em
+    # app/services/laudos.py e app/services/processos.py.
+    empresa_cache: dict = {}
 
     resumo = ImportResumo()
     for _, row in df.iterrows():
@@ -86,7 +89,7 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
             continue
         cpf = cell_text(row.get(col_cpf)) if col_cpf else ""
 
-        empresa = get_or_create_empresa(db, empresa_nome)
+        empresa = get_or_create_empresa(db, empresa_nome, cache=empresa_cache)
         chave = (empresa.id, data_val, normalize(cliente), cpf)
         if chave in existentes:
             resumo.linhas_ja_existentes += 1
