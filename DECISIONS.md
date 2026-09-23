@@ -421,6 +421,24 @@ localmente com a planilha real (5.636 processos, ~28 mil eventos no ano): **13 c
 pra gerar o relatório geral do ano inteiro, nenhuma delas cresce com o número de processos.
 **Reversível:** sim, só otimização de consulta — mesmo resultado, muito mais rápido.
 
+## 2026-09-23 — Mesmo N+1 encontrado (e corrigido) em Laudos, Audiências e Pendências
+
+**Contexto:** logo depois da correção acima, a Clara reportou lentidão em "nível de preocupação
+extrema" no sistema inteiro, não só em Gestão de Processos. Fui direto conferir se o mesmo padrão
+de bug (N+1 de `get_or_create_empresa`) existia nos outros três importadores — existia, sem cache,
+nos três: `laudos.py`, `audiencias.py`, `pendencias.py` chamavam
+`get_or_create_empresa(db, empresa_nome)` dentro do loop de cada linha da planilha, sem o parâmetro
+`cache` (só `processos.py` tinha sido corrigido na Fase 5, porque foi lá que o problema apareceu
+primeiro). Isso explica provavelmente os dois sintomas reportados: lentidão geral (qualquer import
+de planilha grande vira centenas/milhares de consultas separadas ao Supabase) e "Audiências não
+está gerando" (o import provavelmente estava só muito lento, não quebrado — sem feedback visual de
+progresso, uma espera de vários minutos parece uma tela travada).
+**Correção:** mesmo cache compartilhado já usado em `processos.py`, agora nos quatro importadores.
+**Reversível:** sim, só otimização — mesmo resultado, muito mais rápido.
+**Pendente:** confirmar com a Clara que a lentidão melhorou depois desse deploy, e voltar em
+Audiências especificamente para confirmar se "não estava gerando" era só isso ou se tem outro
+problema por trás.
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante
