@@ -176,9 +176,13 @@ class Processo(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     numero_processo: Mapped[str] = mapped_column(String(40), unique=True, index=True)
     empresa_cliente_id: Mapped[int] = mapped_column(ForeignKey("empresas_clientes.id"))
-    nome_cliente: Mapped[str] = mapped_column(String(200), default="")
-    advogada: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    assistente: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # Text (sem limite), não VARCHAR(N): a planilha real já mostrou texto
+    # bem mais longo do que um nome simples nesses campos (ex.: ADVOGADA
+    # com "HUNTING - Fulana de Tal (CONTR. Beltrano)", 84+ caracteres) —
+    # causou StringDataRightTruncation em produção. Ver DECISIONS.md.
+    nome_cliente: Mapped[str] = mapped_column(Text, default="")
+    advogada: Mapped[str | None] = mapped_column(Text, nullable=True)
+    assistente: Mapped[str | None] = mapped_column(Text, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     empresa_cliente: Mapped[EmpresaCliente] = relationship()
@@ -199,7 +203,10 @@ class EventoProcesso(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     processo_id: Mapped[int] = mapped_column(ForeignKey("processos.id"), index=True)
     data: Mapped[date] = mapped_column(Date, index=True)
-    tipo_evento_nome: Mapped[str] = mapped_column(String(80))
+    # Text, não VARCHAR(80): mesmo motivo do Processo.advogada/assistente
+    # acima — texto livre vindo da mesma planilha real, que já se mostrou
+    # mais longa do que um nome de evento do catálogo.
+    tipo_evento_nome: Mapped[str] = mapped_column(Text)
     # Mês/ano da aba de origem na planilha (ex.: "SETEMBRO/2026") — não é
     # extraído de `data`, é o que a própria planilha chama a aba. Só
     # informativo (mostrado em relatórios/painel), pode ficar None quando a

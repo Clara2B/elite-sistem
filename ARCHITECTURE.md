@@ -450,5 +450,12 @@ texto livre no `Processo` (sem login — só os líderes acessam o sistema; ver 
   gerados por outra ferramenta que não o openpyxl — a planilha real da Clara parece ser um desses
   casos). Corrigido preenchendo linhas curtas com `None` até a largura da mais larga da aba antes de
   montar o DataFrame (`_normalizar_larguras`, `app/excel_reader.py`). Ver `DECISIONS.md`.
+- **500 `DataError` — resolvido:** log do Render confirmou `StringDataRightTruncation` — a coluna
+  `advogada` (`VARCHAR(80)`) recebeu um valor de 84 caracteres da planilha real
+  (`"HUNTING - Fulana de Tal (CONTR. Beltrano)"`, não um nome simples como previsto). Corrigido
+  trocando `nome_cliente`/`advogada`/`assistente` (`Processo`) e `tipo_evento_nome`
+  (`EventoProcesso`) de `VARCHAR(N)` para `Text` (sem limite) — todos texto livre da mesma planilha,
+  que se mostrou consistentemente mais "rica" em conteúdo do que o desenho original previu. Ver
+  `DECISIONS.md` e `DATABASE.md` seção 6.1.
 - **Pendente:** revalidar o import via API em produção com a planilha real depois dessa última
   correção.

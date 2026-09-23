@@ -313,6 +313,27 @@ sempre escreve larguras uniformes — por isso testei a função isolada com tup
 diferentes construídas à mão).
 **Reversível:** sim, correção pura de parsing, sem mudança de dado.
 
+## 2026-09-23 — `advogada`/`assistente`/`nome_cliente`/`tipo_evento_nome` viram Text (sem limite)
+
+**Contexto:** depois da correção anterior, o import real deu um erro novo — 500 com
+`sqlalchemy.exc.DataError`. A Clara colou o log completo do Render, que mostrou a causa exata:
+`psycopg.errors.StringDataRightTruncation: value too long for type character varying(80)` ao
+inserir em `processos`, coluna `advogada`, com o valor `'HUNTING - MARIA DULCE CARDOSO DOS SANTOS
+(CONTR. LUIZ FERNANDO PAULINO DOS SANTOS)'` (84 caracteres) — bem mais longo do que os nomes simples
+("DRA KELLY", "DANILO") que eu previ ao desenhar o campo como `VARCHAR(80)`.
+**Correção:** `Processo.nome_cliente`, `Processo.advogada`, `Processo.assistente` e
+`EventoProcesso.tipo_evento_nome` trocados de `String(N)` para `Text` (sem limite) — todos texto
+livre vindo da mesma planilha real, que já se mostrou consistentemente mais "rica" em conteúdo do
+que o desenho original previu (mesmo padrão do problema do `mes_referencia`/aba desalinhada
+encontrado antes). Migração idempotente `_garantir_texto_ilimitado` (`app/db.py`) roda
+`ALTER TABLE ... ALTER COLUMN ... TYPE TEXT` no próximo start do servidor, só no Postgres (SQLite
+dos testes não aplica limite de VARCHAR de verdade, sem impacto ali).
+**Por que não também limitei o texto em vez de alargar:** truncar silenciosamente um nome de
+cliente ou de advogada geraria dado errado (um nome cortado no meio) sem avisar ninguém — pior do
+que simplesmente guardar o texto inteiro. `Text` no Postgres não tem custo de performance relevante
+nesse volume comparado a `VARCHAR(N)`.
+**Reversível:** sim, campo mais permissivo, não descarta nem altera dado nenhum já gravado.
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante

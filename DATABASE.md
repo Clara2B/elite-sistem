@@ -177,9 +177,9 @@ processos
 ├── id
 ├── numero_processo     -- formato CNJ, único
 ├── empresa_cliente_id  -- FK empresas_clientes (mesma lista já usada em laudos/audiências/cobranças)
-├── nome_cliente         -- pessoa física atendida
-├── advogada             -- texto livre por enquanto (ver nota abaixo)
-├── assistente            -- texto livre por enquanto (ver nota abaixo)
+├── nome_cliente         -- pessoa física atendida (Text, sem limite — ver nota abaixo)
+├── advogada             -- texto livre por enquanto (Text, ver nota abaixo)
+├── assistente            -- texto livre por enquanto (Text, ver nota abaixo)
 └── criado_em
 
 tipos_evento                          -- catálogo (igual tipos_laudo), com "Gerenciar valores"
@@ -191,7 +191,7 @@ eventos_processo                      -- os "andamentos"
 ├── id
 ├── processo_id         -- FK processos
 ├── data                -- data do lançamento do evento
-├── tipo_evento_nome     -- texto livre (resolvido contra tipos_evento por nome, igual laudos)
+├── tipo_evento_nome     -- texto livre (Text, resolvido contra tipos_evento por nome, igual laudos)
 ├── mes_referencia       -- ex. "SETEMBRO/2026" — extraído do nome da aba de origem na planilha
 │                            (não de `data`); None quando a aba não é nomeada por mês. Só
 │                            informativo (aparece no painel de prazos), não filtra nem trava nada.
@@ -227,6 +227,11 @@ em lugar nenhum, é uma proposta para começar).
 **Nota sobre `advogada`/`assistente` como texto livre, não `usuarios`:** confirmado pela Clara —
 "os assistentes não acessam o sistema, só seus líderes, mas pode manter apenas como texto pois eles
 aparecerão no relatório". Decisão fechada (não mais uma proposta em aberto); ver `DECISIONS.md`.
+
+**Por que `nome_cliente`/`advogada`/`assistente`/`tipo_evento_nome` são `Text`, não
+`VARCHAR(N)`:** a planilha real mostrou valores bem mais longos do que um nome simples nesses
+campos (ex.: `advogada` = `"HUNTING - Fulana de Tal (CONTR. Beltrano)"`) — um limite errado derrubou
+o import em produção com `StringDataRightTruncation`. Ver `DECISIONS.md`.
 
 **Defeito de dados conhecido, com mitigação:** algumas abas da planilha real têm o cabeçalho
 desalinhado da linha de dados, o que pode jogar valores de outra coluna dentro de

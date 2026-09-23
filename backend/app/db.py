@@ -154,12 +154,29 @@ def _garantir_coluna(engine, tabela: str, coluna: str, tipo_sql: str) -> None:
             conn.execute(text(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {tipo_sql}"))
 
 
+def _garantir_texto_ilimitado(engine, tabela: str, *colunas: str) -> None:
+    """Alarga colunas que já existem em produção como VARCHAR(N) para TEXT
+    (sem limite) — dados reais da planilha de Gestão de Processos mostraram
+    valores mais longos do que o esperado nesses campos (ex.: `advogada`
+    com texto composto tipo "HUNTING - Fulana (CONTR. Beltrano)", 84+
+    caracteres), causando `StringDataRightTruncation` em produção. Só roda
+    no Postgres — SQLite (testes) não aplica limite de VARCHAR de verdade,
+    e as tabelas de teste são recriadas do zero a cada execução."""
+    if engine.dialect.name != "postgresql" or not inspect(engine).has_table(tabela):
+        return
+    with engine.begin() as conn:
+        for coluna in colunas:
+            conn.execute(text(f"ALTER TABLE {tabela} ALTER COLUMN {coluna} TYPE TEXT"))
+
+
 def init_db() -> None:
     """Cria as tabelas (se não existirem) e semeia valores padrão, igual ao
     comportamento do core/db.py do sistema atual na primeira execução."""
     engine = get_engine()
     Base.metadata.create_all(engine)
     _garantir_coluna(engine, "eventos_processo", "mes_referencia", "VARCHAR(20)")
+    _garantir_texto_ilimitado(engine, "processos", "nome_cliente", "advogada", "assistente")
+    _garantir_texto_ilimitado(engine, "eventos_processo", "tipo_evento_nome")
     session_factory = get_session_factory()
     with session_factory() as db:
         if db.scalar(select(TipoLaudo.id).limit(1)) is None:
