@@ -370,3 +370,6 @@ inferir automaticamente qual coluna era a pretendida.
    import/geração fica no log de auditoria, não cada registro) — `DATABASE.md` seção 9.
 4. Validar o import de Gestão de Processos (Fase 5) via API já em produção, com a planilha real da
    Clara — a validação até aqui foi só local.
+5. Modelo do relatório de Gestão de Processos (layout/colunas do PDF) — a Clara viu o exemplo
+   gerado (Março/2026, geral + individual) e gostou, mas quer revisitar detalhes depois. Não é um
+   pedido concreto ainda; retomar quando ela trouxer o que quer mudar.
