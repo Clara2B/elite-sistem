@@ -405,6 +405,22 @@ produção depois do deploy.
 **Reversível:** sim, mudanças aditivas (rotas novas sob `/app/...`, um endpoint `GET /empresas`
 novo); nada do que já existia foi alterado em comportamento.
 
+## 2026-09-23 — Corrige N+1 real em `gerar_relatorio`/`prazos_proximos` (tela de processos "muito lenta")
+
+**Contexto:** a Clara reportou que a tela de Gestão de Processos ficou muito lenta em produção.
+Investigando `app/services/processos.py::gerar_relatorio` (chamada por padrão ao abrir
+`/app/processos`, sem filtro): o código faz `for processo in db.scalars(select(Processo))` e acessa
+`processo.eventos` duas vezes por processo — sem eager loading, cada acesso a uma relação ainda não
+carregada dispara uma consulta nova ao banco (lazy load). Com ~5.636 processos, isso é até ~11 mil
+consultas separadas numa única requisição, cada uma pagando a latência de rede até o Supabase (via
+pooler) — exatamente o tipo de problema já visto antes (Fase 5, N+1 de empresa-cliente no import).
+`prazos_proximos` tinha o mesmo padrão, acessando `evento.processo` por evento.
+**Correção:** `selectinload(Processo.eventos)` e `selectinload(EventoProcesso.processo)` nas duas
+consultas — troca N+1 consultas por 2 (uma pros processos/eventos, uma batched pra relação). Medido
+localmente com a planilha real (5.636 processos, ~28 mil eventos no ano): **13 consultas no total**
+pra gerar o relatório geral do ano inteiro, nenhuma delas cresce com o número de processos.
+**Reversível:** sim, só otimização de consulta — mesmo resultado, muito mais rápido.
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante

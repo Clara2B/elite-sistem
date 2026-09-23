@@ -512,5 +512,9 @@ já usada nos PDFs (azul-marinho `#152A40`). Ver `DECISIONS.md`.
   todas as telas, gerar relatório, baixar PDF, criar usuário, ativar/desativar) contra a planilha
   real de Gestão de Processos — capturas de tela conferidas visualmente antes de reportar como
   pronto.
-- **Pendente:** revalidar em produção (Render) depois do deploy; a Clara ainda não viu a interface
-  rodando de verdade, só as capturas de tela que vou mandar.
+- **N+1 real na tela de Gestão de Processos — resolvido:** a Clara testou em produção e reportou
+  lentidão. `gerar_relatorio`/`prazos_proximos` acessavam relações (`processo.eventos`,
+  `evento.processo`) sem eager loading — com ~5.636 processos isso é até ~11 mil consultas
+  separadas numa única requisição. Corrigido com `selectinload`; medido localmente: 13 consultas no
+  total pro relatório do ano inteiro, não cresce com o número de processos. Ver `DECISIONS.md`.
+- **Pendente:** a Clara revalidar a velocidade em produção depois desse deploy.

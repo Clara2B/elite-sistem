@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.excel_reader import load_data_sheets
 from app.models import EmpresaCliente, EventoProcesso, Processo, TipoEvento
@@ -310,7 +310,14 @@ def gerar_relatorio(
     processos_contados: dict[str, set[int]] = {}
     processos_parados_contados: dict[str, set[int]] = {}
 
-    for processo in db.scalars(select(Processo)):
+    # selectinload: sem isso, `processo.eventos` (usado duas vezes abaixo)
+    # dispara uma consulta separada por processo — N+1 real, encontrado
+    # porque a tela de Gestão de Processos (Fase 6) ficou muito lenta em
+    # produção (~5.600 processos = milhares de idas e vindas ao Supabase
+    # numa única requisição). Com eager load vira 2 consultas no total,
+    # não uma por processo.
+    query_processos = select(Processo).options(selectinload(Processo.eventos))
+    for processo in db.scalars(query_processos):
         pessoa = _agrupar_por(processo, agrupar_por)
         if filtro_pessoa and normalize(pessoa) != normalize(filtro_pessoa):
             continue
@@ -400,7 +407,7 @@ def prazos_proximos(db: Session, dias: int = 7) -> list[PrazoProximo]:
     hoje = date.today()
     limite = hoje + timedelta(days=dias)
     resultado = []
-    query = select(EventoProcesso).where(
+    query = select(EventoProcesso).options(selectinload(EventoProcesso.processo)).where(
         EventoProcesso.prazo_fatal.is_(True),
         EventoProcesso.resolvido.is_(False),
         EventoProcesso.data_prazo.isnot(None),
