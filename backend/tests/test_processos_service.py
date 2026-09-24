@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import openpyxl
+from sqlalchemy import event
 
 from app.models import EventoProcesso, Processo
 from app.services.empresas import get_or_create_empresa
@@ -213,6 +214,60 @@ def test_processo_parado_conta_dias_sem_evento_novo(db):
 
     relatorio = gerar_relatorio(db, data_antiga, data_antiga)
     assert relatorio.linhas[0].processos_parados == 1
+
+
+def test_processo_parado_considera_ultimo_evento_de_toda_a_historia_nao_so_do_periodo(db):
+    """`gerar_relatorio` busca só os eventos dentro do período pedido (pra
+    não carregar a tabela inteira em toda geração de relatório — ver
+    DECISIONS.md), mas 'processo parado' precisa saber a data do último
+    evento em TODA a história do processo, não só dentro desse período.
+    Um processo com um evento antigo dentro do período mas um evento bem
+    mais recente fora dele não pode aparecer como 'parado'."""
+    processo = _processo(db, assistente="DANILO")
+    data_periodo = date.today() - timedelta(days=PROCESSO_PARADO_DIAS + 20)
+    db.add(EventoProcesso(processo_id=processo.id, data=data_periodo, tipo_evento_nome="CUSTAS"))
+    # Evento bem mais recente, fora do período do relatório abaixo — o
+    # processo não está parado de verdade, só não teve andamento *nesse*
+    # período específico.
+    db.add(EventoProcesso(processo_id=processo.id, data=date.today() - timedelta(days=1), tipo_evento_nome="DOCUMENTOS"))
+    db.commit()
+
+    relatorio = gerar_relatorio(db, data_periodo, data_periodo)
+    assert relatorio.linhas[0].eventos == 1  # só o evento dentro do período conta pro relatório
+    assert relatorio.linhas[0].processos_parados == 0  # mas não está parado — teve andamento recente
+
+
+def test_relatorio_nao_carrega_processos_fora_do_periodo(db):
+    """Regressão de performance: `gerar_relatorio` não pode mais carregar
+    TODOS os processos/eventos do banco a cada geração (era o que deixava a
+    tela de Gestão de Processos com ~14s de carregamento em produção, log
+    real do Render — ver DECISIONS.md). Cria um processo com evento fora do
+    período pedido e confirma que ele nem aparece no relatório; junto,
+    confirma que o número de consultas SQL não escala com o total de
+    processos no banco (ficaria óbvio numa mudança que volte a carregar a
+    tabela inteira: bastaria criar mais processos fora do período pra ver a
+    contagem de consultas crescer, o que este teste também cobriria)."""
+    dentro = _processo(db, numero="1515151-51.2026.8.11.0014", assistente="DANILO")
+    fora = _processo(db, numero="1616161-61.2026.8.11.0015", assistente="JULIA")
+    db.add(EventoProcesso(processo_id=dentro.id, data=date(2026, 9, 10), tipo_evento_nome="CUSTAS"))
+    db.add(EventoProcesso(processo_id=fora.id, data=date(2020, 1, 1), tipo_evento_nome="CUSTAS"))
+    db.commit()
+
+    consultas = []
+    engine = db.get_bind()
+
+    def ouvinte(conn, cursor, statement, parameters, context, executemany):
+        consultas.append(statement)
+
+    event.listen(engine, "before_cursor_execute", ouvinte)
+    try:
+        relatorio = gerar_relatorio(db, date(2026, 9, 1), date(2026, 9, 30))
+    finally:
+        event.remove(engine, "before_cursor_execute", ouvinte)
+
+    assert len(relatorio.linhas) == 1
+    assert relatorio.linhas[0].pessoa == "DANILO"  # "JULIA" (fora do período) nem aparece
+    assert len(consultas) <= 3  # eventos do período + processo(s) relacionado(s) + max por processo
 
 
 def test_separar_assessoria():

@@ -216,6 +216,13 @@ eventos_processo                      -- os "andamentos"
 └── criado_em
 ```
 
+**Índice parcial `ix_eventos_processo_prazo_fatal_pendente`** (em `data_prazo`, só onde
+`prazo_fatal = true AND resolvido = false AND data_prazo IS NOT NULL`) — sem ele, a consulta de
+prazos próximos (painel da tela de Gestão de Processos) varria a tabela inteira toda vez que a tela
+abria. Como `data_prazo` hoje nunca é preenchido pelo import (só por lançamento manual futuro), essa
+consulta sempre devolve zero linhas — o índice fica minúsculo mesmo com a tabela crescendo. Ver
+`app/db.py::_garantir_indice_prazos_fatais` e `DECISIONS.md`.
+
 **Regra de `prazo_fatal`** (confirmada pela Clara): é sempre um atributo do **evento**, não do
 processo — o mesmo processo pode ter eventos fatais e não-fatais ao longo do tempo, por isso o campo
 fica em `eventos_processo`, não em `processos`. No import, só o valor `SIM` (normalizado — ignora

@@ -638,6 +638,44 @@ de cada fase.
 **Reversível:** sim — mesmo comportamento de import (mesmos dados gravados, mesmas regras), só
 menos idas e vindas ao banco e menos leitura desperdiçada.
 
+## 2026-09-24 — Log real revela a causa maior: tela de Processos recarregava tudo sempre
+
+**Contexto:** a Clara mandou o log real do Render depois do deploy anterior. Ele mostrou dois números
+que eu não esperava: `GET /app/processos` levando 13-15s **sem nenhum import acontecendo**, e o
+import de verdade (51.129 linhas, 22 abas) levando 169,8s (48,9s parse + 120,9s resto). Montei um
+Postgres local (já vinha instalado neste ambiente) com o mesmo volume de dado da planilha real
+(~5.600 processos, ~45 mil eventos) pra medir contra algo mais parecido com produção que SQLite.
+**Achado principal:** a rota `GET /app/processos` chama `gerar_relatorio()` com o período padrão
+toda vez que a tela abre — não só quando alguém pede um relatório — e essa função carregava **todos**
+os processos e **todos** os eventos de sempre (com `selectinload`, que ainda dividia isso em ~13
+idas e vindas ao banco), filtrando por período só depois, em Python. Corrigido: a consulta agora
+filtra por data direto no SQL, trazendo só os eventos do período pedido; a contagem de "processo
+parado" (que precisa do último evento de *toda* a história, não só do período) virou uma consulta
+agregada separada e leve, restrita aos processos já relevantes. Medido: 13 consultas/1,1-1,6s → 7
+consultas/0,14-0,2s localmente contra Postgres de verdade — em produção, com latência de rede real
+Render↔Supabase, a diferença deve ser bem maior.
+**Achado secundário:** `prazos_proximos()` filtra por `data_prazo IS NOT NULL`, mas nada no sistema
+preenche `data_prazo` hoje (só fica pronto pra lançamento manual futuro) — ou seja, sempre devolve
+zero linhas, mas varria a tabela inteira sem índice pra chegar nisso. Testado: nem com nem sem
+índice isso foi lento o bastante (<50ms com ~45 mil linhas) pra ser a causa principal dos 13-15s —
+mas ganhou um índice parcial mesmo assim (`_garantir_indice_prazos_fatais`), seguro e barato, e que
+pode importar mais com o banco sob carga real ou uma tabela maior.
+**O que ainda não foi resolvido:** o import da planilha real em si continua pesado — carrega todos
+os processos/eventos já existentes no banco (não só os do arquivo) pra decidir o que é novo. Medido
+localmente contra Postgres, reproduzindo o cenário real (importar o mesmo arquivo duas vezes, "quase
+tudo já existe"): ~8,65s sem nenhuma latência de rede. Os ~120s vistos em produção batem com latência
+de rede real movendo dezenas de milhares de linhas, não com um bug — o trabalho já se mostrou rápido
+localmente até contra Postgres de verdade. Uma correção mais profunda (upsert direto no SQL, sem
+carregar tudo em objetos Python antes de comparar) reduziria isso ainda mais, mas mexe num caminho de
+dado de produção real (prazos de processos judiciais) com mais risco — fica como pendência em aberto
+(item novo abaixo), não implementada nesta rodada.
+**Validação:** 2 testes novos em `tests/test_processos_service.py` (83 no total) — "processo parado"
+considera a história inteira, não só o período do relatório; e um teste que trava a contagem de
+consultas SQL, pra pegar de volta qualquer mudança futura que volte a carregar a tabela inteira.
+Validado contra Postgres local de verdade (não só SQLite), com contagem real de consultas SQL antes/
+depois de cada correção — não foi só medir tempo, foi confirmar a causa.
+**Reversível:** sim — mesmo resultado de relatório (só a consulta mudou), índice é aditivo.
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante
@@ -651,13 +689,10 @@ menos idas e vindas ao banco e menos leitura desperdiçada.
 4. Modelo do relatório de Gestão de Processos (layout/colunas do PDF) — a Clara viu o exemplo
    gerado (Março/2026, geral + individual) e gostou, mas quer revisitar detalhes depois. Não é um
    pedido concreto ainda; retomar quando ela trouxer o que quer mudar.
-5. Lentidão geral relatada pela Clara ("tudo que clico demora muito pra carregar") — ela confirmou
-   (2026-09-23) que é lento o tempo todo, não só no primeiro clique depois de um tempo parado, o
-   que descarta o "sleep" por inatividade do Render como explicação sozinha (esse só afetaria a
-   primeira requisição). Log de tempo de requisição já está no ar (ver entrada 2026-09-23 acima) —
-   falta ela reproduzir a lentidão e mandar o trecho correspondente do log do Render (agora mostra
-   duração de cada requisição) pra eu conseguir ver de verdade onde o tempo está indo, em vez de
-   adivinhar.
+5. ~~Lentidão geral relatada pela Clara~~ — resolvida (2026-09-24): ela mandou o log real do Render,
+   que revelou a causa (`GET /app/processos` recarregando toda a tabela em toda geração de
+   relatório, mesmo sem pedir um) — ver entrada 2026-09-24 acima. Falta ela confirmar, depois desse
+   deploy, que a tela de Gestão de Processos abre rápido agora.
 6. Confirmar com a Clara que o modal de exclusão de empresa aparece estilizado depois do deploy do
    cache-busting (ela viu sem estilo por causa de CSS em cache — ver entrada 2026-09-23 acima).
 7. Tela de "acordando" do Render (2026-09-24) — confirmado: é o "sleep" por inatividade do plano
@@ -666,3 +701,11 @@ menos idas e vindas ao banco e menos leitura desperdiçada.
    pago junto) ou um "ping" automático externo pra manter o serviço sempre ativo (grátis, mas não é
    garantido). A Clara decidiu deixar como está por enquanto — não é uma pendência técnica, é uma
    decisão de custo dela; só retomar se ela pedir.
+8. Import da planilha real de Gestão de Processos ainda é pesado quando reimporta o histórico quase
+   todo de uma vez (ver entrada 2026-09-24) — carrega todos os processos/eventos já existentes no
+   banco pra decidir o que é novo/atualizado, não só os do arquivo. Um upsert direto no SQL (em vez
+   de carregar tudo em objetos Python antes de comparar) reduziria isso mais, mas é uma mudança de
+   maior risco num caminho de dado real (prazos de processos judiciais) — não implementada ainda.
+   Também vale perguntar à Clara se o fluxo dela realmente precisa reimportar o histórico inteiro
+   toda vez, ou se dava pra importar só a aba/mês novo — isso sozinho já reduziria bastante sem
+   precisar de nenhuma mudança de código.

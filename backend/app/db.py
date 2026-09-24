@@ -169,6 +169,28 @@ def _garantir_texto_ilimitado(engine, tabela: str, *colunas: str) -> None:
             conn.execute(text(f"ALTER TABLE {tabela} ALTER COLUMN {coluna} TYPE TEXT"))
 
 
+def _garantir_indice_prazos_fatais(engine) -> None:
+    """Índice parcial pra `prazos_proximos()` (`app/services/processos.py`)
+    — sem índice, essa consulta varre `eventos_processo` inteira toda vez
+    que a tela de Gestão de Processos carrega (log real do Render: ~13-15s
+    numa tabela com ~50 mil linhas), mesmo quando o resultado é vazio — que
+    hoje é sempre o caso, já que `data_prazo` só é preenchido por
+    lançamento manual futuro, nunca pelo import. Índice parcial (só as
+    linhas que a consulta realmente filtra) fica minúsculo mesmo com a
+    tabela toda crescendo. Só roda no Postgres — SQLite (testes) tem tabela
+    pequena o bastante pra não precisar."""
+    if engine.dialect.name != "postgresql" or not inspect(engine).has_table("eventos_processo"):
+        return
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_eventos_processo_prazo_fatal_pendente "
+                "ON eventos_processo (data_prazo) "
+                "WHERE prazo_fatal = true AND resolvido = false AND data_prazo IS NOT NULL"
+            )
+        )
+
+
 def init_db() -> None:
     """Cria as tabelas (se não existirem) e semeia valores padrão, igual ao
     comportamento do core/db.py do sistema atual na primeira execução."""
@@ -181,6 +203,7 @@ def init_db() -> None:
     _garantir_texto_ilimitado(
         engine, "audiencias", "nome_cliente", "cpf", "data_agendamento", "conciliadora", "advogada"
     )
+    _garantir_indice_prazos_fatais(engine)
     session_factory = get_session_factory()
     with session_factory() as db:
         if db.scalar(select(TipoLaudo.id).limit(1)) is None:

@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.excel_reader import load_data_sheets
@@ -382,38 +382,57 @@ def gerar_relatorio(
     processos_contados: dict[str, set[int]] = {}
     processos_parados_contados: dict[str, set[int]] = {}
 
-    # selectinload: sem isso, `processo.eventos` (usado duas vezes abaixo)
-    # dispara uma consulta separada por processo — N+1 real, encontrado
-    # porque a tela de Gestão de Processos (Fase 6) ficou muito lenta em
-    # produção (~5.600 processos = milhares de idas e vindas ao Supabase
-    # numa única requisição). Com eager load vira 2 consultas no total,
-    # não uma por processo.
-    query_processos = select(Processo).options(selectinload(Processo.eventos))
-    for processo in db.scalars(query_processos):
+    # Só os eventos DENTRO do período (não a tabela inteira filtrada em
+    # Python depois) — a versão anterior carregava todos os ~5.600
+    # processos e todos os ~45 mil eventos em toda geração de relatório,
+    # mesmo pedindo só um mês; `selectinload` sozinho ainda divide isso em
+    # vários lotes de 500 ids (13 idas e vindas ao banco pra ~5.600
+    # processos). Medido com log real do Render: ~14s por carregamento da
+    # tela de Gestão de Processos (ela já chama esta função com o período
+    # padrão só de abrir a tela, mesmo sem pedir relatório nenhum). Um
+    # período típico de um mês é uma fração pequena do total de eventos, e
+    # a consulta abaixo só traz esses — normalmente cabe num único lote.
+    query_eventos = (
+        select(EventoProcesso)
+        .options(selectinload(EventoProcesso.processo))
+        .where(EventoProcesso.data >= periodo_ini, EventoProcesso.data <= periodo_fim)
+    )
+    for evento in db.scalars(query_eventos):
+        processo = evento.processo
         pessoa = _agrupar_por(processo, agrupar_por)
         if filtro_pessoa and normalize(pessoa) != normalize(filtro_pessoa):
             continue
 
-        eventos_periodo = [e for e in processo.eventos if periodo_ini <= e.data <= periodo_fim]
-        if not eventos_periodo:
-            continue
-
         linha = por_pessoa.setdefault(pessoa, LinhaRelatorioPessoa(pessoa=pessoa))
         processos_contados.setdefault(pessoa, set()).add(processo.id)
-        linha.eventos += len(eventos_periodo)
+        linha.eventos += 1
 
-        for evento in eventos_periodo:
-            st = status_prazo(evento, hoje)
-            if st == "CUMPRIDO":
-                linha.prazos_cumpridos += 1
-            elif st in ("PERDIDO", "CUMPRIDO_COM_ATRASO"):
-                linha.prazos_perdidos += 1
-            elif st == "PENDENTE":
-                linha.prazos_pendentes += 1
+        st = status_prazo(evento, hoje)
+        if st == "CUMPRIDO":
+            linha.prazos_cumpridos += 1
+        elif st in ("PERDIDO", "CUMPRIDO_COM_ATRASO"):
+            linha.prazos_perdidos += 1
+        elif st == "PENDENTE":
+            linha.prazos_pendentes += 1
 
-        ultimo_evento = max(e.data for e in processo.eventos)
-        if ultimo_evento < limite_parado:
-            processos_parados_contados.setdefault(pessoa, set()).add(processo.id)
+    # "Processo parado" precisa do último evento de TODA a história do
+    # processo, não só dentro do período do relatório — por isso é uma
+    # consulta separada, agregada (só processo_id + data máxima, nada de
+    # observação/tipo/etc.) e restrita só aos processos que já entraram no
+    # relatório acima, não a tabela inteira de novo.
+    if processos_contados:
+        ids_relevantes = {pid for ids in processos_contados.values() for pid in ids}
+        ultimo_evento_por_processo = dict(
+            db.execute(
+                select(EventoProcesso.processo_id, func.max(EventoProcesso.data))
+                .where(EventoProcesso.processo_id.in_(ids_relevantes))
+                .group_by(EventoProcesso.processo_id)
+            ).all()
+        )
+        for pessoa, ids in processos_contados.items():
+            for processo_id in ids:
+                if ultimo_evento_por_processo.get(processo_id, hoje) < limite_parado:
+                    processos_parados_contados.setdefault(pessoa, set()).add(processo_id)
 
     # "EQUIPE (GERAL)" só faz sentido no relatório geral (todo mundo); no
     # individual (filtro_pessoa preenchido) a linha de total é só a mesma

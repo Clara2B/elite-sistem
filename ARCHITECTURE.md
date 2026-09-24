@@ -721,3 +721,56 @@ ponta localmente, antes e depois de cada correção.
 - **Reversível:** sim — mesmo comportamento de import, só menos idas e vindas ao banco e menos
   leitura desperdiçada de aba que não interessa.
 
+### 4.7 Log real do Render revela a causa maior: tela de Processos carregava a tabela inteira (2026-09-24)
+
+A Clara mandou o log real do Render depois do deploy da seção 4.6 — as correções de lá ajudaram
+(import de ~45s de parse passou pra funcionar), mas o log revelou dois números que eu não esperava:
+`GET /app/processos` levando **13-15 segundos**, sem nenhum import acontecendo — só abrindo a tela —
+e o import de verdade da planilha real (51.129 linhas, 22 abas) levando **169,8 segundos** (48,9s de
+parse + 120,9s do resto). Como o Render free tier tem só 0,1 vCPU (achado numa pesquisa de preços do
+Render) e o banco é o Supabase free tier, resolvi montar um Postgres local (o pacote já vem
+instalado neste ambiente) com o mesmo volume de dados da planilha real (~5.600 processos, ~45 mil
+eventos) pra medir com uma base de comparação mais parecida com produção do que SQLite.
+
+- **Achado — `GET /app/processos` sempre gerava um relatório completo, mesmo sem pedir um:** a rota
+  chama `gerar_relatorio()` com o período padrão (dia 1 do mês até hoje) toda vez que a tela abre,
+  não só quando alguém aperta "Gerar relatório". E `gerar_relatorio()` carregava **todos** os ~5.600
+  processos com `selectinload(Processo.eventos)` — todos os ~45 mil eventos de sempre — e só
+  filtrava por período **depois, em Python**. `selectinload` sozinho ainda dividia isso em ~13 idas
+  e vindas ao banco (lote de 500 ids por vez). Corrigido: a consulta agora busca só os eventos
+  **dentro do período pedido** direto no SQL (`WHERE data >= periodo_ini AND data <= periodo_fim`),
+  com `selectinload` só pro processo relacionado a esses eventos — não mais a tabela inteira. A
+  contagem de "processo parado" (que precisa do último evento de toda a história, não só do
+  período) virou uma consulta agregada separada e leve (`MAX(data) GROUP BY processo_id`), restrita
+  só aos processos que já entraram no relatório. Medido com Postgres local + mesmo volume de dados:
+  13 consultas / 1,1-1,6s → 7 consultas / 0,14-0,2s (~8-10x mais rápido, e seria bem mais em
+  produção, com latência de rede de verdade entre Render e Supabase).
+- **Achado — `prazos_proximos()` varria a tabela inteira sem índice, sempre em busca de zero
+  resultados:** essa consulta filtra por `data_prazo IS NOT NULL`, mas **nada no sistema hoje
+  preenche `data_prazo`** (só fica pronto pra lançamento manual futuro — ver docstring do módulo) —
+  ou seja, essa consulta sempre devolve zero linhas, mas ainda assim varria `eventos_processo`
+  inteira (sem índice em `prazo_fatal`/`resolvido`/`data_prazo`) toda vez que a tela carregava.
+  Testado localmente: nem com nem sem índice isso ficou lento o bastante (< 50ms com ~45 mil linhas)
+  pra explicar os 13-15s sozinho — mas é uma correção segura e barata mesmo assim (índice parcial,
+  `_garantir_indice_prazos_fatais` em `app/db.py`), e pode importar mais num banco Supabase
+  sobrecarregado ou numa tabela bem maior no futuro.
+- **Import da planilha real ainda é pesado — mas por volume de dado, não por bug:** o import ainda
+  carrega **todos** os processos/eventos já existentes no banco (não só os do arquivo) pra decidir o
+  que é novo/atualizado — reproduzido localmente contra Postgres com o mesmo volume (importando o
+  mesmo arquivo duas vezes, replicando o cenário real da Clara de "quase tudo já existe"): ~8,65s
+  localmente (sem nenhuma latência de rede). Em produção, isso é ~120s — a diferença bate com
+  latência de rede real entre Render e Supabase movendo dezenas de milhares de linhas, não com um
+  bug de código (o trabalho em si já se mostrou rápido localmente, mesmo com Postgres de verdade).
+  Uma correção mais profunda (upsert direto no SQL em vez de carregar tudo em objetos Python antes
+  de comparar) reduziria isso ainda mais, mas é uma mudança de maior risco num caminho de dado de
+  produção real (prazos de processos judiciais) — fica registrada como próximo passo em aberto, não
+  implementada nesta rodada; ver `DECISIONS.md` pendência.
+- **Testado:** 2 testes novos em `tests/test_processos_service.py` ("processo parado" considera a
+  história inteira, não só o período do relatório; a consulta não volta a carregar a tabela inteira,
+  travado por contagem de consultas SQL) — 83 testes no total, nenhum existente quebrou. Validado
+  contra um Postgres local de verdade (não só SQLite) com volume de dado igual ao da planilha real,
+  incluindo contagem real de consultas SQL antes/depois de cada correção. Verificação visual local
+  confirmando que o relatório continua com os números certos depois da reescrita.
+- **Reversível:** sim — mesmo resultado de relatório (só a consulta mudou, não a regra de negócio),
+  índice é aditivo.
+
