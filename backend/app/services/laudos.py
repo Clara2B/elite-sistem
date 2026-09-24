@@ -88,7 +88,7 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
 
     col_empresa = _col(df, "EMPRESA")
     col_tipo = _col(df, "TIPO DE LAUDO")
-    col_data = _col(df, "DATA")
+    col_data_nomeada = _col(df, "DATA")
     col_cliente = _col_optional(df, "NOME DO CLIENTE") or _col_optional(df, "CLIENTE")
     col_status = _col_optional(df, "ENTRADA DE LAUDO") or _col_optional(df, "STATUS")
 
@@ -109,7 +109,17 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
         empresa_nome = cell_text(row.get(col_empresa))
         if not empresa_nome:
             continue
-        data_val = parse_date_cell(row.get(col_data))
+        # Prefere a coluna A (posição) quando ela mesma já é uma data válida
+        # — a planilha real tem abas onde mais de uma coluna cai no mesmo
+        # nome canônico "DATA" (a ordem das colunas varia de aba pra aba),
+        # fazendo a busca por nome pegar a data de prazo/entrega em vez da
+        # de entrada do laudo, só em algumas abas. A Clara confirmou: a data
+        # certa é sempre a da coluna A. Cai pro nome "DATA" só quando a
+        # coluna A não é uma data (abas em que a coluna A é outra coisa,
+        # ex. EMPRESA) — ver DECISIONS.md e app/excel_reader.py::load_data_sheets.
+        data_val = parse_date_cell(row.get("_COL_A"))
+        if data_val is None:
+            data_val = parse_date_cell(row.get(col_data_nomeada))
         if data_val is None:
             continue
         tipo = cell_text(row.get(col_tipo))

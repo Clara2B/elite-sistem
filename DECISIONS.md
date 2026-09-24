@@ -676,6 +676,36 @@ Validado contra Postgres local de verdade (não só SQLite), com contagem real d
 depois de cada correção — não foi só medir tempo, foi confirmar a causa.
 **Reversível:** sim — mesmo resultado de relatório (só a consulta mudou), índice é aditivo.
 
+## 2026-09-24 — Datas erradas no relatório de Laudos: coluna errada lida no import
+
+**Contexto:** a Clara comparou o relatório de Laudos da ABSOLUTA linha por linha com a planilha real
+e achou datas erradas em 3 das 6 linhas — as datas erradas batiam exatamente com uma das outras
+colunas de data mais à direita na planilha (prazo/entrega), não com a coluna A (entrada do laudo).
+**Causa:** o import buscava a data pelo nome do cabeçalho (`_col(df, "DATA")`) no DataFrame já
+unificado de todas as abas. Quando mais de uma coluna cai no mesmo nome canônico "DATA" (a ordem das
+colunas varia de aba pra aba na planilha real — mesma classe de defeito já visto em Gestão de
+Processos), a busca por nome pode resolver pra uma coluna diferente dependendo de qual aba a linha
+veio, só nalgumas abas.
+**Corrigido:** a Clara confirmou que a coluna A é sempre a data certa. `load_data_sheets` passou a
+guardar o valor bruto da coluna A por posição (`_COL_A`), e o import de laudos usa esse valor quando
+ele é uma data válida, caindo pro nome "DATA" só quando a coluna A não é uma data (protege layouts
+onde a coluna A é outra coisa — um teste já existente com "EMPRESA" na coluna A provou isso ao
+continuar passando sem mudança).
+**Risco considerado:** cheguei a implementar uma versão que ignorava o nome completamente e sempre
+lia a coluna A — quebrou um teste existente (`test_import_e_relatorio_via_api`, que tem "EMPRESA" na
+coluna A, um layout plausível diferente do da Clara). Isso mostrou que a suposição "coluna A é
+sempre data" não é universal o bastante pra virar regra fixa — daí o fallback condicional (só usa
+coluna A quando ela mesma é uma data) em vez de substituir a lógica de nome por completo.
+**Pendência importante:** esse conserto vale só pra importações novas — laudos já importados com
+data errada continuam errados no banco. Simplesmente reimportar o mesmo arquivo hoje criaria um
+registro novo (data certa) sem remover o antigo (data errada), já que a data faz parte da chave de
+duplicidade do import — duplicaria em vez de corrigir. Não fiz nenhuma limpeza de dado existente
+nesta rodada — é dado real de faturamento, e "quais registros corrigir/apagar" não é uma decisão
+técnica pra tomar sozinho. Perguntar à Clara como ela quer corrigir o que já foi importado errado.
+**Validação:** 2 testes novos (`tests/test_excel_reader.py`, `tests/test_laudos_service.py`) — 85 no
+total, nenhum existente quebrou.
+**Reversível:** sim — muda só qual coluna o import lê daqui pra frente, sem mexer em dado já gravado.
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante
@@ -709,3 +739,7 @@ depois de cada correção — não foi só medir tempo, foi confirmar a causa.
    Também vale perguntar à Clara se o fluxo dela realmente precisa reimportar o histórico inteiro
    toda vez, ou se dava pra importar só a aba/mês novo — isso sozinho já reduziria bastante sem
    precisar de nenhuma mudança de código.
+9. Laudos com data errada já gravados no banco (ver entrada 2026-09-24, bug da coluna de data) —
+   precisa perguntar à Clara quais empresas/períodos foram afetados e como ela quer corrigir (deletar
+   e reimportar um período específico, corrigir manualmente os registros identificados, ou outra
+   forma) antes de eu mexer em qualquer dado já gravado.

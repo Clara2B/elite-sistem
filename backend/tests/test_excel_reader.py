@@ -1,4 +1,11 @@
-from app.excel_reader import _normalizar_larguras
+import tempfile
+from datetime import date
+from pathlib import Path
+
+import openpyxl
+
+from app.excel_reader import _normalizar_larguras, load_data_sheets
+from app.utils import parse_date_cell
 
 
 def test_normalizar_larguras_preenche_linhas_curtas_com_none():
@@ -21,3 +28,32 @@ def test_normalizar_larguras_lista_vazia():
 def test_normalizar_larguras_ja_uniforme_fica_igual():
     rows = [("A", "B"), ("C", "D")]
     assert _normalizar_larguras(rows) == rows
+
+
+def test_load_data_sheets_preenche_col_a_pela_posicao_nao_pelo_nome():
+    """`_COL_A` guarda o valor bruto da coluna A de cada linha, por posição
+    — não por nome de cabeçalho. Usado pelo import de laudos porque a
+    planilha real tem abas onde mais de uma coluna cai no mesmo nome
+    canônico "DATA" (a ordem das colunas varia de aba pra aba), fazendo a
+    busca por nome pegar a coluna errada em algumas abas mas não em
+    outras — a Clara confirmou que a data certa é sempre a da coluna A,
+    independente do que o nome do cabeçalho diz. Ver DECISIONS.md."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "AGOSTO"
+    ws.append(["DATA", "EMPRESA", "TIPO DE LAUDO", "NOME DO CLIENTE"])
+    ws.append([date(2026, 8, 26), "ABSOLUTA", "EMPRÉSTIMO", "JOSE NUNES DA ROSA FILHO"])
+    ws2 = wb.create_sheet("SETEMBRO")
+    # Aba com layout diferente: coluna A continua sendo a data certa, mas
+    # a ordem das outras colunas mudou em relação à aba anterior — o que
+    # já bastou, na planilha real, pra confundir a busca por nome em algum
+    # ponto do meio.
+    ws2.append(["DATA", "TIPO DE LAUDO", "EMPRESA", "NOME DO CLIENTE"])
+    ws2.append([date(2026, 9, 11), "AUTO", "ABSOLUTA", "VILMAR MARQUES"])
+    path = Path(tempfile.mkdtemp()) / "laudos.xlsx"
+    wb.save(path)
+
+    df = load_data_sheets(str(path), ["EMPRESA", "TIPO DE LAUDO", "DATA"])
+    assert "_COL_A" in df.columns
+    valores = sorted(parse_date_cell(v) for v in df["_COL_A"])
+    assert valores == [date(2026, 8, 26), date(2026, 9, 11)]

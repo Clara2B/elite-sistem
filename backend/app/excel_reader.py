@@ -118,6 +118,15 @@ def load_data_sheets(
             data_rows = rows[header_idx + 1:]
             df = pd.DataFrame(data_rows, columns=cols)
             df["_ABA"] = sheet_name
+            # Valor bruto da coluna A (posição, não nome) — reserva pra quando
+            # o nome do cabeçalho não é confiável: a planilha real de Laudos
+            # tem abas com mais de uma coluna que cai no mesmo nome canônico
+            # "DATA" (ex.: um alias como "DIA" batendo com outra coluna de
+            # data, tipo prazo/entrega, dependendo da ordem das colunas
+            # naquela aba específica) — o nome resolve pra coluna errada só
+            # nalgumas abas, não em todas. A Clara confirmou: a data certa é
+            # sempre a da coluna A. Ver app/services/laudos.py.
+            df["_COL_A"] = [r[0] if r else None for r in data_rows]
             df = df.dropna(how="all", subset=[c for c in cols if c != "_ABA"])
             frames.append(df)
             abas_aproveitadas += 1

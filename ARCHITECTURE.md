@@ -774,3 +774,48 @@ eventos) pra medir com uma base de comparação mais parecida com produção do 
 - **Reversível:** sim — mesmo resultado de relatório (só a consulta mudou, não a regra de negócio),
   índice é aditivo.
 
+### 4.8 Datas erradas no relatório de Laudos — coluna errada lida no import (2026-09-24)
+
+A Clara comparou o relatório de Laudos da ABSOLUTA (tela do Elite Sistem) com a planilha real, linha
+por linha, e achou datas erradas em várias delas — não coincidência: as datas erradas batiam
+exatamente com uma das outras colunas de data que aparecem mais à direita na planilha (prazo/
+entrega), não com a coluna A (a de entrada do laudo, a que vale pro sistema). Comparação exata:
+
+| Cliente | Data real (coluna A) | Data que o sistema mostrou |
+|---|---|---|
+| JOSE NUNES DA ROSA FILHO | 26/08 | 27/08 (uma das colunas de data mais à direita) |
+| HAFLER SZUBRIS AMORIM | 27/08 | 01/09 (idem) |
+| CESAR ELIAS MACHADO | 31/08 | 03/09 (idem) |
+| ALBERTO TRAJANO DE ALMEIDA | 02/09 | 02/09 ✓ |
+| JAILSON FRANCISCO DE LIMA | 11/09 | 11/09 ✓ |
+| VILMAR MARQUES | 11/09 | 11/09 ✓ |
+
+Só 3 das 6 linhas vieram erradas — sinal de que não é a planilha inteira desalinhada, é algo
+específico de certas abas/linhas (a mesma classe de defeito já visto em Gestão de Processos:
+cabeçalho de colunas variando entre abas da mesma planilha).
+
+- **Causa:** `app/services/laudos.py` buscava a data pelo **nome** do cabeçalho (`_col(df, "DATA")`
+  — resolvido no DataFrame já unificado de todas as abas). Quando mais de uma coluna cai no mesmo
+  nome canônico "DATA" (a ordem das colunas varia de aba pra aba na planilha real), a busca por nome
+  pode resolver pra uma coluna diferente dependendo de qual aba aquela linha veio — puxando a data
+  de prazo/entrega em vez da data de entrada do laudo, só nas abas com esse desalinhamento.
+- **Corrigido:** a Clara confirmou que a coluna A é sempre a data certa. `load_data_sheets`
+  (`app/excel_reader.py`) agora também guarda o valor bruto da coluna A por **posição** (`_COL_A`,
+  igual já faz com `_ABA`) — sem depender do nome do cabeçalho daquela célula. O import de laudos
+  usa esse valor quando ele já é uma data válida; só cai de volta pro nome "DATA" quando a coluna A
+  não é uma data (evita quebrar layouts onde a coluna A é outra coisa, ex. testes existentes com
+  "EMPRESA" primeiro — confirmado com um teste de regressão que já existia e continuou passando).
+- **Pendência importante, não resolvida nesta rodada:** esse conserto vale só pra **importações
+  novas** — laudos que já foram importados com a data errada continuam errados no banco até serem
+  reimportados ou corrigidos manualmente, e como a chave de duplicidade do import inclui a data,
+  simplesmente reimportar o mesmo arquivo hoje criaria um registro novo (com a data certa) sem
+  remover o antigo (com a data errada) — duplicaria em vez de corrigir. Perguntar à Clara como ela
+  quer corrigir os dados já importados antes de fazer qualquer limpeza (não é uma decisão pra tomar
+  sozinho, é dado real de faturamento).
+- **Testado:** 2 testes novos (`tests/test_excel_reader.py` — `_COL_A` captura a coluna A por
+  posição, não por nome, mesmo com abas de layout diferente; `tests/test_laudos_service.py` — import
+  usa a coluna A quando ela é uma data válida, mesmo com uma coluna extra de data no meio) — 85
+  testes no total, nenhum existente quebrou (inclusive um teste antigo com "EMPRESA" na coluna A,
+  que serviu de prova de que o fallback funciona).
+- **Reversível:** sim — muda só qual coluna o import lê, sem mexer em dado já gravado.
+
