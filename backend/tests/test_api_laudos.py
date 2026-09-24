@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 
 from app.db import get_db
 from app.main import app
+from app.models import Laudo
+from app.services.empresas import get_or_create_empresa
 
 
 def _planilha_laudos_bytes() -> bytes:
@@ -60,3 +62,18 @@ def test_import_e_relatorio_via_api(db, admin_token):
         assert resp_sem_login.status_code == 401
     finally:
         app.dependency_overrides.clear()
+
+
+def test_apagar_todos_laudos_via_api_exige_admin(client, db, admin_token):
+    empresa = get_or_create_empresa(db, "ABSOLUTA")
+    db.add(Laudo(empresa_cliente_id=empresa.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 25),
+                 nome_cliente="Fulano", status="SOLICITAÇÃO"))
+    db.commit()
+
+    resp = client.delete("/laudos", headers={"Authorization": f"Bearer {admin_token}"})
+    assert resp.status_code == 200
+    assert resp.json()["apagados"] == 1
+    assert db.query(Laudo).count() == 0
+
+    resp_sem_login = client.delete("/laudos")
+    assert resp_sem_login.status_code == 401

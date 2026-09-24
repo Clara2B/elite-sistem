@@ -375,6 +375,16 @@ button.perigo:hover {
   background: var(--danger);
   color: #fff;
 }
+button:disabled, .botao:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+button.perigo:disabled:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
 
 /* ---------- tabelas ---------- */
 

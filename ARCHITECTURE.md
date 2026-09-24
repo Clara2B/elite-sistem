@@ -819,3 +819,30 @@ cabeçalho de colunas variando entre abas da mesma planilha).
   que serviu de prova de que o fallback funciona).
 - **Reversível:** sim — muda só qual coluna o import lê, sem mexer em dado já gravado.
 
+### 4.9 "Apagar todo o histórico de laudos" (a pedido da Clara, 2026-09-24)
+
+Continuação direta da seção 4.8: a Clara confirmou que **todas** as empresas foram afetadas pela
+data errada, e pediu explicitamente pra apagar o histórico inteiro de laudos, corrigir o sistema
+(já corrigido na 4.8) e reimportar a planilha do zero.
+
+- **`apagar_todos_laudos(db)`** (`app/services/laudos.py`) — apaga todas as linhas de `laudos` num
+  `DELETE` só (não carrega os registros um por um antes) e devolve a contagem apagada. Só mexe em
+  `laudos`; não toca em empresas-clientes, tipos de laudo cadastrados nem em nenhum outro módulo.
+- **Rota web `POST /app/laudos/apagar-tudo`** e **rota API `DELETE /laudos`** — ambas restritas a
+  Admin Superior/T.I. (`admin_logado_web`/`require_admin`; nem todo usuário ELITE, diferente das
+  outras rotas de laudos). Registrada no log de auditoria (`APAGOU_TODOS_LAUDOS`, com a contagem).
+- **Confirmação reforçada na tela:** o modal de confirmação já usado pra excluir empresa (seção 4.x
+  anterior) não pareceu proteção suficiente pra apagar uma tabela inteira — adicionado um mecanismo
+  novo e reaproveitável (`data-confirmar-texto`/`data-confirmar-alvo` em `app/static/app.js`): o
+  botão de confirmar só destrava depois de digitar a palavra pedida ("APAGAR") num campo de texto
+  dentro do modal. Fica disponível pra qualquer ação futura de risco parecido, não só essa.
+- **Testado:** 4 testes novos (`tests/test_laudos_service.py` — apaga tudo e devolve a contagem
+  certa, banco já vazio não quebra; `tests/test_web.py` — admin consegue, não-admin recebe 403 sem
+  apagar nada; `tests/test_api_laudos.py` — mesma checagem pela API) — 90 testes no total.
+  Verificação visual local ponta a ponta com Playwright: importar um laudo, abrir o modal, confirmar
+  que o botão fica desabilitado até digitar "APAGAR" (maiúsculas/minúsculas não importam), e que o
+  laudo some de verdade depois de confirmar.
+- **Reversível:** não — é uma exclusão real e definitiva, por isso a barreira de confirmação mais
+  forte que o padrão do resto do sistema. Usada a pedido explícito da Clara, não por iniciativa
+  própria.
+

@@ -6,7 +6,12 @@ import openpyxl
 
 from app.models import Laudo
 from app.services.empresas import get_or_create_empresa
-from app.services.laudos import gerar_relatorio, importar_planilha, periodo_20_a_20
+from app.services.laudos import (
+    apagar_todos_laudos,
+    gerar_relatorio,
+    importar_planilha,
+    periodo_20_a_20,
+)
 
 
 def test_periodo_20_a_20():
@@ -103,3 +108,28 @@ def test_import_usa_coluna_a_como_data_mesmo_com_coluna_extra_de_data(db):
 
     laudo = db.query(Laudo).one()
     assert laudo.data == date(2026, 8, 26)  # coluna A, não a coluna extra (27/08)
+
+
+def test_apagar_todos_laudos_remove_tudo_e_devolve_a_contagem(db):
+    empresa1 = get_or_create_empresa(db, "ABSOLUTA")
+    empresa2 = get_or_create_empresa(db, "ALFA")
+    db.add_all(
+        [
+            Laudo(empresa_cliente_id=empresa1.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 25),
+                  nome_cliente="Fulano", status="SOLICITAÇÃO"),
+            Laudo(empresa_cliente_id=empresa2.id, tipo_laudo_nome="IMÓVEL", data=date(2026, 2, 1),
+                  nome_cliente="Beltrano", status="CORREÇÃO"),
+        ]
+    )
+    db.commit()
+
+    apagados = apagar_todos_laudos(db)
+
+    assert apagados == 2
+    assert db.query(Laudo).count() == 0
+    # não mexe nas empresas-clientes, só nos laudos
+    assert get_or_create_empresa(db, "ABSOLUTA").id == empresa1.id
+
+
+def test_apagar_todos_laudos_com_banco_ja_vazio(db):
+    assert apagar_todos_laudos(db) == 0

@@ -706,6 +706,28 @@ técnica pra tomar sozinho. Perguntar à Clara como ela quer corrigir o que já 
 total, nenhum existente quebrou.
 **Reversível:** sim — muda só qual coluna o import lê daqui pra frente, sem mexer em dado já gravado.
 
+## 2026-09-24 — "Apagar todo o histórico de laudos", a pedido explícito da Clara
+
+**Contexto:** continuação direta da entrada anterior. Perguntei quais empresas foram afetadas pela
+data errada e como ela queria corrigir — respondeu que todas foram afetadas, e pediu explicitamente
+pra apagar o histórico inteiro de laudos, confirmar que o sistema está corrigido, e reimportar a
+planilha do zero.
+**Decisão:** implementei `apagar_todos_laudos()` (DELETE em massa, só na tabela `laudos`, não mexe
+em empresas-clientes nem em outro módulo) com rota web e de API, ambas restritas a Admin Superior/
+T.I. — mais restrito que as outras rotas de laudos (que qualquer usuário ELITE usa).
+**Confirmação reforçada:** o modal de "excluir empresa" já existente não pareceu proteção
+suficiente pra uma exclusão em massa dessa escala (histórico inteiro, não um registro) — adicionei
+um mecanismo novo (botão só destrava depois de digitar "APAGAR" no modal), pensado pra ser
+reaproveitável em qualquer ação de risco parecido no futuro, não só essa.
+**Por que não fiz sozinho sem perguntar:** é dado real de faturamento e uma exclusão em massa e
+irreversível — mesmo tendo entendido a causa do bug, "apagar tudo" é uma decisão que só a dona dos
+dados pode tomar, e ela tomou, explicitamente, depois de eu perguntar.
+**Validação:** 4 testes novos (serviço, rota web com bloqueio pra não-admin, rota de API) — 90 no
+total — + verificação visual local ponta a ponta (import, modal, botão travado até digitar certo,
+exclusão de verdade confirmada).
+**Reversível:** não — a ação em si é irreversível por natureza (é uma exclusão real). A decisão de
+executá-la foi explícita e documentada.
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante
@@ -739,7 +761,7 @@ total, nenhum existente quebrou.
    Também vale perguntar à Clara se o fluxo dela realmente precisa reimportar o histórico inteiro
    toda vez, ou se dava pra importar só a aba/mês novo — isso sozinho já reduziria bastante sem
    precisar de nenhuma mudança de código.
-9. Laudos com data errada já gravados no banco (ver entrada 2026-09-24, bug da coluna de data) —
-   precisa perguntar à Clara quais empresas/períodos foram afetados e como ela quer corrigir (deletar
-   e reimportar um período específico, corrigir manualmente os registros identificados, ou outra
-   forma) antes de eu mexer em qualquer dado já gravado.
+9. ~~Laudos com data errada já gravados no banco~~ — resolvida (2026-09-24): a Clara confirmou que
+   todas as empresas foram afetadas e pediu pra apagar todo o histórico de laudos; construída a
+   função/rota de "apagar tudo" (ver entrada 2026-09-24 acima). Falta ela de fato clicar em apagar
+   e reimportar a planilha completa — só aí a Fase 5/6 de Laudos volta a ter dado confiável no ar.

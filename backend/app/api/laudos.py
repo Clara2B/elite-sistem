@@ -3,7 +3,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api._shared import salvar_temp
-from app.auth import require_operadora
+from app.auth import require_admin, require_operadora
 from app.db import get_db
 from app.models import Usuario
 from app.pdf_export import gerar_pdf_laudos
@@ -32,6 +32,20 @@ def importar(
         raise HTTPException(status_code=400, detail=str(e))
     registrar(db, usuario, "IMPORTOU_LAUDOS", entidade="laudo", detalhes=str(resumo))
     return resumo
+
+
+@router.delete("")
+def apagar_tudo(
+    usuario: Usuario = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Apaga todo o histórico de laudos — a pedido explícito da Clara
+    (2026-09-24), pra corrigir de vez os laudos com data errada gravados
+    antes do bug da coluna de data ser corrigido (ver DECISIONS.md).
+    Irreversível; só Admin Superior/T.I."""
+    total = laudos_service.apagar_todos_laudos(db)
+    registrar(db, usuario, "APAGOU_TODOS_LAUDOS", entidade="laudo", detalhes=f"{total} laudo(s) apagado(s)")
+    return {"apagados": total}
 
 
 @router.get("/relatorio")

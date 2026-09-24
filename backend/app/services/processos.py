@@ -452,7 +452,7 @@ def gerar_relatorio(
     return RelatorioProcessos(
         periodo_ini=periodo_ini,
         periodo_fim=periodo_fim,
-        linhas=sorted(por_pessoa.values(), key=lambda l: normalize(l.pessoa)),
+        linhas=sorted(por_pessoa.values(), key=lambda linha: normalize(linha.pessoa)),
         total=total,
     )
 

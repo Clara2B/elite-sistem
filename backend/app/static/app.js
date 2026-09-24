@@ -102,8 +102,36 @@ function iniciarModaisDeConfirmacao() {
   });
 }
 
+// Trava o botão de confirmar até a pessoa digitar a palavra pedida — pra
+// ações muito mais destrutivas que um "excluir" comum (ex.: apagar TODO o
+// histórico de um módulo, não só um registro), onde o modal sozinho já não
+// parece proteção suficiente. Campo com [data-confirmar-texto="PALAVRA"]
+// destrava o botão com [data-confirmar-alvo] quando o texto digitado bate
+// exatamente (sem diferenciar maiúsculas) com PALAVRA.
+function iniciarConfirmacaoPorTexto() {
+  document.querySelectorAll("[data-confirmar-texto]").forEach(function (campo) {
+    var modal = campo.closest("dialog");
+    var botao = modal ? modal.querySelector("[data-confirmar-alvo]") : null;
+    if (!botao) return;
+    var esperado = campo.getAttribute("data-confirmar-texto").toUpperCase();
+
+    botao.disabled = true;
+    campo.addEventListener("input", function () {
+      botao.disabled = campo.value.trim().toUpperCase() !== esperado;
+    });
+
+    // Limpa o campo (e retrava o botão) toda vez que o modal fecha, pra não
+    // ficar destravado se a pessoa abrir de novo sem digitar nada.
+    modal.addEventListener("close", function () {
+      campo.value = "";
+      botao.disabled = true;
+    });
+  });
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   iniciarZonasDeUpload();
   iniciarValidacaoDeUpload();
   iniciarModaisDeConfirmacao();
+  iniciarConfirmacaoPorTexto();
 });

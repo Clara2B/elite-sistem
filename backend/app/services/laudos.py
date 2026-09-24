@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.excel_reader import load_data_sheets
@@ -93,8 +93,8 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
     col_status = _col_optional(df, "ENTRADA DE LAUDO") or _col_optional(df, "STATUS")
 
     existentes = {
-        (l.empresa_cliente_id, normalize(l.tipo_laudo_nome), l.data, normalize(l.nome_cliente))
-        for l in db.scalars(select(Laudo))
+        (laudo.empresa_cliente_id, normalize(laudo.tipo_laudo_nome), laudo.data, normalize(laudo.nome_cliente))
+        for laudo in db.scalars(select(Laudo))
     }
     # Cache de empresa-cliente pro import inteiro — sem isso,
     # get_or_create_empresa faz uma consulta ao banco varrendo todas as
@@ -152,6 +152,21 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
     db.commit()
     _logger.info("import laudos: %.1fs total — %s", time.perf_counter() - inicio, resumo)
     return resumo
+
+
+def apagar_todos_laudos(db: Session) -> int:
+    """Apaga TODO o histórico de laudos — a pedido explícito da Clara, pra
+    corrigir de vez os registros com data errada (bug da coluna de data no
+    import, já corrigido — ver DECISIONS.md 2026-09-24): reimportar sozinho
+    não corrige o que já está errado, porque a data faz parte da chave de
+    duplicidade (criaria registro novo em vez de substituir o antigo).
+    Irreversível — a tela que chama isso exige confirmação explícita antes.
+    Só laudos; não mexe em empresas-clientes, tipos de laudo cadastrados
+    nem em nenhum outro módulo."""
+    total = db.scalar(select(func.count()).select_from(Laudo)) or 0
+    db.execute(delete(Laudo))
+    db.commit()
+    return total
 
 
 @dataclass
@@ -248,8 +263,8 @@ def gerar_relatorio(
             )
         )
 
-    linhas.sort(key=lambda l: normalize(l.cliente))
-    total = sum(l.valor for l in linhas)
+    linhas.sort(key=lambda linha: normalize(linha.cliente))
+    total = sum(linha.valor for linha in linhas)
 
     return LaudosResult(
         empresa=empresa.nome,

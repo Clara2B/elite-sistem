@@ -226,3 +226,36 @@ def test_erro_nao_tratado_em_rota_json_devolve_json(client, admin_token, monkeyp
     resposta = cliente_sem_relancar.get("/empresas", headers={"Authorization": f"Bearer {admin_token}"})
     assert resposta.status_code == 500
     assert resposta.headers["content-type"].startswith("application/json")
+
+
+def test_apagar_todos_laudos_via_web_exige_admin(client, db):
+    db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    empresa = EmpresaCliente(nome="ABSOLUTA")
+    db.add(empresa)
+    db.flush()
+    db.add(Laudo(empresa_cliente_id=empresa.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 25), nome_cliente="Fulano", status="SOLICITAÇÃO"))
+    db.commit()
+    client.post("/login", data={"email": "fulano@teste.local", "senha": "certa"})
+
+    resposta = client.post("/app/laudos/apagar-tudo", follow_redirects=False)
+    assert resposta.status_code == 303
+    assert resposta.headers["location"].startswith("/app/laudos?mensagem=")
+    assert db.query(Laudo).count() == 0
+
+
+def test_apagar_todos_laudos_via_web_bloqueado_para_nao_admin(client, db):
+    setor = db.query(Setor).first()
+    usuario = Usuario(nome="Colaboradora", email="colab@teste.local", senha_hash=hash_senha("certa"))
+    db.add(usuario)
+    db.flush()
+    db.add(UsuarioSetor(usuario_id=usuario.id, setor_id=setor.id, papel="COLABORADOR"))
+    empresa = EmpresaCliente(nome="ABSOLUTA")
+    db.add(empresa)
+    db.flush()
+    db.add(Laudo(empresa_cliente_id=empresa.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 25), nome_cliente="Fulano", status="SOLICITAÇÃO"))
+    db.commit()
+    client.post("/login", data={"email": "colab@teste.local", "senha": "certa"})
+
+    resposta = client.post("/app/laudos/apagar-tudo")
+    assert resposta.status_code == 403
+    assert db.query(Laudo).count() == 1  # nada foi apagado
