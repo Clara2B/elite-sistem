@@ -1,9 +1,12 @@
 """Fluxo de PENDÊNCIAS — portado de core/pendencias.py (leitor-relatorio).
 
 Regras já auditadas em ARCHITECTURE.md seção 1.4: pendente = campo PAGO com
-status explícito diferente de SIM/NÃO (vazio não conta); dedup por
-(data+empresa+tipo+valor) com SIM sempre vencendo; classificação automática
-do cobrador (tipo contendo "AUDIÊNCIA" -> EXIMIA, resto -> ELITE).
+qualquer status diferente de SIM (vazio não conta) — inclui "NÃO"
+explicitamente como pendência, a pedido da Clara (2026-09-24; antes disso
+"NÃO" era tratado como resolvido, igual "SIM", o que estava errado — ver
+DECISIONS.md). Dedup por (data+empresa+tipo+valor) com SIM sempre vencendo;
+classificação automática do cobrador (tipo contendo "AUDIÊNCIA" -> EXIMIA,
+resto -> ELITE).
 """
 from __future__ import annotations
 
@@ -25,7 +28,7 @@ _logger = logging.getLogger("elite_sistem.import")
 
 REQUIRED_HEADERS = ["EMPRESA", "TIPO DE COBRANÇA", "VALOR"]
 CHAVE_DUPLICIDADE = ["DATA", "EMPRESA", "TIPO DE COBRANÇA", "VALOR"]
-STATUS_PAGO_OK = {normalize("SIM"), normalize("NÃO")}
+STATUS_PAGO_OK = {normalize("SIM")}
 _PRIORIDADE_PAGO = {"SIM": 0}
 
 PIX_EXIMIA = "✅ PIX: CNPJ: 655965130001-52 \nEXIMIA CAMARA DE CONCILIACAO MEDIACAO & ARBITRAGEM LTDA"

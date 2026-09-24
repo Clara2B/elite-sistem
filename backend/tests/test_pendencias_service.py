@@ -45,6 +45,28 @@ def test_classifica_cobrador_por_tipo_e_ignora_pago(db):
     assert elite.total == 100.0  # a paga (SIM) não entra
 
 
+def test_pago_nao_conta_como_pendente(db):
+    """A Clara pediu explicitamente (2026-09-24): PAGO = "Não" também é
+    pendência, não só valores como "EM ATRASO"/"PENDENTE". Só "Sim" conta
+    como resolvido."""
+    empresa = get_or_create_empresa(db, "NOVA GLOBAL")
+    db.add(
+        Cobranca(
+            empresa_cliente_id=empresa.id,
+            data=date(2026, 1, 1),
+            tipo_cobranca="MENSALIDADE PROCESSUAL",
+            cobrador="ELITE",
+            valor=150.0,
+            status_pagamento="Não",
+        )
+    )
+    db.commit()
+
+    mensagens = gerar_mensagens(db, "NOVA GLOBAL")
+    assert len(mensagens) == 1
+    assert mensagens[0].total == 150.0
+
+
 def test_pago_vazio_nao_conta_como_pendente(db):
     empresa = get_or_create_empresa(db, "NOVA GLOBAL")
     db.add(

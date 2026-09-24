@@ -728,6 +728,23 @@ exclusão de verdade confirmada).
 **Reversível:** não — a ação em si é irreversível por natureza (é uma exclusão real). A decisão de
 executá-la foi explícita e documentada.
 
+## 2026-09-24 — Pendências: "Não" também vira pendência, a pedido da Clara
+
+**Contexto:** a Clara pediu diretamente: "na aba pendências do sistema, eu preciso que o que
+estiver com 'Não' na planilha também seja lido como pendência". A regra antiga tratava "NÃO" como
+equivalente a "SIM" (resolvido); só valores como "EM ATRASO"/"PENDENTE" viravam pendência.
+**Decisão:** reduzi `STATUS_PAGO_OK` (`app/services/pendencias.py`) de `{"SIM", "NÃO"}` para
+`{"SIM"}` — agora só "SIM" conta como pago; qualquer outro valor não-vazio, incluindo "NÃO", conta
+como pendência. Sem mudança de lógica em `_e_pendente()`, só no conjunto de valores considerados OK.
+**Sem migração necessária:** a regra é aplicada ao vivo sobre o texto já gravado (não há
+interpretação no momento do import), então todo o histórico já importado passa a ser lido
+corretamente assim que o deploy sobe — diferente do bug de Laudos (entrada acima), não precisa
+apagar nem reimportar nada.
+**Validação:** novo teste (`test_pago_nao_conta_como_pendente`) + suíte completa (91 testes) +
+verificação visual local com planilha sintética (Não/Sim/vazio), confirmando que só "Não" vira
+pendência.
+**Reversível:** sim — é uma única constante; fácil de reverter se a regra mudar de novo.
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante

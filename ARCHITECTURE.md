@@ -846,3 +846,27 @@ data errada, e pediu explicitamente pra apagar o histórico inteiro de laudos, c
   forte que o padrão do resto do sistema. Usada a pedido explícito da Clara, não por iniciativa
   própria.
 
+### 4.10 Pendências: "Não" também conta como pendência (a pedido da Clara, 2026-09-24)
+
+A regra original (seção 1.2, diagnóstico da Fase 0) tratava o campo PAGO como pendência só quando o
+valor era diferente de "SIM" **e** de "NÃO" — ou seja, "NÃO" era tratado como resolvido, igual
+"SIM". A Clara pediu explicitamente que "NÃO" também seja lido como pendência: só "SIM" conta como
+pago/resolvido; qualquer outro valor não-vazio ("NÃO", "EM ATRASO", "PENDENTE" etc.) é pendência.
+
+- **`STATUS_PAGO_OK`** (`app/services/pendencias.py`) — reduzido de `{"SIM", "NÃO"}` para `{"SIM"}`.
+  `_e_pendente()` não mudou de lógica (continua `texto not in STATUS_PAGO_OK`); o comportamento
+  muda porque o conjunto de "ok" ficou menor. `_PRIORIDADE_PAGO` (usado só para desempate de linhas
+  duplicadas na importação, priorizando manter a linha "SIM" quando duas batem na mesma chave) não
+  precisou mudar — "SIM" continua vencendo.
+- **Sem migração/reimportação necessária:** diferente do bug de datas de Laudos (seção 4.8), aqui o
+  texto bruto de PAGO já é gravado como veio da planilha, sem interpretação no momento do import — a
+  regra "isso conta como pendência?" é aplicada ao vivo, a cada geração de mensagem
+  (`gerar_mensagens`), lendo o texto já salvo. Assim que o deploy sobe, todo o histórico já
+  importado passa a ser reinterpretado corretamente, sem precisar apagar nem reimportar nada.
+- **Testado:** novo teste `test_pago_nao_conta_como_pendente`
+  (`tests/test_pendencias_service.py`) cobre uma cobrança com PAGO="Não" e confirma que ela aparece
+  na mensagem de pendência gerada. Verificação visual local (planilha sintética com linhas "Não"/
+  "Sim"/vazio) confirma que só a linha "Não" aparece como pendência.
+- **Reversível:** sim — é só uma constante (`STATUS_PAGO_OK`); reverter é trivial se a regra mudar
+  de novo no futuro.
+
