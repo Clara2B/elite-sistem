@@ -996,3 +996,44 @@ como etapa separada (mexe no import de todos os módulos, não só nesse relató
 - **Reversível:** sim — tabela nova e campo de filtro isolados; reverter é remover a tabela/rota
   sem afetar mais nada (não há FK apontando pra `Funcionario`).
 
+### 4.14 Sincronização com a lista oficial de empresas (2026-09-24)
+
+Continuação direta da 4.13: a Clara mandou um PDF ("INFOS ASSESSORIAS") com nome + CNPJ de cada
+empresa-cliente oficial, pedindo pra "limpar o que tem e adicionar os novos". 48 empresas ao todo —
+8 a mais do que a lista de 40 que ela tinha digitado de memória no pedido anterior (ANDRADE, JUROS
+JUSTOS, PERES, ROYAL, REGULARIZE, REVISALPHA, TEG, WN FAST); ela confirmou incluir todas as 48.
+
+- **`LISTA_OFICIAL_EMPRESAS`** (`app/services/empresas.py`) — lista fixa de 48 tuplas
+  `(nome_curto, cnpj)`, extraída do PDF. **Nome curto, não razão social**: o PDF chama de "ABSOLUTA
+  SOLUÇÕES FINANCEIRAS", mas o campo `nome` guarda só "ABSOLUTA" — é isso que toda a base (imports
+  de Laudos/Audiências/Pendências/Processos, todo o histórico já gravado) já usa pra reconhecer a
+  empresa; usar a razão social completa quebraria o reconhecimento em todo import futuro. Uma
+  exceção notável: o PDF escreve "WN FAST SOLUCOES LTDA." mas a planilha real de processos já usa
+  "WNFAST" (sem espaço) nos registros existentes (confirmado pela Clara) — usado "WNFAST" na lista
+  pra não perder o vínculo com processos já importados. "OPÇÃO1" não tem CNPJ no PDF (célula em
+  branco) — cadastrada com `cnpj=None`, editável depois.
+- **`sincronizar_lista_oficial(db, lista)`** (`app/services/empresas.py`) — pra cada nome da lista:
+  cria se não existe, atualiza o CNPJ se existe e mudou (nunca apaga um CNPJ já cadastrado só
+  porque a lista trouxe `None` pra aquela entrada). Pra cada empresa cadastrada que NÃO está na
+  lista: tenta excluir de verdade via `excluir_empresa` já existente — que **recusa a exclusão** se
+  houver laudo/audiência/cobrança/processo vinculado (proteção que já existia antes desta mudança,
+  não construída pra isso). Devolve um resumo (criadas/atualizadas/excluídas/não-excluídas-por-
+  vínculo) — a Clara vê exatamente quais empresas ficaram de fora da exclusão e por quê, sem eu
+  forçar o apagamento de histórico de nenhum outro módulo por baixo dos panos.
+- **Rota web `POST /app/empresas/sincronizar-lista-oficial`** e **API `POST /empresas/
+  sincronizar-lista-oficial`** — restritas a Admin Superior/T.I., mesmo padrão de confirmação por
+  texto digitado ("SINCRONIZAR") das outras zonas de perigo. A rota web precisou ficar **antes** de
+  `POST /{empresa_id}` no arquivo de rotas — senão o Starlette casava
+  `/app/empresas/sincronizar-lista-oficial` com `empresa_id="sincronizar-lista-oficial"` primeiro e
+  devolvia 422 (bug pego pelo próprio teste automatizado, corrigido antes do commit).
+- **Testado:** 8 testes novos (`tests/test_empresas_service.py` — cria/atualiza/exclui, não exclui
+  com vínculo, não apaga CNPJ existente quando a lista não traz um novo, case-insensitive por nome,
+  sanidade da lista oficial em si: 48 sem duplicata e "WNFAST" sem espaço; `tests/test_web.py` —
+  rota exige admin, bloqueada pra não-admin) — 122 no total. Validado também rodando de ponta a
+  ponta com Playwright contra um banco local com três cenários (empresa antiga sem vínculo — foi
+  excluída; empresa antiga com laudo vinculado — não foi excluída, apareceu na mensagem; ABSOLUTA
+  já cadastrada com CNPJ errado — CNPJ corrigido): resultado bateu exatamente (47 criadas, 1 CNPJ
+  atualizado, 1 excluída, 1 não excluída por vínculo, 49 empresas ao final).
+- **Reversível:** não — as exclusões são definitivas (mesma natureza das outras zonas de perigo);
+  criação/atualização de CNPJ são triviais de reverter, mas uma empresa excluída não volta sozinha.
+

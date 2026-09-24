@@ -90,4 +90,41 @@
       <button type="submit">Cadastrar</button>
     </form>
   </div>
+
+  <div class="card" style="border: 1px solid var(--danger-soft);">
+    <h2>Zona de perigo</h2>
+    <p class="subtitulo">
+      Sincroniza o cadastro com a lista oficial de 48 empresas (nome + CNPJ) do PDF que você
+      mandou — cria as que faltam, atualiza o CNPJ das que já existem, e <strong>exclui de
+      verdade</strong> qualquer empresa cadastrada que não esteja nessa lista (uma empresa só é
+      excluída se não tiver laudo, audiência, cobrança ou processo vinculado a ela — se tiver, fica
+      de fora da exclusão e aparece na mensagem de resultado).
+    </p>
+    <button type="button" class="perigo" data-abrir-confirmacao="modal-sincronizar-empresas">
+      {{ icones.icone('empresas') }} Sincronizar com a lista oficial
+    </button>
+  </div>
+
+  <dialog id="modal-sincronizar-empresas" class="modal-confirmacao">
+    <div class="modal-corpo">
+      <div class="modal-icone">{{ icones.icone('alerta') }}</div>
+      <h3>Sincronizar com a lista oficial de empresas?</h3>
+      <p>
+        Isso vai <strong>excluir de verdade</strong> qualquer empresa cadastrada hoje que não esteja
+        na lista oficial de 48 (sem volta, exceto pra quem tiver histórico vinculado — essas ficam
+        de fora da exclusão). As 48 da lista oficial são criadas ou têm o CNPJ atualizado.
+      </p>
+      <div class="campo" style="margin-top: 14px;">
+        <label for="confirmar-sincronizar-empresas">Digite SINCRONIZAR para confirmar</label>
+        <input type="text" id="confirmar-sincronizar-empresas" autocomplete="off"
+               data-confirmar-texto="SINCRONIZAR" placeholder="SINCRONIZAR">
+      </div>
+    </div>
+    <div class="modal-acoes">
+      <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
+      <form method="post" action="/app/empresas/sincronizar-lista-oficial">
+        <button type="submit" class="perigo" data-confirmar-alvo>Sincronizar</button>
+      </form>
+    </div>
+  </dialog>
 {% endblock %}

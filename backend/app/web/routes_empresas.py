@@ -15,6 +15,7 @@ from app.services.empresas import (
     criar_empresa,
     excluir_empresa,
     listar_empresas,
+    sincronizar_lista_oficial,
 )
 from app.web.auth import admin_logado_web
 from app.web.menu import itens_menu
@@ -73,6 +74,37 @@ async def criar(
     contexto = _contexto_base(db, usuario)
     contexto["mensagem"] = f"Empresa {empresa.nome} cadastrada."
     return templates.TemplateResponse(request, "empresas.html", contexto)
+
+
+@router.post("/sincronizar-lista-oficial")
+def sincronizar(
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Sincroniza com a lista oficial de 48 empresas (nome + CNPJ) que a
+    Clara mandou em PDF (2026-09-24) — a confirmação (obrigatória, com o
+    nome digitado) acontece no navegador antes desse POST (ver empresas.html
+    e static/app.js). Irreversível para quem for excluído. Precisa ficar
+    ANTES de `POST /{empresa_id}` abaixo — senão o Starlette casa essa rota
+    com `empresa_id="sincronizar-lista-oficial"` primeiro e devolve 422."""
+    resumo = sincronizar_lista_oficial(db)
+    registrar(
+        db, usuario, "SINCRONIZOU_EMPRESAS_OFICIAIS", entidade="empresa_cliente",
+        detalhes=(
+            f"{len(resumo.criadas)} criada(s), {len(resumo.atualizadas_cnpj)} CNPJ atualizado(s), "
+            f"{len(resumo.excluidas)} excluída(s), {len(resumo.nao_excluidas_por_vinculo)} não excluída(s) por vínculo"
+        ),
+    )
+    mensagem = (
+        f"{len(resumo.criadas)} criada(s), {len(resumo.atualizadas_cnpj)} com CNPJ atualizado, "
+        f"{len(resumo.excluidas)} excluída(s)."
+    )
+    if resumo.nao_excluidas_por_vinculo:
+        mensagem += (
+            f" {len(resumo.nao_excluidas_por_vinculo)} não puderam ser excluídas por terem histórico "
+            f"vinculado: {', '.join(resumo.nao_excluidas_por_vinculo)}."
+        )
+    return RedirectResponse(f"/app/empresas?mensagem={quote(mensagem)}", status_code=303)
 
 
 @router.post("/{empresa_id}")

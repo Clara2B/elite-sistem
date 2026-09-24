@@ -865,3 +865,28 @@ Assessoria, sem lista cadastrada ainda).
 populados, alternância funcionário/texto funcionando, filtro por empresa correto, CRUD de
 funcionários funcionando).
 **Reversível:** sim — tabela e filtro isolados, sem FK apontando pra `Funcionario`.
+
+## 2026-09-24 — Sincronização com a lista oficial de empresas (PDF da Clara)
+
+**Contexto:** a Clara mandou um PDF ("INFOS ASSESSORIAS") com nome + CNPJ oficial de cada
+empresa-cliente, pedindo pra apagar o que está cadastrado e adicionar as novas. 48 empresas — 8 a
+mais do que a lista de 40 que ela tinha digitado de memória num pedido anterior.
+**Perguntei antes de implementar (4 pontos, todos aceitos com a opção recomendada):** (1) manter o
+nome curto no cadastro (não a razão social do PDF), pra não quebrar o reconhecimento de empresa nos
+imports futuros — sem adicionar campo de razão social; (2) incluir as 48 do PDF, não só as 40
+digitadas antes; (3) usar "WNFAST" (sem espaço, como a planilha real de processos já grava) em vez
+de "WN FAST" (como está escrito no PDF); (4) cadastrar "OPÇÃO1" sem CNPJ (o PDF não trouxe um).
+**Decisão:** `sincronizar_lista_oficial()` (`app/services/empresas.py`) cria/atualiza CNPJ das 48
+empresas oficiais e exclui de verdade qualquer empresa cadastrada fora dessa lista — reaproveitando
+a proteção que `excluir_empresa` já tinha antes (recusa excluir se houver laudo/audiência/cobrança/
+processo vinculado). Não force-apaguei histórico de nenhum outro módulo pra viabilizar a exclusão:
+quem não pôde ser excluída aparece detalhado na mensagem de resultado, pra Clara decidir o que
+fazer com cada uma.
+**Bug pego pelo teste antes do commit:** a rota web `POST /app/empresas/sincronizar-lista-oficial`
+precisou ser registrada antes de `POST /{empresa_id}` no arquivo de rotas — na ordem original, o
+Starlette casava com a rota de editar primeiro (`empresa_id="sincronizar-lista-oficial"`) e devolvia
+422 em vez de rodar a sincronização.
+**Validação:** 8 testes novos — 122 no total — + teste manual de ponta a ponta com Playwright
+(3 cenários: empresa sem vínculo excluída, empresa com laudo vinculado preservada e reportada, CNPJ
+de uma empresa já existente corrigido) batendo exatamente com o esperado.
+**Reversível:** não — as exclusões são definitivas; criação/CNPJ são triviais de reverter.

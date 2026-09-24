@@ -167,6 +167,34 @@ def test_empresas_exclusao_bloqueada_se_tiver_laudo_vinculado(client, db):
     assert empresa.id in ids
 
 
+def test_sincronizar_lista_oficial_via_web_exige_admin(client, db):
+    db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    db.add(EmpresaCliente(nome="EMPRESA FORA DA LISTA"))
+    db.commit()
+    client.post("/login", data={"email": "fulano@teste.local", "senha": "certa"})
+
+    resposta = client.post("/app/empresas/sincronizar-lista-oficial", follow_redirects=False)
+    assert resposta.status_code == 303
+    assert resposta.headers["location"].startswith("/app/empresas?mensagem=")
+
+    nomes = {e["nome"] for e in client.get("/empresas").json()}
+    assert "EMPRESA FORA DA LISTA" not in nomes
+    assert "ABSOLUTA" in nomes
+
+
+def test_sincronizar_lista_oficial_via_web_bloqueado_para_nao_admin(client, db):
+    setor = db.query(Setor).first()
+    usuario = Usuario(nome="Colaboradora", email="colab@teste.local", senha_hash=hash_senha("certa"))
+    db.add(usuario)
+    db.flush()
+    db.add(UsuarioSetor(usuario_id=usuario.id, setor_id=setor.id, papel="COLABORADOR"))
+    db.commit()
+    client.post("/login", data={"email": "colab@teste.local", "senha": "certa"})
+
+    resposta = client.post("/app/empresas/sincronizar-lista-oficial")
+    assert resposta.status_code == 403
+
+
 def test_empresas_pagina_restrita_a_admin(client, db):
     setor = db.query(Setor).first()
     usuario = Usuario(nome="Colaboradora", email="colab@teste.local", senha_hash=hash_senha("certa"))

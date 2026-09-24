@@ -12,6 +12,7 @@ from app.services.empresas import (
     criar_empresa,
     excluir_empresa,
     listar_empresas,
+    sincronizar_lista_oficial,
 )
 
 router = APIRouter(prefix="/empresas", tags=["empresas"])
@@ -100,3 +101,30 @@ def excluir(
         raise HTTPException(status_code=400, detail=str(e))
     registrar(db, usuario, "EXCLUIU_EMPRESA", entidade="empresa_cliente", entidade_id=empresa_id)
     return {"ok": True}
+
+
+@router.post("/sincronizar-lista-oficial")
+def sincronizar(
+    usuario: Usuario = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Sincroniza com a lista oficial de 48 empresas (nome + CNPJ) que a
+    Clara mandou em PDF (2026-09-24) — cria as que faltam, atualiza CNPJ das
+    existentes, exclui de verdade quem não está na lista (bloqueado se tiver
+    histórico vinculado — ver services/empresas.py::sincronizar_lista_oficial).
+    Irreversível para quem for excluído; só Admin Superior/T.I."""
+    resumo = sincronizar_lista_oficial(db)
+    registrar(
+        db, usuario, "SINCRONIZOU_EMPRESAS_OFICIAIS", entidade="empresa_cliente",
+        detalhes=(
+            f"{len(resumo.criadas)} criada(s), {len(resumo.atualizadas_cnpj)} CNPJ atualizado(s), "
+            f"{len(resumo.excluidas)} excluída(s), {len(resumo.nao_excluidas_por_vinculo)} não excluída(s) por vínculo"
+        ),
+    )
+    return {
+        "criadas": resumo.criadas,
+        "atualizadas_cnpj": resumo.atualizadas_cnpj,
+        "sem_mudanca": resumo.sem_mudanca,
+        "excluidas": resumo.excluidas,
+        "nao_excluidas_por_vinculo": resumo.nao_excluidas_por_vinculo,
+    }
