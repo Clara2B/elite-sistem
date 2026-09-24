@@ -544,3 +544,38 @@ def test_import_data_real_de_aba_dia_nao_e_marcada_como_liberacao(db):
 
     relatorio = gerar_relatorio(db, date(2026, 9, 1), date(2026, 9, 30))
     assert relatorio.total.eventos == 1
+
+
+def test_relatorio_filtra_por_empresa(db):
+    """Dropdown novo de Empresa no relatório (2026-09-24) — só processos da
+    empresa-cliente escolhida entram na contagem."""
+    p1 = _processo(db, numero="2222222-22.2026.8.11.0021", assistente="DANILO")
+    empresa2 = get_or_create_empresa(db, "OUTRA EMPRESA")
+    p2 = Processo(
+        numero_processo="3333333-33.2026.8.11.0022",
+        empresa_cliente_id=empresa2.id,
+        nome_cliente="Beltrano",
+        assistente="DANILO",
+    )
+    db.add(p2)
+    db.flush()
+    db.add_all(
+        [
+            EventoProcesso(processo_id=p1.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
+            EventoProcesso(processo_id=p2.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
+        ]
+    )
+    db.commit()
+
+    relatorio = gerar_relatorio(db, date(2026, 9, 1), date(2026, 9, 30), filtro_empresa="ABSOLUTA")
+    assert relatorio.total.processos == 1
+    assert relatorio.total.eventos == 1
+    assert relatorio.linhas[0].pessoa == "DANILO"
+
+
+def test_relatorio_empresa_inexistente_gera_erro(db):
+    try:
+        gerar_relatorio(db, date(2026, 9, 1), date(2026, 9, 30), filtro_empresa="NAO EXISTE")
+        assert False, "deveria ter levantado ValueError"
+    except ValueError as e:
+        assert "NAO EXISTE" in str(e)

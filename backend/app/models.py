@@ -45,6 +45,20 @@ class TipoLaudo(Base):
     ativo: Mapped[bool] = mapped_column(default=True)
 
 
+class Funcionario(Base):
+    """Cadastro manual dos assistentes de Gestão de Processos (2026-09-24) —
+    alimenta o seletor "Funcionário" do relatório de Processos, mesmo
+    padrão de EmpresaCliente. Não é FK de `Processo.assistente` (que
+    continua texto livre, vindo da planilha) — só uma lista de valores
+    pré-definidos pra montar o formulário sem digitar. Ver ARCHITECTURE.md."""
+
+    __tablename__ = "funcionarios"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    nome: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    ativo: Mapped[bool] = mapped_column(default=True)
+
+
 class Laudo(Base):
     __tablename__ = "laudos"
 

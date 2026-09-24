@@ -180,6 +180,97 @@ def test_empresas_pagina_restrita_a_admin(client, db):
     assert resposta.status_code == 403
 
 
+def test_funcionarios_admin_cria_edita_e_desativa(client, db):
+    db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    db.commit()
+    client.post("/login", data={"email": "fulano@teste.local", "senha": "certa"})
+
+    resposta = client.post("/app/funcionarios", data={"nome": "Danilo Teste"})
+    assert resposta.status_code == 200
+    assert "Danilo Teste" in resposta.text
+
+    funcionario_id = client.get("/funcionarios").json()[0]["id"]
+
+    resposta = client.post(f"/app/funcionarios/{funcionario_id}", data={"nome": "Danilo Editado"})
+    assert resposta.status_code == 200
+    assert "Danilo Editado" in resposta.text
+
+    resposta = client.post(f"/app/funcionarios/{funcionario_id}/ativo?ativo=false", follow_redirects=False)
+    assert resposta.status_code == 303
+    dados = client.get("/funcionarios").json()
+    assert dados[0]["ativo"] is False
+
+
+def test_funcionarios_nome_duplicado_mostra_erro(client, db):
+    db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    db.commit()
+    client.post("/login", data={"email": "fulano@teste.local", "senha": "certa"})
+
+    client.post("/app/funcionarios", data={"nome": "Duplicado"})
+    resposta = client.post("/app/funcionarios", data={"nome": "Duplicado"})
+    assert resposta.status_code == 400
+    assert "já existe" in resposta.text.lower()
+
+
+def test_funcionarios_exclusao_definitiva_funciona(client, db):
+    db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    db.commit()
+    client.post("/login", data={"email": "fulano@teste.local", "senha": "certa"})
+
+    client.post("/app/funcionarios", data={"nome": "Excluível"})
+    funcionario_id = next(f["id"] for f in client.get("/funcionarios").json() if f["nome"] == "Excluível")
+
+    resposta = client.post(f"/app/funcionarios/{funcionario_id}/excluir", follow_redirects=False)
+    assert resposta.status_code == 303
+    assert resposta.headers["location"].startswith("/app/funcionarios?mensagem=")
+
+    ids = [f["id"] for f in client.get("/funcionarios").json()]
+    assert funcionario_id not in ids
+
+
+def test_funcionarios_pagina_restrita_a_admin(client, db):
+    setor = db.query(Setor).first()
+    usuario = Usuario(nome="Colaboradora", email="colab@teste.local", senha_hash=hash_senha("certa"))
+    db.add(usuario)
+    db.flush()
+    db.add(UsuarioSetor(usuario_id=usuario.id, setor_id=setor.id, papel="COLABORADOR"))
+    db.commit()
+    client.post("/login", data={"email": "colab@teste.local", "senha": "certa"})
+
+    resposta = client.get("/app/funcionarios")
+    assert resposta.status_code == 403
+
+
+def test_relatorio_processos_filtra_por_empresa(client, db):
+    """Bug/pedido da Clara (2026-09-24): dropdown novo de Empresa no
+    relatório de Gestão de Processos — filtra os processos só dessa
+    empresa-cliente."""
+    db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    empresa1 = EmpresaCliente(nome="ABSOLUTA")
+    empresa2 = EmpresaCliente(nome="ALFA")
+    db.add_all([empresa1, empresa2])
+    db.flush()
+    p1 = Processo(numero_processo="5012298-14.2025.8.13.0231", empresa_cliente_id=empresa1.id, nome_cliente="Fulano", assistente="DANILO")
+    p2 = Processo(numero_processo="6012298-14.2025.8.13.0232", empresa_cliente_id=empresa2.id, nome_cliente="Beltrano", assistente="DANILO")
+    db.add_all([p1, p2])
+    db.flush()
+    db.add_all(
+        [
+            EventoProcesso(processo_id=p1.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
+            EventoProcesso(processo_id=p2.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
+        ]
+    )
+    db.commit()
+    client.post("/login", data={"email": "fulano@teste.local", "senha": "certa"})
+
+    resposta = client.get(
+        "/app/processos",
+        params={"periodo_ini": "2026-09-01", "periodo_fim": "2026-09-30", "empresa": "ABSOLUTA"},
+    )
+    assert resposta.status_code == 200
+    assert "<td>DANILO</td><td>1</td><td>1</td>" in resposta.text  # só o processo/evento da ABSOLUTA
+
+
 def test_erro_nao_tratado_em_rota_html_mostra_pagina_estilizada(client, db, monkeypatch):
     """A Clara reportou 'Internal Server Error' em branco ao importar
     audiências (era StringDataRightTruncation, já corrigido) — mas qualquer

@@ -956,3 +956,43 @@ mandou) encontrou **dois bugs reais**, nas duas direções:
 - **Reversível:** sim — `data_e_liberacao` é só um booleano; reverter a exclusão do relatório (ou a
   leitura da coluna EMPRESA) é uma mudança pequena e isolada se a regra mudar de novo.
 
+### 4.13 Dropdowns de Empresa e Funcionário no Relatório de Gestão de Processos (2026-09-24)
+
+A Clara pediu pra trocar digitação livre por menus suspensos no Relatório de Processos, usando a
+mesma fonte de dados dos menus já existentes noutras telas (sem duplicar lista). Contexto
+importante que ela trouxe antes de eu implementar: no futuro vai apagar todas as empresas
+cadastradas e recadastrar só as oficiais (com CNPJ), e quer que o sistema pare de criar empresa
+nova sozinho a partir da planilha — por isso o dropdown de Empresa lê direto de
+`empresas_clientes` (não duplica lista), e a mudança de "parar de auto-criar" fica para depois,
+como etapa separada (mexe no import de todos os módulos, não só nesse relatório).
+
+- **Novo cadastro `Funcionario`** (`app/models.py`, tabela `funcionarios`) — mesmo padrão de
+  `EmpresaCliente` (nome único, ativo), mas **não é FK** de `Processo.assistente` (que continua
+  texto livre, vindo da planilha): é só uma lista de valores pré-definidos pra montar o dropdown,
+  sem mexer em como o import já grava assistente. Semeados os 7 nomes que a Clara informou
+  (`DEFAULT_FUNCIONARIOS` em `app/db.py`), editável depois pela tela nova.
+- **Tela `/app/funcionarios`** (`app/web/routes_funcionarios.py` + `funcionarios.html`) e API
+  `/funcionarios` (`app/api/funcionarios.py`) — cadastro/edição/ativação/exclusão, mesmo padrão de
+  `/app/empresas`, restrito a Admin Superior/T.I. Exclusão não tem checagem de vínculo (não existe
+  FK) — só tira o nome do dropdown, não mexe em processo/evento já gravado.
+- **Relatório de Processos** (`app/services/processos.py::gerar_relatorio`) ganhou
+  `filtro_empresa` — filtra os eventos por `Processo.empresa_cliente_id`, resolvido por nome
+  normalizado (mesmo padrão de `gerar_relatorio` de Laudos/Audiências). Esse filtro **não existia
+  antes** nessa tela (só em Laudos/Audiências/Pendências).
+- **Campo "Pessoa" no formulário** (`processos.html`) — vira um dropdown de Funcionário quando
+  "Agrupar por" = Assistente (única opção com lista fixa; Advogada/Assessoria continuam texto
+  livre, sem lista cadastrada). Os dois campos têm o mesmo `name="pessoa"` mas só um fica habilitado
+  por vez — `app/static/app.js::iniciarAlternanciaFuncionario()`, alternando com base no valor de
+  "Agrupar por" (`[data-mostrar-se-agrupar]`), desabilitando o campo escondido pra não mandar dois
+  valores pro mesmo parâmetro no submit.
+- **Migração:** `_garantir_coluna` não é necessária (tabela nova, criada por `create_all`); banco
+  de produção já ganha `funcionarios` semeada no próximo deploy, sem passo manual.
+- **Testado:** 7 testes novos (serviço: filtro por empresa + empresa inexistente; web: CRUD de
+  funcionários, página restrita a admin, relatório filtrando por empresa) — 114 no total.
+  Verificação visual local com Playwright: dropdown de Empresa/Funcionário populados certinho,
+  alternância Funcionário↔texto-livre funcionando (campo escondido fica `disabled`), relatório
+  filtrado por empresa mostrando só o processo esperado, tela de Funcionários listando os 7 nomes
+  semeados.
+- **Reversível:** sim — tabela nova e campo de filtro isolados; reverter é remover a tabela/rota
+  sem afetar mais nada (não há FK apontando pra `Funcionario`).
+

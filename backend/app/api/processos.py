@@ -52,11 +52,12 @@ def relatorio(
     periodo_fim: date,
     agrupar_por: str = "assistente",
     pessoa: str | None = None,
+    empresa: str | None = None,
     usuario: Usuario = Depends(_acesso_elite),
     db: Session = Depends(get_db),
 ):
     try:
-        resultado = processos_service.gerar_relatorio(db, periodo_ini, periodo_fim, agrupar_por, pessoa)
+        resultado = processos_service.gerar_relatorio(db, periodo_ini, periodo_fim, agrupar_por, pessoa, empresa)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     titulo = f"Relatório de {pessoa}" if pessoa else "Relatório geral da equipe"
@@ -76,11 +77,12 @@ def relatorio_pdf(
     periodo_fim: date,
     agrupar_por: str = "assistente",
     pessoa: str | None = None,
+    empresa: str | None = None,
     usuario: Usuario = Depends(_acesso_elite),
     db: Session = Depends(get_db),
 ):
     try:
-        resultado = processos_service.gerar_relatorio(db, periodo_ini, periodo_fim, agrupar_por, pessoa)
+        resultado = processos_service.gerar_relatorio(db, periodo_ini, periodo_fim, agrupar_por, pessoa, empresa)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     titulo = f"Relatório de {pessoa}" if pessoa else "Relatório geral da equipe"

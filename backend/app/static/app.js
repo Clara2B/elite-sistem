@@ -129,9 +129,36 @@ function iniciarConfirmacaoPorTexto() {
   });
 }
 
+// Relatório de Gestão de Processos: o campo "pessoa" é um dropdown de
+// Funcionário (assistente) ou um texto livre (advogada/assessoria),
+// dependendo do "Agrupar por" escolhido — só uma das duas versões pode
+// estar habilitada de cada vez, senão o formulário manda dois valores pro
+// mesmo campo "pessoa". `[data-mostrar-se-agrupar="valor1,valor2"]` marca
+// cada bloco com os valores de "Agrupar por" em que ele deve aparecer.
+function iniciarAlternanciaFuncionario() {
+  var agrupar = document.getElementById("agrupar_por");
+  var campos = document.querySelectorAll("[data-mostrar-se-agrupar]");
+  if (!agrupar || !campos.length) return;
+
+  function atualizar() {
+    var valores = agrupar.value;
+    campos.forEach(function (campo) {
+      var aceita = campo.getAttribute("data-mostrar-se-agrupar").split(",");
+      var mostrar = aceita.indexOf(valores) !== -1;
+      campo.style.display = mostrar ? "" : "none";
+      var entrada = campo.querySelector("input, select");
+      if (entrada) entrada.disabled = !mostrar;
+    });
+  }
+
+  agrupar.addEventListener("change", atualizar);
+  atualizar();
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   iniciarZonasDeUpload();
   iniciarValidacaoDeUpload();
+  iniciarAlternanciaFuncionario();
   iniciarModaisDeConfirmacao();
   iniciarConfirmacaoPorTexto();
 });

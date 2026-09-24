@@ -410,12 +410,22 @@ def gerar_relatorio(
     periodo_fim: date,
     agrupar_por: str = "assistente",
     filtro_pessoa: str | None = None,
+    filtro_empresa: str | None = None,
 ) -> RelatorioProcessos:
     """`agrupar_por`: 'assistente', 'advogada' ou 'assessoria'. `filtro_pessoa`:
     se informado, só essa pessoa/assessoria entra no relatório (relatório
-    individual); senão, todas (relatório geral)."""
+    individual); senão, todas (relatório geral). `filtro_empresa`: se
+    informado, só processos dessa empresa-cliente entram (2026-09-24)."""
     if agrupar_por not in {"assistente", "advogada", "assessoria"}:
         raise ValueError("agrupar_por precisa ser 'assistente', 'advogada' ou 'assessoria'.")
+
+    empresa_id = None
+    if filtro_empresa:
+        alvo_empresa = normalize(filtro_empresa)
+        empresa = next((e for e in db.scalars(select(EmpresaCliente)) if normalize(e.nome) == alvo_empresa), None)
+        if empresa is None:
+            raise ValueError(f"A empresa '{filtro_empresa}' não foi encontrada.")
+        empresa_id = empresa.id
 
     hoje = date.today()
     limite_parado = hoje - timedelta(days=PROCESSO_PARADO_DIAS)
@@ -449,6 +459,10 @@ def gerar_relatorio(
             EventoProcesso.data_e_liberacao.is_(False),
         )
     )
+    if empresa_id is not None:
+        query_eventos = query_eventos.where(
+            EventoProcesso.processo_id.in_(select(Processo.id).where(Processo.empresa_cliente_id == empresa_id))
+        )
     for evento in db.scalars(query_eventos):
         processo = evento.processo
         pessoa = _agrupar_por(processo, agrupar_por)

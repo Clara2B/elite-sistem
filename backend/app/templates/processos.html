@@ -69,16 +69,34 @@
         <input type="date" id="periodo_fim" name="periodo_fim" value="{{ filtro.periodo_fim }}" required>
       </div>
       <div class="campo">
+        <label for="empresa">Empresa-cliente (opcional — deixe em branco para todas)</label>
+        <select id="empresa" name="empresa">
+          <option value="">Todas</option>
+          {% for e in empresas %}
+            <option value="{{ e.nome }}" {{ "selected" if filtro.empresa == e.nome else "" }}>{{ e.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="campo">
         <label for="agrupar_por">Agrupar por</label>
-        <select id="agrupar_por" name="agrupar_por">
+        <select id="agrupar_por" name="agrupar_por" data-alterna-pessoa>
           <option value="assistente" {{ "selected" if filtro.agrupar_por == "assistente" else "" }}>Assistente</option>
           <option value="advogada" {{ "selected" if filtro.agrupar_por == "advogada" else "" }}>Advogada</option>
           <option value="assessoria" {{ "selected" if filtro.agrupar_por == "assessoria" else "" }}>Assessoria</option>
         </select>
       </div>
-      <div class="campo">
-        <label for="pessoa">Pessoa/assessoria (individual — deixe em branco para o geral)</label>
-        <input type="text" id="pessoa" name="pessoa" value="{{ filtro.pessoa }}" placeholder="Ex.: DANILO ou HUNTING">
+      <div class="campo" data-mostrar-se-agrupar="assistente">
+        <label for="pessoa-funcionario">Funcionário (individual — deixe em branco para o geral)</label>
+        <select id="pessoa-funcionario" name="pessoa">
+          <option value="">Todos</option>
+          {% for f in funcionarios %}
+            <option value="{{ f.nome }}" {{ "selected" if filtro.pessoa == f.nome else "" }}>{{ f.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="campo" data-mostrar-se-agrupar="advogada,assessoria" style="display:none;">
+        <label for="pessoa-texto">Advogada/assessoria (individual — deixe em branco para o geral)</label>
+        <input type="text" id="pessoa-texto" name="pessoa" value="{{ filtro.pessoa }}" placeholder="Ex.: HUNTING">
       </div>
       <button type="submit">Gerar relatório</button>
     </form>
@@ -89,7 +107,7 @@
       <h2>
         {{ "Relatório de " + filtro.pessoa if filtro.pessoa else "Relatório geral da equipe" }}
         <a class="botao secundario" style="float:right; font-size:0.82rem; padding:6px 12px;"
-           href="/processos/relatorio.pdf?periodo_ini={{ filtro.periodo_ini }}&periodo_fim={{ filtro.periodo_fim }}&agrupar_por={{ filtro.agrupar_por }}&pessoa={{ filtro.pessoa }}">
+           href="/processos/relatorio.pdf?periodo_ini={{ filtro.periodo_ini }}&periodo_fim={{ filtro.periodo_fim }}&agrupar_por={{ filtro.agrupar_por }}&pessoa={{ filtro.pessoa }}&empresa={{ filtro.empresa }}">
           Baixar PDF
         </a>
       </h2>

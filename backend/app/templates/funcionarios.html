@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block titulo %}Funcionários — Elite Sistem{% endblock %}
+{% block conteudo %}
+  {% import "_icones.html" as icones %}
+  {% import "_flash.html" as flash %}
+  <h1>Funcionários</h1>
+  <p class="subtitulo">Assistentes de Gestão de Processos — alimenta o dropdown "Funcionário" do relatório.</p>
+
+  {{ flash.toast('sucesso', mensagem) }}
+  {{ flash.toast('erro', erro) }}
+
+  <div class="card">
+    <div class="card-header"><h2>Cadastrados ({{ funcionarios|length }})</h2></div>
+    {% if funcionarios %}
+      {% for f in funcionarios %}
+        <form id="funcionario-{{ f.id }}" method="post" action="/app/funcionarios/{{ f.id }}"></form>
+      {% endfor %}
+      <div class="tabela-wrap">
+        <table>
+          <thead><tr><th>Nome</th><th>Status</th><th style="width:1%;"></th></tr></thead>
+          <tbody>
+            {% for f in funcionarios %}
+              <tr>
+                <td>
+                  <input type="text" name="nome" value="{{ f.nome }}" required form="funcionario-{{ f.id }}"
+                         style="min-width:200px; padding:6px 9px; border:1px solid var(--border); border-radius:7px; font-size:0.86rem;">
+                </td>
+                <td>
+                  {% if f.ativo %}<span class="badge ativo">Ativo</span>{% else %}<span class="badge inativo">Inativo</span>{% endif %}
+                </td>
+                <td>
+                  <div class="acoes-linha">
+                    <button type="submit" form="funcionario-{{ f.id }}" class="secundario" style="padding:7px 12px; font-size:0.8rem;">Salvar</button>
+                    <form method="post" action="/app/funcionarios/{{ f.id }}/ativo?ativo={{ 'false' if f.ativo else 'true' }}">
+                      <button type="submit" class="{{ 'perigo' if f.ativo else 'secundario' }}" style="padding:7px 12px; font-size:0.8rem;">
+                        {{ "Desativar" if f.ativo else "Ativar" }}
+                      </button>
+                    </form>
+                    <button type="button" class="perigo" style="padding:7px 10px; font-size:0.8rem;"
+                            data-abrir-confirmacao="modal-excluir-{{ f.id }}" data-nome-alvo="{{ f.nome }}"
+                            aria-label="Excluir {{ f.nome }}">
+                      {{ icones.icone('lixeira') }}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% for f in funcionarios %}
+        <dialog id="modal-excluir-{{ f.id }}" class="modal-confirmacao">
+          <div class="modal-corpo">
+            <div class="modal-icone">{{ icones.icone('alerta') }}</div>
+            <h3>Excluir funcionário?</h3>
+            <p>
+              Isso vai apagar <strong data-nome-alvo-destino>{{ f.nome }}</strong> definitivamente do
+              cadastro — só tira o nome do dropdown do relatório, não mexe em nenhum processo ou
+              evento já gravado.
+            </p>
+          </div>
+          <div class="modal-acoes">
+            <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
+            <form method="post" action="/app/funcionarios/{{ f.id }}/excluir">
+              <button type="submit" class="perigo">Excluir definitivamente</button>
+            </form>
+          </div>
+        </dialog>
+      {% endfor %}
+    {% else %}
+      <p class="vazio">Nenhum funcionário cadastrado ainda.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Novo funcionário</h2></div>
+    <form class="formulario" method="post" action="/app/funcionarios">
+      <div class="campo">
+        <label for="nome">Nome</label>
+        <input type="text" id="nome" name="nome" required placeholder="Ex.: DANILO">
+      </div>
+      <button type="submit">Cadastrar</button>
+    </form>
+  </div>
+{% endblock %}

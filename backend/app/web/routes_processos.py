@@ -13,6 +13,8 @@ from app.db import get_db
 from app.models import Usuario
 from app.services import processos as processos_service
 from app.services.auditoria import registrar
+from app.services.empresas import listar_empresas
+from app.services.funcionarios import listar_funcionarios
 from app.web.auth import admin_logado_web, require_operadora_web
 from app.web.menu import itens_menu
 from app.web.templates import templates
@@ -31,6 +33,8 @@ def _contexto_base(db: Session, usuario: Usuario) -> dict:
     return {
         "usuario": usuario,
         "menu": itens_menu(db, usuario),
+        "empresas": listar_empresas(db, apenas_ativas=False),
+        "funcionarios": listar_funcionarios(db, apenas_ativos=False),
         "filtro": {},
         "resultado": None,
         "prazos": processos_service.prazos_proximos(db, dias=30),
@@ -47,6 +51,7 @@ def tela(
     periodo_fim: date | None = None,
     agrupar_por: str = "assistente",
     pessoa: str | None = None,
+    empresa: str | None = None,
     mensagem: str | None = None,
     usuario: Usuario = Depends(_acesso_elite),
     db: Session = Depends(get_db),
@@ -59,11 +64,12 @@ def tela(
         "periodo_fim": periodo_fim or padrao_fim,
         "agrupar_por": agrupar_por,
         "pessoa": pessoa or "",
+        "empresa": empresa or "",
     }
     try:
         resultado = processos_service.gerar_relatorio(
             db, contexto["filtro"]["periodo_ini"], contexto["filtro"]["periodo_fim"],
-            agrupar_por, pessoa or None,
+            agrupar_por, pessoa or None, empresa or None,
         )
     except ValueError as e:
         contexto["erro"] = str(e)
@@ -84,7 +90,10 @@ async def importar(
     path = salvar_temp(arquivo)
     contexto = _contexto_base(db, usuario)
     padrao_ini, padrao_fim = _periodo_padrao()
-    contexto["filtro"] = {"periodo_ini": padrao_ini, "periodo_fim": padrao_fim, "agrupar_por": "assistente", "pessoa": ""}
+    contexto["filtro"] = {
+        "periodo_ini": padrao_ini, "periodo_fim": padrao_fim,
+        "agrupar_por": "assistente", "pessoa": "", "empresa": "",
+    }
     try:
         resumo = processos_service.importar_planilha(db, path, usuario_id=usuario.id)
     except ValueError as e:

@@ -836,3 +836,32 @@ reais de setembro (data real na coluna "DIA"), só que numa aba separada da mens
 rodando o import completo contra a planilha real da Clara (fora da suíte): "empresa não
 reconhecida" caiu de 6.632 para 450 linhas; total do período foi de 3.552 para 2.693.
 **Reversível:** sim — mudanças isoladas e pequenas (uma coluna nova, um booleano) se a regra mudar.
+
+## 2026-09-24 — Dropdowns de Empresa e Funcionário no Relatório de Processos
+
+**Contexto:** a Clara pediu pra trocar digitação livre por menus suspensos no Relatório de Gestão
+de Processos, reaproveitando a mesma fonte de dados dos menus já existentes (sem duplicar lista).
+Antes de implementar, ela avisou um plano futuro: apagar todas as empresas cadastradas e recadastrar
+só as oficiais (com CNPJ), e parar o sistema de criar empresa nova sozinho a partir da planilha —
+perguntou se isso mudava a forma de implementar.
+**Minha recomendação (aceita):** sim, seguir a ideia de reaproveitar a mesma fonte
+(`empresas_clientes`) pro dropdown de Empresa — assim, quando ela recadastrar as 40 oficiais, o
+relatório já reflete automaticamente, sem eu mexer de novo. Mas tratar "parar de auto-criar
+empresa no import" como etapa **separada**, futura — é uma mudança mais delicada (toca import de
+Laudos/Audiências/Pendências/Processos) que merece sua própria decisão sobre o que fazer com uma
+linha cuja empresa não está cadastrada.
+**Achado ao investigar:** nem o dropdown de Empresa nem de Funcionário existiam de fato no
+Relatório de Processos antes disso — Empresa não tinha filtro nenhum ali (só em Laudos/Audiências/
+Pendências), e "Funcionário" não existia como lista cadastrada em lugar nenhum do sistema
+(assistente/advogada sempre foram texto livre, vindo da planilha).
+**Decisões da Clara:** (1) Funcionário = os assistentes de Gestão de Processos; (2) guardar numa
+tabela editável (não fixo no código), mesmo padrão de Empresa.
+**Implementação:** tabela nova `Funcionario` (nome, ativo — sem FK de `Processo.assistente`, que
+continua texto livre), semeada com os 7 nomes que ela informou; tela `/app/funcionarios` (CRUD,
+admin) espelhando `/app/empresas`; `gerar_relatorio` ganhou `filtro_empresa`; campo "Pessoa" agora
+alterna entre dropdown de Funcionário (quando agrupa por Assistente) e texto livre (Advogada/
+Assessoria, sem lista cadastrada ainda).
+**Validação:** 7 testes novos — 114 no total — + verificação visual local com Playwright (dropdowns
+populados, alternância funcionário/texto funcionando, filtro por empresa correto, CRUD de
+funcionários funcionando).
+**Reversível:** sim — tabela e filtro isolados, sem FK apontando pra `Funcionario`.

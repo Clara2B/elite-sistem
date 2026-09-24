@@ -9,6 +9,7 @@ from app.config import settings
 from app.models import (
     Base,
     FaixaAudiencia,
+    Funcionario,
     Operadora,
     Setor,
     TipoEvento,
@@ -41,6 +42,13 @@ DEFAULT_SETORES = {
     "ELITE": ["Líder - Gestão de Processos", "Doutores(as)", "Admin/dona", "Financeiro"],
     "EXIMIA": ["Financeiro"],
 }
+
+# Assistentes de Gestão de Processos informados pela Clara (2026-09-24) —
+# ponto de partida do cadastro em `Funcionario`; editável depois em
+# /app/funcionarios, sem precisar mexer em código pra adicionar/remover.
+DEFAULT_FUNCIONARIOS = [
+    "GABRIELA", "DANILO", "FLAVIA", "RAFAELA", "JHENIFFER", "ISABEL", "GUSTAVO",
+]
 
 # Catálogo inicial de tipos de evento — os mais frequentes observados na
 # planilha real "ELITE - GESTÃO DE PROCESSOS.xlsx" (Fase 5). Igual aos tipos
@@ -216,6 +224,9 @@ def init_db() -> None:
         if db.scalar(select(TipoEvento.id).limit(1)) is None:
             for nome in DEFAULT_TIPOS_EVENTO:
                 db.add(TipoEvento(nome=nome))
+        if db.scalar(select(Funcionario.id).limit(1)) is None:
+            for nome in DEFAULT_FUNCIONARIOS:
+                db.add(Funcionario(nome=nome))
 
         operadoras = {o.nome: o for o in db.scalars(select(Operadora))}
         for nome in ("EXIMIA", "ELITE"):
