@@ -660,3 +660,9 @@ menos idas e vindas ao banco e menos leitura desperdiçada.
    adivinhar.
 6. Confirmar com a Clara que o modal de exclusão de empresa aparece estilizado depois do deploy do
    cache-busting (ela viu sem estilo por causa de CSS em cache — ver entrada 2026-09-23 acima).
+7. Tela de "acordando" do Render (2026-09-24) — confirmado: é o "sleep" por inatividade do plano
+   gratuito (não um bug), aparece depois de ~15 minutos sem uso. Duas opções apresentadas: upgrade
+   pago (~US$7/mês, instância "Starter", elimina o sleep de vez — não precisa de plano de workspace
+   pago junto) ou um "ping" automático externo pra manter o serviço sempre ativo (grátis, mas não é
+   garantido). A Clara decidiu deixar como está por enquanto — não é uma pendência técnica, é uma
+   decisão de custo dela; só retomar se ela pedir.
