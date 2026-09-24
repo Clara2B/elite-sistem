@@ -5,7 +5,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api._shared import salvar_temp
-from app.auth import require_operadora
+from app.auth import require_admin, require_operadora
 from app.db import get_db
 from app.models import Usuario
 from app.pdf_export import gerar_pdf_processos
@@ -32,6 +32,18 @@ def importar(
         raise HTTPException(status_code=400, detail=str(e))
     registrar(db, usuario, "IMPORTOU_PROCESSOS", entidade="processo", detalhes=str(resumo))
     return resumo
+
+
+@router.delete("")
+def apagar_tudo(
+    usuario: Usuario = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Apaga todo o histórico de Gestão de Processos (processos + eventos)
+    — irreversível; só Admin Superior/T.I. (ver DECISIONS.md 2026-09-24)."""
+    total = processos_service.apagar_todos_processos(db)
+    registrar(db, usuario, "APAGOU_TODOS_PROCESSOS", entidade="processo", detalhes=f"{total} processo(s) apagado(s)")
+    return {"apagados": total}
 
 
 @router.get("/relatorio")

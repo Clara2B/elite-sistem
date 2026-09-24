@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass, field
 
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.excel_reader import load_data_sheets
@@ -176,6 +176,18 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
     db.commit()
     _logger.info("import pendencias: %.1fs total — %s", time.perf_counter() - inicio, resumo)
     return resumo
+
+
+def apagar_todas_pendencias(db: Session) -> int:
+    """Apaga TODO o histórico de cobranças (EXÍMIA e ELITE juntas, mesma
+    tabela) — mesma "zona de perigo" já disponibilizada em Laudos (ver
+    DECISIONS.md 2026-09-24), estendida aqui a pedido da Clara. Irreversível
+    — a tela que chama isso exige confirmação explícita antes. Só
+    cobranças; não mexe em empresas-clientes nem em nenhum outro módulo."""
+    total = db.scalar(select(func.count()).select_from(Cobranca)) or 0
+    db.execute(delete(Cobranca))
+    db.commit()
+    return total
 
 
 @dataclass

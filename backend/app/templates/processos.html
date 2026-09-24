@@ -119,4 +119,41 @@
       {% endif %}
     </div>
   {% endif %}
+
+  {% if eh_admin %}
+    <div class="card" style="border: 1px solid var(--danger-soft);">
+      <h2>Zona de perigo</h2>
+      <p class="subtitulo">
+        Apaga TODO o histórico de Gestão de Processos do sistema (todos os processos e eventos,
+        todos os períodos) — use só pra corrigir dados importados errados, antes de reimportar a
+        planilha do zero.
+      </p>
+      <button type="button" class="perigo" data-abrir-confirmacao="modal-apagar-processos">
+        {{ icones.icone('lixeira') }} Apagar todo o histórico de processos
+      </button>
+    </div>
+
+    <dialog id="modal-apagar-processos" class="modal-confirmacao">
+      <div class="modal-corpo">
+        <div class="modal-icone">{{ icones.icone('alerta') }}</div>
+        <h3>Apagar todo o histórico de processos?</h3>
+        <p>
+          Isso vai apagar <strong>todos</strong> os processos e eventos de <strong>todas</strong>
+          as empresas-clientes, de qualquer período — sem volta. Só faça isso se for reimportar a
+          planilha completa logo em seguida.
+        </p>
+        <div class="campo" style="margin-top: 14px;">
+          <label for="confirmar-apagar-processos">Digite APAGAR para confirmar</label>
+          <input type="text" id="confirmar-apagar-processos" autocomplete="off"
+                 data-confirmar-texto="APAGAR" placeholder="APAGAR">
+        </div>
+      </div>
+      <div class="modal-acoes">
+        <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
+        <form method="post" action="/app/processos/apagar-tudo">
+          <button type="submit" class="perigo" data-confirmar-alvo>Apagar tudo</button>
+        </form>
+      </div>
+    </dialog>
+  {% endif %}
 {% endblock %}

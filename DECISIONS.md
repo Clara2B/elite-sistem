@@ -745,6 +745,24 @@ verificação visual local com planilha sintética (Não/Sim/vazio), confirmando
 pendência.
 **Reversível:** sim — é uma única constante; fácil de reverter se a regra mudar de novo.
 
+## 2026-09-24 — "Zona de perigo" (apagar todo o histórico) estendida para Audiências, Pendências e Gestão de Processos
+
+**Contexto:** a Clara pediu pra adicionar o mesmo botão de "apagar todo o histórico" que já existia
+em Laudos (entrada 2026-09-24 acima) também nas telas de Audiências, Pendências e Gestão de
+Processos.
+**Decisão:** implementei `apagar_todas_audiencias()`, `apagar_todas_pendencias()` e
+`apagar_todos_processos()`, cada uma seguindo exatamente o mesmo formato de `apagar_todos_laudos()`
+— rota web e de API, ambas restritas a Admin Superior/T.I., mesmo modal de confirmação por texto
+digitado ("APAGAR") já usado em Laudos, reaproveitado sem escrever JS novo.
+**Particularidade de Gestão de Processos:** não há `cascade` entre `eventos_processo` e `processos`
+no banco — `apagar_todos_processos()` apaga os eventos antes dos processos, na mesma função/
+transação, senão a segunda parte quebraria por chave estrangeira.
+**Validação:** 12 testes novos (serviço + rota web, um par por módulo) — 103 no total — +
+verificação visual local com Playwright nas três telas (botão só aparece pra admin, modal abre,
+botão de confirmar destrava só depois de digitar "APAGAR", exclusão real confirmada em Audiências
+ponta a ponta).
+**Reversível:** não — mesma natureza irreversível da função já existente em Laudos.
+
 ## Pendências abertas
 
 1. Política de retenção de dados pessoais (LGPD) — `SECURITY.md` seção 6. Ainda mais relevante

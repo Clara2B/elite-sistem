@@ -7,6 +7,7 @@ from sqlalchemy import Text
 
 from app.models import Audiencia
 from app.services.audiencias import (
+    apagar_todas_audiencias,
     gerar_relatorio,
     importar_planilha,
     periodo_quinzenal,
@@ -123,3 +124,26 @@ def test_import_cpf_com_texto_longo_nao_quebra(db):
     resumo = importar_planilha(db, str(path))
     assert resumo.linhas_novas == 1
     assert db.query(Audiencia).one().cpf == cpf_longo
+
+
+def test_apagar_todas_audiencias_remove_tudo_e_devolve_a_contagem(db):
+    empresa1 = get_or_create_empresa(db, "ALFA")
+    empresa2 = get_or_create_empresa(db, "BETA")
+    db.add_all(
+        [
+            Audiencia(empresa_cliente_id=empresa1.id, nome_cliente="Fulano", data_recebimento=date(2026, 9, 1)),
+            Audiencia(empresa_cliente_id=empresa2.id, nome_cliente="Beltrano", data_recebimento=date(2026, 9, 2)),
+        ]
+    )
+    db.commit()
+
+    apagadas = apagar_todas_audiencias(db)
+
+    assert apagadas == 2
+    assert db.query(Audiencia).count() == 0
+    # não mexe nas empresas-clientes
+    assert get_or_create_empresa(db, "ALFA").id == empresa1.id
+
+
+def test_apagar_todas_audiencias_com_banco_ja_vazio(db):
+    assert apagar_todas_audiencias(db) == 0

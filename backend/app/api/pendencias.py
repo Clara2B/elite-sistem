@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api._shared import salvar_temp
-from app.auth import get_current_user, operadoras_acessiveis
+from app.auth import get_current_user, operadoras_acessiveis, require_admin
 from app.db import get_db
 from app.models import Usuario
 from app.services import pendencias as pendencias_service
@@ -30,6 +30,18 @@ def importar(
         raise HTTPException(status_code=400, detail=str(e))
     registrar(db, usuario, "IMPORTOU_PENDENCIAS", entidade="cobranca", detalhes=str(resumo))
     return resumo
+
+
+@router.delete("")
+def apagar_tudo(
+    usuario: Usuario = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Apaga todo o histórico de cobranças/pendências (EXÍMIA e ELITE) —
+    irreversível; só Admin Superior/T.I. (ver DECISIONS.md 2026-09-24)."""
+    total = pendencias_service.apagar_todas_pendencias(db)
+    registrar(db, usuario, "APAGOU_TODAS_PENDENCIAS", entidade="cobranca", detalhes=f"{total} cobrança(s) apagada(s)")
+    return {"apagados": total}
 
 
 @router.get("/mensagens")

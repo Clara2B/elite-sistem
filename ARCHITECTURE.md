@@ -870,3 +870,36 @@ pago/resolvido; qualquer outro valor não-vazio ("NÃO", "EM ATRASO", "PENDENTE"
 - **Reversível:** sim — é só uma constante (`STATUS_PAGO_OK`); reverter é trivial se a regra mudar
   de novo no futuro.
 
+### 4.11 "Zona de perigo" estendida para Audiências, Pendências e Gestão de Processos (2026-09-24)
+
+A Clara pediu pra estender o botão "Apagar todo o histórico" (criado na seção 4.9, só em Laudos)
+para as outras três telas de import/relatório — mesmo padrão, mesma barreira de confirmação.
+
+- **Serviço:** `apagar_todas_audiencias()` (`app/services/audiencias.py`), `apagar_todas_pendencias()`
+  (`app/services/pendencias.py`) e `apagar_todos_processos()` (`app/services/processos.py`) — mesmo
+  formato de `apagar_todos_laudos()` (`DELETE` em massa numa transação só, devolve a contagem
+  apagada). Gestão de Processos é o único caso com uma particularidade: não há `cascade` configurado
+  entre `eventos_processo` e `processos` (ver `app/models.py`), então `apagar_todos_processos()`
+  apaga os eventos primeiro e só depois os processos, na mesma função — sem isso a segunda parte
+  falharia por violação de chave estrangeira. A contagem devolvida é de PROCESSOS, não de eventos.
+- **Rotas web `POST /app/<módulo>/apagar-tudo`** e **rotas API `DELETE /<módulo>`** — todas
+  restritas a Admin Superior/T.I. (`admin_logado_web`/`require_admin`), igual Laudos — mais
+  restrito que o acesso normal por operadora dessas telas (ex.: Audiências normalmente só exige
+  acesso à EXIMIA; apagar tudo exige ser admin, mesmo que o admin veja as duas operadoras).
+- **Tela:** mesmo bloco "Zona de perigo" + modal com confirmação por texto digitado ("APAGAR") já
+  usado em Laudos, reaproveitando o mecanismo genérico `data-confirmar-texto`/`data-confirmar-alvo`
+  (`app/static/app.js`) — nenhum JS novo precisou ser escrito, só o HTML do modal em cada template.
+- **Testado:** 12 testes novos — serviço (apaga tudo + devolve a contagem certa, banco já vazio não
+  quebra, cada módulo) e rota web (admin consegue com redirecionamento e mensagem, não-admin recebe
+  403 sem apagar nada, cada módulo) — 103 testes no total. Verificação visual local com Playwright
+  nas três telas: botão aparece só pra admin, modal abre, botão de confirmar fica desabilitado até
+  digitar "APAGAR" (maiúsculas/minúsculas não importam), e o registro de teste some de verdade
+  depois de confirmar (audiências verificado ponta a ponta; pendências/processos verificados até a
+  abertura do modal e o destravamento do botão, mesmo código do backend já coberto por teste
+  automatizado).
+- **Sem rotas de API JSON dedicadas em teste:** diferente de Laudos (que tem `tests/test_api_laudos.py`),
+  Audiências/Pendências/Gestão de Processos nunca tiveram um arquivo de teste de API JSON próprio
+  neste projeto (só teste de serviço + teste de tela web) — as novas rotas `DELETE` seguem o mesmo
+  padrão de cobertura já existente para essas três telas, não o de Laudos.
+- **Reversível:** não — mesma natureza irreversível de Laudos; a barreira de confirmação é a mesma.
+

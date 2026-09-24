@@ -12,6 +12,7 @@ from app.services.processos import (
     _mes_referencia_da_aba,
     _pessoa_valida,
     _separar_assessoria,
+    apagar_todos_processos,
     gerar_relatorio,
     importar_planilha,
     marcar_resolvido,
@@ -442,3 +443,28 @@ def test_import_varios_eventos_do_mesmo_processo_novo_na_mesma_planilha(db, tmp_
     assert len(processos) == 1  # não duplicou o processo
     eventos = db.query(EventoProcesso).filter_by(processo_id=processos[0].id).all()
     assert {e.tipo_evento_nome for e in eventos} == {"CUSTAS", "DOCUMENTOS"}
+
+
+def test_apagar_todos_processos_remove_processos_e_eventos_e_devolve_a_contagem(db):
+    p1 = _processo(db, numero="1717171-71.2026.8.11.0016")
+    p2 = _processo(db, numero="1818181-81.2026.8.11.0017")
+    db.add_all(
+        [
+            EventoProcesso(processo_id=p1.id, data=date(2026, 9, 1), tipo_evento_nome="CUSTAS"),
+            EventoProcesso(processo_id=p1.id, data=date(2026, 9, 2), tipo_evento_nome="DOCUMENTOS"),
+            EventoProcesso(processo_id=p2.id, data=date(2026, 9, 1), tipo_evento_nome="CUSTAS"),
+        ]
+    )
+    db.commit()
+
+    apagados = apagar_todos_processos(db)
+
+    assert apagados == 2
+    assert db.query(Processo).count() == 0
+    assert db.query(EventoProcesso).count() == 0
+    # não mexe nas empresas-clientes
+    assert get_or_create_empresa(db, "ABSOLUTA").nome == "ABSOLUTA"
+
+
+def test_apagar_todos_processos_com_banco_ja_vazio(db):
+    assert apagar_todos_processos(db) == 0

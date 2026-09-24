@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, Request, UploadFile
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.api._shared import salvar_temp
-from app.auth import operadoras_acessiveis
+from app.auth import PAPEIS_GLOBAIS, operadoras_acessiveis
 from app.db import get_db
 from app.models import Usuario
 from app.services import pendencias as pendencias_service
 from app.services.auditoria import registrar
 from app.services.empresas import listar_empresas
-from app.web.auth import usuario_logado_web
+from app.web.auth import admin_logado_web, usuario_logado_web
 from app.web.menu import itens_menu
 from app.web.templates import templates
 
@@ -26,6 +29,7 @@ def _contexto_base(db: Session, usuario: Usuario) -> dict:
         "mensagens": None,
         "mensagem": None,
         "erro": None,
+        "eh_admin": usuario.papel_global in PAPEIS_GLOBAIS,
     }
 
 
@@ -33,10 +37,12 @@ def _contexto_base(db: Session, usuario: Usuario) -> dict:
 def tela(
     request: Request,
     empresa: str | None = None,
+    mensagem: str | None = None,
     usuario: Usuario = Depends(usuario_logado_web),
     db: Session = Depends(get_db),
 ):
     contexto = _contexto_base(db, usuario)
+    contexto["mensagem"] = mensagem
     contexto["filtro"] = {"empresa": empresa}
     if empresa:
         try:
@@ -74,3 +80,18 @@ async def importar(
             f"({resumo.linhas_ja_existentes} já existiam de antes)."
         )
     return templates.TemplateResponse(request, "pendencias.html", contexto)
+
+
+@router.post("/apagar-tudo")
+def apagar_tudo(
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Apaga todo o histórico de cobranças/pendências (EXÍMIA e ELITE) —
+    irreversível; só Admin Superior/T.I. A confirmação (obrigatória, com o
+    nome digitado) acontece no navegador antes desse POST — ver
+    pendencias.html/static/app.js."""
+    total = pendencias_service.apagar_todas_pendencias(db)
+    registrar(db, usuario, "APAGOU_TODAS_PENDENCIAS", entidade="cobranca", detalhes=f"{total} cobrança(s) apagada(s)")
+    mensagem = quote(f"{total} cobrança(s) apagada(s). Pode importar a planilha do zero agora.")
+    return RedirectResponse(f"/app/pendencias?mensagem={mensagem}", status_code=303)

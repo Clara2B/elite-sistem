@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.excel_reader import load_data_sheets
@@ -308,6 +308,23 @@ def importar_planilha(db: Session, path: str, usuario_id: int | None = None) -> 
     db.commit()
     _logger.info("import processos: %.1fs total — %s", time.perf_counter() - inicio, resumo)
     return resumo
+
+
+def apagar_todos_processos(db: Session) -> int:
+    """Apaga TODO o histórico de Gestão de Processos (processos + seus
+    eventos/andamentos) — mesma "zona de perigo" já disponibilizada em
+    Laudos (ver DECISIONS.md 2026-09-24), estendida aqui a pedido da Clara.
+    Não há cascade configurado entre `eventos_processo` e `processos`
+    (ver app/models.py), então os eventos são apagados primeiro. Devolve a
+    contagem de PROCESSOS apagados (não de eventos). Irreversível — a tela
+    que chama isso exige confirmação explícita antes. Só Gestão de
+    Processos; não mexe em empresas-clientes, tipos de evento cadastrados
+    nem em nenhum outro módulo."""
+    total = db.scalar(select(func.count()).select_from(Processo)) or 0
+    db.execute(delete(EventoProcesso))
+    db.execute(delete(Processo))
+    db.commit()
+    return total
 
 
 def tipos_evento_cadastrados(db: Session) -> set[str]:

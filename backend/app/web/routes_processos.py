@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 from datetime import date
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.api._shared import salvar_temp
+from app.auth import PAPEIS_GLOBAIS
 from app.db import get_db
 from app.models import Usuario
 from app.services import processos as processos_service
 from app.services.auditoria import registrar
-from app.web.auth import require_operadora_web
+from app.web.auth import admin_logado_web, require_operadora_web
 from app.web.menu import itens_menu
 from app.web.templates import templates
 
@@ -34,6 +36,7 @@ def _contexto_base(db: Session, usuario: Usuario) -> dict:
         "prazos": processos_service.prazos_proximos(db, dias=30),
         "mensagem": None,
         "erro": None,
+        "eh_admin": usuario.papel_global in PAPEIS_GLOBAIS,
     }
 
 
@@ -44,10 +47,12 @@ def tela(
     periodo_fim: date | None = None,
     agrupar_por: str = "assistente",
     pessoa: str | None = None,
+    mensagem: str | None = None,
     usuario: Usuario = Depends(_acesso_elite),
     db: Session = Depends(get_db),
 ):
     contexto = _contexto_base(db, usuario)
+    contexto["mensagem"] = mensagem
     padrao_ini, padrao_fim = _periodo_padrao()
     contexto["filtro"] = {
         "periodo_ini": periodo_ini or padrao_ini,
@@ -108,3 +113,18 @@ def resolver(
     else:
         registrar(db, usuario, "RESOLVEU_EVENTO_PROCESSO", entidade="evento_processo", entidade_id=evento_id)
     return RedirectResponse("/app/processos", status_code=303)
+
+
+@router.post("/apagar-tudo")
+def apagar_tudo(
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Apaga todo o histórico de Gestão de Processos (processos + eventos)
+    — irreversível; só Admin Superior/T.I. A confirmação (obrigatória, com
+    o nome digitado) acontece no navegador antes desse POST — ver
+    processos.html/static/app.js."""
+    total = processos_service.apagar_todos_processos(db)
+    registrar(db, usuario, "APAGOU_TODOS_PROCESSOS", entidade="processo", detalhes=f"{total} processo(s) apagado(s)")
+    mensagem = quote(f"{total} processo(s) apagado(s). Pode importar a planilha do zero agora.")
+    return RedirectResponse(f"/app/processos?mensagem={mensagem}", status_code=303)

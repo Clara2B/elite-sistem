@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.excel_reader import load_data_sheets
@@ -117,6 +117,18 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
     db.commit()
     _logger.info("import audiencias: %.1fs total — %s", time.perf_counter() - inicio, resumo)
     return resumo
+
+
+def apagar_todas_audiencias(db: Session) -> int:
+    """Apaga TODO o histórico de audiências — mesma "zona de perigo" já
+    disponibilizada em Laudos (ver DECISIONS.md 2026-09-24), estendida aqui
+    a pedido da Clara. Irreversível — a tela que chama isso exige
+    confirmação explícita antes. Só audiências; não mexe em
+    empresas-clientes nem em nenhum outro módulo."""
+    total = db.scalar(select(func.count()).select_from(Audiencia)) or 0
+    db.execute(delete(Audiencia))
+    db.commit()
+    return total
 
 
 @dataclass

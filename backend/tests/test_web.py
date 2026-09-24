@@ -5,7 +5,17 @@ página 403)."""
 from datetime import date
 
 from app.auth import hash_senha
-from app.models import EmpresaCliente, Laudo, Setor, Usuario, UsuarioSetor
+from app.models import (
+    Audiencia,
+    Cobranca,
+    EmpresaCliente,
+    EventoProcesso,
+    Laudo,
+    Processo,
+    Setor,
+    Usuario,
+    UsuarioSetor,
+)
 
 
 def test_login_form_carrega(client):
@@ -259,3 +269,109 @@ def test_apagar_todos_laudos_via_web_bloqueado_para_nao_admin(client, db):
     resposta = client.post("/app/laudos/apagar-tudo")
     assert resposta.status_code == 403
     assert db.query(Laudo).count() == 1  # nada foi apagado
+
+
+def test_apagar_todas_audiencias_via_web_exige_admin(client, db):
+    db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    empresa = EmpresaCliente(nome="ABSOLUTA")
+    db.add(empresa)
+    db.flush()
+    db.add(Audiencia(empresa_cliente_id=empresa.id, nome_cliente="Fulano", data_recebimento=date(2026, 1, 25)))
+    db.commit()
+    client.post("/login", data={"email": "fulano@teste.local", "senha": "certa"})
+
+    resposta = client.post("/app/audiencias/apagar-tudo", follow_redirects=False)
+    assert resposta.status_code == 303
+    assert resposta.headers["location"].startswith("/app/audiencias?mensagem=")
+    assert db.query(Audiencia).count() == 0
+
+
+def test_apagar_todas_audiencias_via_web_bloqueado_para_nao_admin(client, db):
+    setor = db.query(Setor).first()
+    usuario = Usuario(nome="Colaboradora", email="colab@teste.local", senha_hash=hash_senha("certa"))
+    db.add(usuario)
+    db.flush()
+    db.add(UsuarioSetor(usuario_id=usuario.id, setor_id=setor.id, papel="COLABORADOR"))
+    empresa = EmpresaCliente(nome="ABSOLUTA")
+    db.add(empresa)
+    db.flush()
+    db.add(Audiencia(empresa_cliente_id=empresa.id, nome_cliente="Fulano", data_recebimento=date(2026, 1, 25)))
+    db.commit()
+    client.post("/login", data={"email": "colab@teste.local", "senha": "certa"})
+
+    resposta = client.post("/app/audiencias/apagar-tudo")
+    assert resposta.status_code == 403
+    assert db.query(Audiencia).count() == 1  # nada foi apagado
+
+
+def test_apagar_todas_pendencias_via_web_exige_admin(client, db):
+    db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    empresa = EmpresaCliente(nome="ABSOLUTA")
+    db.add(empresa)
+    db.flush()
+    db.add(Cobranca(empresa_cliente_id=empresa.id, data=date(2026, 1, 25), tipo_cobranca="MENSALIDADE",
+                     cobrador="ELITE", valor=100.0, status_pagamento="Não"))
+    db.commit()
+    client.post("/login", data={"email": "fulano@teste.local", "senha": "certa"})
+
+    resposta = client.post("/app/pendencias/apagar-tudo", follow_redirects=False)
+    assert resposta.status_code == 303
+    assert resposta.headers["location"].startswith("/app/pendencias?mensagem=")
+    assert db.query(Cobranca).count() == 0
+
+
+def test_apagar_todas_pendencias_via_web_bloqueado_para_nao_admin(client, db):
+    setor = db.query(Setor).first()
+    usuario = Usuario(nome="Colaboradora", email="colab@teste.local", senha_hash=hash_senha("certa"))
+    db.add(usuario)
+    db.flush()
+    db.add(UsuarioSetor(usuario_id=usuario.id, setor_id=setor.id, papel="COLABORADOR"))
+    empresa = EmpresaCliente(nome="ABSOLUTA")
+    db.add(empresa)
+    db.flush()
+    db.add(Cobranca(empresa_cliente_id=empresa.id, data=date(2026, 1, 25), tipo_cobranca="MENSALIDADE",
+                     cobrador="ELITE", valor=100.0, status_pagamento="Não"))
+    db.commit()
+    client.post("/login", data={"email": "colab@teste.local", "senha": "certa"})
+
+    resposta = client.post("/app/pendencias/apagar-tudo")
+    assert resposta.status_code == 403
+    assert db.query(Cobranca).count() == 1  # nada foi apagado
+
+
+def test_apagar_todos_processos_via_web_exige_admin(client, db):
+    db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    empresa = EmpresaCliente(nome="ABSOLUTA")
+    db.add(empresa)
+    db.flush()
+    processo = Processo(numero_processo="5012298-14.2025.8.13.0231", empresa_cliente_id=empresa.id, nome_cliente="Fulano")
+    db.add(processo)
+    db.flush()
+    db.add(EventoProcesso(processo_id=processo.id, data=date(2026, 1, 25), tipo_evento_nome="CUSTAS"))
+    db.commit()
+    client.post("/login", data={"email": "fulano@teste.local", "senha": "certa"})
+
+    resposta = client.post("/app/processos/apagar-tudo", follow_redirects=False)
+    assert resposta.status_code == 303
+    assert resposta.headers["location"].startswith("/app/processos?mensagem=")
+    assert db.query(Processo).count() == 0
+    assert db.query(EventoProcesso).count() == 0
+
+
+def test_apagar_todos_processos_via_web_bloqueado_para_nao_admin(client, db):
+    setor = db.query(Setor).first()
+    usuario = Usuario(nome="Colaboradora", email="colab@teste.local", senha_hash=hash_senha("certa"))
+    db.add(usuario)
+    db.flush()
+    db.add(UsuarioSetor(usuario_id=usuario.id, setor_id=setor.id, papel="COLABORADOR"))
+    empresa = EmpresaCliente(nome="ABSOLUTA")
+    db.add(empresa)
+    db.flush()
+    processo = Processo(numero_processo="5012298-14.2025.8.13.0231", empresa_cliente_id=empresa.id, nome_cliente="Fulano")
+    db.add(processo)
+    db.commit()
+    client.post("/login", data={"email": "colab@teste.local", "senha": "certa"})
+
+    resposta = client.post("/app/processos/apagar-tudo")
+    assert resposta.status_code == 403
+    assert db.query(Processo).count() == 1  # nada foi apagado
