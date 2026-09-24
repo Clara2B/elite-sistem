@@ -45,6 +45,19 @@ def _canonical_header(texto: str) -> str:
     return HEADER_ALIASES.get(chave, chave)
 
 
+# Texto exato (antes do alias) que HEADER_ALIASES equipara a "DATA" — mas
+# semanticamente é outra coisa: a data em que a Dra inseriu o cliente na
+# planilha (intake), não a data do andamento em si. Algumas abas "coringa"
+# da planilha real de Gestão de Processos (fatais, Dra Galzo, DOCS E CUSTAS
+# etc.) só têm essa coluna, sem nenhuma data de andamento de verdade — ver
+# app/services/processos.py, que usa esse marcador pra excluir essas linhas
+# do filtro por período do relatório mensal (a Clara confirmou: não deve
+# contar como se fosse o mês do andamento).
+_TEXTO_DATA_DE_LIBERACAO = normalize(
+    "DATA DE LIBERAÇÃO - QUANDO A DRA INSERIIU O CLIENTE NA PLANILHA"
+)
+
+
 def _find_header_row(rows: list[tuple], required_headers: list[str]) -> int | None:
     required_canonicos = [_canonical_header(h) for h in required_headers]
     for i, row in enumerate(rows[:5]):
@@ -127,6 +140,13 @@ def load_data_sheets(
             # nalgumas abas, não em todas. A Clara confirmou: a data certa é
             # sempre a da coluna A. Ver app/services/laudos.py.
             df["_COL_A"] = [r[0] if r else None for r in data_rows]
+            # True quando o que essa aba chama de "DATA" (depois do alias em
+            # HEADER_ALIASES) na verdade veio da coluna de data de liberação/
+            # intake, não de uma data de andamento real — ver comentário de
+            # `_TEXTO_DATA_DE_LIBERACAO` acima.
+            df["_DATA_E_LIBERACAO"] = any(
+                c is not None and normalize(c) == _TEXTO_DATA_DE_LIBERACAO for c in rows[header_idx]
+            )
             df = df.dropna(how="all", subset=[c for c in cols if c != "_ABA"])
             frames.append(df)
             abas_aproveitadas += 1

@@ -197,6 +197,7 @@ def init_db() -> None:
     engine = get_engine()
     Base.metadata.create_all(engine)
     _garantir_coluna(engine, "eventos_processo", "mes_referencia", "VARCHAR(20)")
+    _garantir_coluna(engine, "eventos_processo", "data_e_liberacao", "BOOLEAN NOT NULL DEFAULT FALSE")
     _garantir_coluna(engine, "processos", "assessoria", "TEXT")
     _garantir_texto_ilimitado(engine, "processos", "nome_cliente", "advogada", "assistente")
     _garantir_texto_ilimitado(engine, "eventos_processo", "tipo_evento_nome")

@@ -903,3 +903,56 @@ para as outras três telas de import/relatório — mesmo padrão, mesma barreir
   padrão de cobertura já existente para essas três telas, não o de Laudos.
 - **Reversível:** não — mesma natureza irreversível de Laudos; a barreira de confirmação é a mesma.
 
+### 4.12 Relatório de Gestão de Processos contando errado no mês corrente (2026-09-24)
+
+A Clara reportou o relatório geral mostrando 3.552 eventos pro período 01/09–24/09/2026, quando a
+aba SETEMBRO26 da planilha real só tem ~2.449 linhas. Investigação (com a planilha real que ela
+mandou) encontrou **dois bugs reais**, nas duas direções:
+
+- **Empresa não reconhecida nas abas novas (fazia perder quase todo o mês corrente):** a partir de
+  algum mês (confirmado em AGOSTO26/SETEMBRO26), a planilha passou a ter a empresa numa **coluna
+  própria** ("EMPRESA"), em vez do formato antigo "EMPRESA - Cliente" embutido na coluna CLIENTE. O
+  import só sabia separar o formato antigo (`_separar_empresa_cliente`) — sem reconhecer a coluna
+  nova, ~97% das linhas da aba SETEMBRO26 (2.333 de 2.406) eram descartadas por "empresa não
+  reconhecida", nunca chegando a virar `Processo`/`EventoProcesso`. **Corrigido:**
+  `importar_planilha` (`app/services/processos.py`) agora usa a coluna EMPRESA diretamente quando
+  ela existir e vier preenchida na linha; cai pro formato com hífen só quando não tiver essa coluna
+  (abas antigas continuam funcionando exatamente como antes).
+- **"DATA DE LIBERAÇÃO" sendo contada como se fosse a data do andamento (fazia ganhar eventos de
+  outros meses):** algumas abas "coringa" (fatais, Dra Galzo, Dra Kelly, Dra Sleiman, DOCS E
+  CUSTAS, JUN-25 a OUT-25) não têm uma coluna de data de andamento real — só "DATA DE LIBERAÇÃO —
+  QUANDO A DRA INSERIU O CLIENTE NA PLANILHA" (data de intake do cliente naquela aba, não do
+  andamento em si), que o `HEADER_ALIASES` (`app/excel_reader.py`) já equiparava a "DATA" por falta
+  de coluna melhor. Isso fazia uma linha entrar no relatório do mês em que o cliente foi
+  cadastrado naquela aba, não no mês do andamento de verdade — ex.: a aba "FATAIS 08" sozinha
+  contribuiu 333 "eventos de setembro" que eram só datas de liberação. A Clara confirmou: essas
+  linhas não devem contar no filtro por período do relatório (continuam existindo no sistema
+  normalmente, só não entram nessa contagem mensal). **Corrigido:** novo marcador
+  `_DATA_E_LIBERACAO` em `load_data_sheets` (`app/excel_reader.py`), por aba, sinalizando quando o
+  que virou "DATA" veio literalmente dessa coluna de liberação — não de "DATA"/"DIA" (essas
+  continuam contando normalmente: a aba FATAIS 08, por ex., usa "DIA" com data real do andamento,
+  não é afetada). Novo campo `EventoProcesso.data_e_liberacao` (`app/models.py`, migrado via
+  `_garantir_coluna` em `app/db.py`) grava esse marcador por evento; `gerar_relatorio` exclui
+  eventos com esse marcador do filtro por período.
+- **Não é um terceiro bug, mas parte da explicação:** parte da diferença entre 2.449 (contagem
+  manual da Clara, só da aba SETEMBRO26) e o total certo do sistema depois da correção (~2.693) é
+  legítima — a aba "FATAIS 08" tem ~333 prazos fatais de setembro de verdade (datas reais na coluna
+  "DIA"), só que registrados numa aba separada da mensal, que a contagem manual não incluiu.
+- **Sem migração de dados corrompidos:** diferente do bug de Laudos (seção 4.8), aqui a `data` já
+  gravada nos eventos existentes está correta (o bug era só de contagem — não gravava data errada,
+  só deixava de reconhecer empresa ou contava uma data errada como se fosse "a" data certa); a
+  contagem de empresa incorreta, porém, significa que a maior parte do mês corrente simplesmente
+  **nunca foi importada** — recomendado à Clara apagar o histórico de Gestão de Processos (zona de
+  perigo, seção 4.11) e reimportar a planilha completa pra ter certeza de que tudo está coberto com
+  a lógica corrigida, em vez de tentar reconciliar incrementalmente.
+- **Testado:** 4 testes novos — `test_import_reconhece_empresa_em_coluna_propria_alem_do_formato_com_hifen`,
+  `test_import_marca_data_de_liberacao_e_relatorio_a_exclui_do_periodo`,
+  `test_import_data_real_de_aba_dia_nao_e_marcada_como_liberacao`
+  (`tests/test_processos_service.py`) e `test_load_data_sheets_marca_data_e_liberacao_so_na_aba_que_usa_esse_alias`
+  (`tests/test_excel_reader.py`) — 107 testes no total. Validado também rodando o import completo
+  contra a planilha real que a Clara mandou (fora da suíte automatizada): "empresa não reconhecida"
+  caiu de 6.632 para 450 linhas, e o total de eventos no período 01/09–24/09/2026 foi de 3.552 para
+  2.693 (≈2.365 da aba SETEMBRO26 + ≈328 de FATAIS 08, ambos com data real).
+- **Reversível:** sim — `data_e_liberacao` é só um booleano; reverter a exclusão do relatório (ou a
+  leitura da coluna EMPRESA) é uma mudança pequena e isolada se a regra mudar de novo.
+

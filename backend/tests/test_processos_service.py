@@ -468,3 +468,79 @@ def test_apagar_todos_processos_remove_processos_e_eventos_e_devolve_a_contagem(
 
 def test_apagar_todos_processos_com_banco_ja_vazio(db):
     assert apagar_todos_processos(db) == 0
+
+
+def test_import_reconhece_empresa_em_coluna_propria_alem_do_formato_com_hifen(db):
+    """Bug real reportado pela Clara (2026-09-24): abas mais recentes (ex.:
+    SETEMBRO26) passaram a ter EMPRESA numa coluna própria, sem o formato
+    antigo "EMPRESA - Cliente" embutido em CLIENTE. Sem esse reconhecimento,
+    quase toda a aba era descartada do import por "empresa não reconhecida"
+    — o relatório do mês corrente ficava com quase nada."""
+    numero = "1919191-91.2026.8.11.0018"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "SETEMBRO26"
+    ws.append(["ASSISTENTE", "MÊS", "DIA", "EMPRESA", "CLIENTE", "Nº PROCESSO", "EVENTO"])
+    ws.append(["DANILO", "SETEMBRO", date(2026, 9, 5), "ABSOLUTA", "Fulano de Tal", numero, "CUSTAS"])
+    path = Path(tempfile.mkdtemp()) / "processos.xlsx"
+    wb.save(path)
+
+    resumo = importar_planilha(db, str(path))
+    assert resumo.linhas_novas == 1
+    assert resumo.linhas_sem_empresa_reconhecida == 0
+
+    processo = db.query(Processo).filter_by(numero_processo=numero).one()
+    assert processo.nome_cliente == "Fulano de Tal"
+    from app.services.empresas import get_or_create_empresa
+
+    assert processo.empresa_cliente_id == get_or_create_empresa(db, "ABSOLUTA").id
+
+
+def test_import_marca_data_de_liberacao_e_relatorio_a_exclui_do_periodo(db):
+    """Bug real (2026-09-24): abas "coringa" (fatais, Dra Galzo, DOCS E
+    CUSTAS etc.) não têm data de andamento real — só a data em que a Dra
+    inseriu o cliente na planilha. Essas linhas não podem contar como se
+    fossem eventos daquele mês no relatório por período (a Clara
+    confirmou), mas continuam existindo no sistema normalmente."""
+    numero = "2020202-02.2026.8.11.0019"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Dra Teste"
+    ws.append(["ASSISTENTE", "ANO", "MÊS", "DATA DE LIBERAÇÃO - QUANDO A DRA INSERIIU O CLIENTE NA PLANILHA", "CLIENTE", "Nº PROCESSO", "EVENTO"])
+    ws.append(["DANILO", 2026, "SETEMBRO", date(2026, 9, 5), "ABSOLUTA - Fulano de Tal", numero, "CUSTAS"])
+    path = Path(tempfile.mkdtemp()) / "processos.xlsx"
+    wb.save(path)
+
+    resumo = importar_planilha(db, str(path))
+    assert resumo.linhas_novas == 1
+
+    evento = db.query(EventoProcesso).join(Processo).filter(Processo.numero_processo == numero).one()
+    assert evento.data == date(2026, 9, 5)
+    assert evento.data_e_liberacao is True
+
+    relatorio = gerar_relatorio(db, date(2026, 9, 1), date(2026, 9, 30))
+    assert relatorio.total.eventos == 0  # excluído do relatório por período
+    assert relatorio.linhas == []
+
+
+def test_import_data_real_de_aba_dia_nao_e_marcada_como_liberacao(db):
+    """Regressão do teste acima: uma aba cuja coluna de data se chama "DIA"
+    (ex.: FATAIS 08 na planilha real) tem data de andamento de verdade, não
+    é a mesma coisa que "DATA DE LIBERAÇÃO" — não pode ser excluída do
+    relatório por período."""
+    numero = "2121212-12.2026.8.11.0020"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "FATAIS 09"
+    ws.append(["ASSISTENTE", "MÊS", "DIA", "CLIENTE", "Nº PROCESSO", "EVENTO"])
+    ws.append(["DANILO", "SETEMBRO", date(2026, 9, 5), "ABSOLUTA - Fulano de Tal", numero, "CUSTAS"])
+    path = Path(tempfile.mkdtemp()) / "processos.xlsx"
+    wb.save(path)
+
+    importar_planilha(db, str(path))
+
+    evento = db.query(EventoProcesso).join(Processo).filter(Processo.numero_processo == numero).one()
+    assert evento.data_e_liberacao is False
+
+    relatorio = gerar_relatorio(db, date(2026, 9, 1), date(2026, 9, 30))
+    assert relatorio.total.eventos == 1

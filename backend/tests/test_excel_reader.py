@@ -57,3 +57,25 @@ def test_load_data_sheets_preenche_col_a_pela_posicao_nao_pelo_nome():
     assert "_COL_A" in df.columns
     valores = sorted(parse_date_cell(v) for v in df["_COL_A"])
     assert valores == [date(2026, 8, 26), date(2026, 9, 11)]
+
+
+def test_load_data_sheets_marca_data_e_liberacao_so_na_aba_que_usa_esse_alias():
+    """`_DATA_E_LIBERACAO` sinaliza, por aba, quando o que virou "DATA" (via
+    HEADER_ALIASES) veio da coluna de data de liberação/intake — não de uma
+    data de andamento real (ver app/services/processos.py). Uma aba com
+    "DIA" (data real) não deve ser marcada; só a que usa literalmente
+    "DATA DE LIBERAÇÃO - QUANDO A DRA INSERIIU O CLIENTE NA PLANILHA"."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "FATAIS 08"
+    ws.append(["CLIENTE", "Nº PROCESSO", "DIA"])
+    ws.append(["Fulano de Tal", "1234567-11.2026.8.11.0001", date(2026, 9, 5)])
+    ws2 = wb.create_sheet("Dra Teste")
+    ws2.append(["CLIENTE", "Nº PROCESSO", "DATA DE LIBERAÇÃO - QUANDO A DRA INSERIIU O CLIENTE NA PLANILHA"])
+    ws2.append(["Beltrano", "7654321-22.2026.8.11.0002", date(2026, 9, 6)])
+    path = Path(tempfile.mkdtemp()) / "processos.xlsx"
+    wb.save(path)
+
+    df = load_data_sheets(str(path), ["CLIENTE", "Nº PROCESSO"])
+    marcadas = dict(zip(df["_ABA"], df["_DATA_E_LIBERACAO"], strict=True))
+    assert marcadas == {"FATAIS 08": False, "Dra Teste": True}

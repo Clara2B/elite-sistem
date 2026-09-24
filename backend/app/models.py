@@ -230,6 +230,14 @@ class EventoProcesso(Base):
     # aba não é nomeada por mês (ex. abas "fatais", "DOCS E CUSTAS"). Ver
     # app/services/processos.py::_mes_referencia_da_aba.
     mes_referencia: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # True quando `data` na verdade veio da coluna "DATA DE LIBERAÇÃO..."
+    # (data em que a Dra inseriu o cliente na planilha — abas "coringa" como
+    # fatais/Dra Galzo/DOCS E CUSTAS não têm data de andamento real), não de
+    # uma data de andamento de verdade. `gerar_relatorio` exclui esses
+    # eventos do filtro por período (a Clara confirmou: não deve contar como
+    # se fosse o mês do andamento) — ver DECISIONS.md 2026-09-24 e
+    # app/excel_reader.py::_TEXTO_DATA_DE_LIBERACAO.
+    data_e_liberacao: Mapped[bool] = mapped_column(default=False)
     prazo_fatal: Mapped[bool] = mapped_column(default=False)
     data_prazo: Mapped[date | None] = mapped_column(Date, nullable=True)
     resolvido: Mapped[bool] = mapped_column(default=False)

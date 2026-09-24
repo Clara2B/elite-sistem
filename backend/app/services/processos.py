@@ -155,6 +155,14 @@ def importar_planilha(db: Session, path: str, usuario_id: int | None = None) -> 
     col_cliente = _col(df, "CLIENTE")
     col_numero = _col(df, "Nº PROCESSO")
     col_data = _col_optional(df, "DATA")
+    # Abas mais recentes (ex.: AGOSTO26, SETEMBRO26) passaram a ter a empresa
+    # numa coluna própria, separada do cliente — diferente do formato antigo
+    # "EMPRESA - Cliente" embutido na coluna CLIENTE (`_separar_empresa_cliente`
+    # abaixo). Sem isso, essas linhas não tinham empresa reconhecida e eram
+    # descartadas inteiras do import — bug real reportado pela Clara (via
+    # relatório de Gestão de Processos com contagem errada, ver DECISIONS.md
+    # 2026-09-24).
+    col_empresa = _col_optional(df, "EMPRESA")
     col_evento = _col_optional(df, "EVENTO")
     col_prazo = _col_optional(df, "PRAZO FATAL")
     col_observacao = _col_optional(df, "OBSERVAÇÃO")
@@ -195,15 +203,28 @@ def importar_planilha(db: Session, path: str, usuario_id: int | None = None) -> 
             continue
 
         cliente_campo = cell_text(row.get(col_cliente))
-        separado = _separar_empresa_cliente(cliente_campo)
-        if separado is None:
-            resumo.linhas_sem_empresa_reconhecida += 1
-            continue
-        empresa_nome, nome_cliente = separado
+        empresa_col_valor = cell_text(row.get(col_empresa)) if col_empresa else ""
+        if empresa_col_valor and cliente_campo:
+            empresa_nome, nome_cliente = empresa_col_valor, cliente_campo
+        else:
+            separado = _separar_empresa_cliente(cliente_campo)
+            if separado is None:
+                resumo.linhas_sem_empresa_reconhecida += 1
+                continue
+            empresa_nome, nome_cliente = separado
 
         data_val = parse_date_cell(row.get(col_data)) if col_data else None
         if data_val is None:
             continue  # sem data não dá pra colocar no relatório por período
+        # Algumas abas "coringa" (fatais, Dra Galzo, DOCS E CUSTAS etc.) não
+        # têm data de andamento real — só a data em que a Dra inseriu o
+        # cliente na planilha, que `load_data_sheets` também apelida de
+        # "DATA" por falta de outra coluna melhor (ver
+        # app/excel_reader.py::_TEXTO_DATA_DE_LIBERACAO). Marca a origem
+        # pra `gerar_relatorio` excluir do filtro por período — a Clara
+        # confirmou que essas linhas não devem contar como se fossem do mês
+        # marcado por essa data (ver DECISIONS.md 2026-09-24).
+        data_e_liberacao = bool(row.get("_DATA_E_LIBERACAO", False))
 
         empresa = get_or_create_empresa(db, empresa_nome, cache=empresa_cache)
 
@@ -270,6 +291,9 @@ def importar_planilha(db: Session, path: str, usuario_id: int | None = None) -> 
             if mes_referencia and evento_existente.mes_referencia != mes_referencia:
                 evento_existente.mes_referencia = mes_referencia
                 atualizado = True
+            if evento_existente.data_e_liberacao != data_e_liberacao:
+                evento_existente.data_e_liberacao = data_e_liberacao
+                atualizado = True
             if atualizado:
                 resumo.linhas_atualizadas += 1
             continue
@@ -285,6 +309,7 @@ def importar_planilha(db: Session, path: str, usuario_id: int | None = None) -> 
             data=data_val,
             tipo_evento_nome=tipo_evento.upper(),
             mes_referencia=mes_referencia,
+            data_e_liberacao=data_e_liberacao,
             prazo_fatal=prazo_fatal,
             data_prazo=None,  # não extraído do histórico — ver docstring do módulo
             observacao=observacao,
@@ -409,10 +434,20 @@ def gerar_relatorio(
     # padrão só de abrir a tela, mesmo sem pedir relatório nenhum). Um
     # período típico de um mês é uma fração pequena do total de eventos, e
     # a consulta abaixo só traz esses — normalmente cabe num único lote.
+    # `data_e_liberacao` exclui eventos cuja "data" não é a de um andamento
+    # de verdade, só a de quando a Dra inseriu o cliente na planilha (abas
+    # coringa como fatais/Dra Galzo/DOCS E CUSTAS) — contá-los no filtro por
+    # período distorceria o mês (a Clara confirmou, ver DECISIONS.md
+    # 2026-09-24). Eles continuam existindo no sistema normalmente, só não
+    # entram nesse relatório por período.
     query_eventos = (
         select(EventoProcesso)
         .options(selectinload(EventoProcesso.processo))
-        .where(EventoProcesso.data >= periodo_ini, EventoProcesso.data <= periodo_fim)
+        .where(
+            EventoProcesso.data >= periodo_ini,
+            EventoProcesso.data <= periodo_fim,
+            EventoProcesso.data_e_liberacao.is_(False),
+        )
     )
     for evento in db.scalars(query_eventos):
         processo = evento.processo

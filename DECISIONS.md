@@ -800,3 +800,39 @@ ponta a ponta).
    todas as empresas foram afetadas e pediu pra apagar todo o histórico de laudos; construída a
    função/rota de "apagar tudo" (ver entrada 2026-09-24 acima). Falta ela de fato clicar em apagar
    e reimportar a planilha completa — só aí a Fase 5/6 de Laudos volta a ter dado confiável no ar.
+10. Relatório de Gestão de Processos com contagem errada no mês corrente — corrigido (ver entrada
+    2026-09-24 "Relatório de Gestão de Processos..." abaixo); falta a Clara apagar o histórico de
+    processos (zona de perigo, mesma seção) e reimportar a planilha completa pra garantir que os
+    dados de meses recentes (que estavam sendo descartados) entrem certinho no sistema.
+
+## 2026-09-24 — Relatório de Gestão de Processos contando errado no mês corrente
+
+**Contexto:** a Clara reportou (com print e a planilha real anexada): o relatório geral mostrou
+3.552 eventos pro período 01/09–24/09/2026, mas a aba SETEMBRO26 da planilha só tem ~2.449 linhas.
+Pediu pra explicar como o relatório está puxando os dados e o que está puxando.
+**Investigação:** com a planilha real, encontrei dois bugs reais, um em cada direção. (1) Abas
+recentes (AGOSTO26/SETEMBRO26) passaram a ter EMPRESA numa coluna própria, não mais embutida no
+formato "EMPRESA - Cliente" da coluna CLIENTE — o import só sabia o formato antigo, então ~97% da
+aba SETEMBRO26 (2.333 de 2.406 linhas) era descartada como "empresa não reconhecida", nunca virava
+`Processo`/`EventoProcesso`. (2) Abas "coringa" (fatais, Dra Galzo, Dra Kelly, Dra Sleiman, DOCS E
+CUSTAS, JUN-25 a OUT-25) não têm data de andamento real, só "DATA DE LIBERAÇÃO — QUANDO A DRA
+INSERIU O CLIENTE NA PLANILHA" — o sistema tratava isso como se fosse a data do andamento, fazendo
+uma linha contar no mês em que o cliente foi cadastrado naquela aba, não no mês do andamento de
+verdade (ex.: FATAIS 08 sozinha contribuiu 333 "eventos de setembro" que eram só data de intake).
+**Perguntei à Clara e ela decidiu:** (1) corrigir o import pra aceitar as duas formas de EMPRESA
+(coluna própria ou hífen); (2) as abas sem data real de andamento não devem contar no filtro por
+período do relatório — continuam existindo no sistema normalmente, só não entram nessa contagem
+mensal.
+**Decisão/implementação:** `importar_planilha` (`app/services/processos.py`) agora lê a coluna
+EMPRESA diretamente quando ela existir e vier preenchida; `load_data_sheets`
+(`app/excel_reader.py`) ganhou um marcador `_DATA_E_LIBERACAO` por aba, sinalizando quando a
+"DATA" resolvida veio literalmente da coluna de liberação (não de "DATA"/"DIA" — essas continuam
+tendo data real, ex. FATAIS 08); novo campo `EventoProcesso.data_e_liberacao` grava esse marcador
+por evento, e `gerar_relatorio` exclui eventos marcados do filtro por período.
+**Achado que não é bug:** parte da diferença entre 2.449 (contagem manual da Clara, só da aba
+SETEMBRO26) e o total correto pós-correção (~2.693) é legítima — FATAIS 08 tem ~333 prazos fatais
+reais de setembro (data real na coluna "DIA"), só que numa aba separada da mensal.
+**Validação:** 4 testes novos (serviço + leitor de planilha) — 107 no total — + validação manual
+rodando o import completo contra a planilha real da Clara (fora da suíte): "empresa não
+reconhecida" caiu de 6.632 para 450 linhas; total do período foi de 3.552 para 2.693.
+**Reversível:** sim — mudanças isoladas e pequenas (uma coluna nova, um booleano) se a regra mudar.
