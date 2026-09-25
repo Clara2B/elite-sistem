@@ -269,10 +269,44 @@ def test_funcionarios_pagina_restrita_a_admin(client, db):
     assert resposta.status_code == 403
 
 
-def test_relatorio_processos_filtra_por_empresa(client, db):
-    """Bug/pedido da Clara (2026-09-24): dropdown novo de Empresa no
-    relatório de Gestão de Processos — filtra os processos só dessa
-    empresa-cliente."""
+def test_relatorio_processos_geral_mostra_secao_por_empresa(client, db):
+    """Bloco 1 (2026-09-25): tipo "Geral" — uma seção por empresa, com as
+    duas partes (Assistente/Nº processo/Evento/Fatal e Cliente/Nº processo/
+    Último evento/Última observação)."""
+    db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    empresa1 = EmpresaCliente(nome="ABSOLUTA")
+    empresa2 = EmpresaCliente(nome="ALFA")
+    db.add_all([empresa1, empresa2])
+    db.flush()
+    p1 = Processo(numero_processo="5012298-14.2025.8.13.0231", empresa_cliente_id=empresa1.id, nome_cliente="Fulano", assistente="DANILO")
+    p2 = Processo(numero_processo="6012298-14.2025.8.13.0232", empresa_cliente_id=empresa2.id, nome_cliente="Beltrano", assistente="DANILO")
+    db.add_all([p1, p2])
+    db.flush()
+    db.add_all(
+        [
+            EventoProcesso(processo_id=p1.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS", prazo_fatal=True),
+            EventoProcesso(processo_id=p2.id, data=date(2026, 9, 5), tipo_evento_nome="DOCUMENTOS"),
+        ]
+    )
+    db.commit()
+    client.post("/login", data={"email": "fulano@teste.local", "senha": "certa"})
+
+    resposta = client.get(
+        "/app/processos",
+        params={"periodo_ini": "2026-09-01", "periodo_fim": "2026-09-30", "tipo": "geral"},
+    )
+    assert resposta.status_code == 200
+    assert "ABSOLUTA — 1 processo(s)" in resposta.text
+    assert "ALFA — 1 processo(s)" in resposta.text
+    assert "<td>DANILO</td>" in resposta.text
+    assert "<td>Sim</td>" in resposta.text  # fatal da ABSOLUTA
+    assert "<td>Não</td>" in resposta.text  # fatal da ALFA
+    assert "Fulano" in resposta.text  # Parte 2 (resumo por cliente)
+
+
+def test_relatorio_processos_por_empresa_filtra_uma_so(client, db):
+    """Bloco 1 (2026-09-25): tipo "Por empresa" — 5 colunas, só a empresa
+    selecionada."""
     db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
     empresa1 = EmpresaCliente(nome="ABSOLUTA")
     empresa2 = EmpresaCliente(nome="ALFA")
@@ -293,10 +327,24 @@ def test_relatorio_processos_filtra_por_empresa(client, db):
 
     resposta = client.get(
         "/app/processos",
-        params={"periodo_ini": "2026-09-01", "periodo_fim": "2026-09-30", "empresa": "ABSOLUTA"},
+        params={"periodo_ini": "2026-09-01", "periodo_fim": "2026-09-30", "tipo": "empresa", "empresa": "ABSOLUTA"},
     )
     assert resposta.status_code == 200
-    assert "<td>DANILO</td><td>1</td><td>1</td>" in resposta.text  # só o processo/evento da ABSOLUTA
+    assert "ABSOLUTA — 1 processo(s)" in resposta.text
+    assert "Beltrano" not in resposta.text  # processo da ALFA não aparece
+
+
+def test_relatorio_processos_sem_resultado_mostra_mensagem_amigavel(client, db):
+    db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    db.commit()
+    client.post("/login", data={"email": "fulano@teste.local", "senha": "certa"})
+
+    resposta = client.get(
+        "/app/processos",
+        params={"periodo_ini": "2026-09-01", "periodo_fim": "2026-09-30", "tipo": "geral"},
+    )
+    assert resposta.status_code == 200
+    assert "Nenhum processo encontrado nesse período." in resposta.text
 
 
 def test_erro_nao_tratado_em_rota_html_mostra_pagina_estilizada(client, db, monkeypatch):

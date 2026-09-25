@@ -69,73 +69,110 @@
         <input type="date" id="periodo_fim" name="periodo_fim" value="{{ filtro.periodo_fim }}" required>
       </div>
       <div class="campo">
-        <label for="empresa">Empresa-cliente (opcional — deixe em branco para todas)</label>
+        <label for="tipo">Tipo de relatório</label>
+        <select id="tipo" name="tipo" data-alterna-tipo-relatorio>
+          <option value="geral" {{ "selected" if filtro.tipo == "geral" else "" }}>Geral (todas as empresas)</option>
+          <option value="empresa" {{ "selected" if filtro.tipo == "empresa" else "" }}>Por empresa</option>
+        </select>
+      </div>
+      <div class="campo" data-mostrar-se-tipo="empresa">
+        <label for="empresa">Empresa</label>
         <select id="empresa" name="empresa">
-          <option value="">Todas</option>
+          <option value="">Selecione...</option>
           {% for e in empresas %}
             <option value="{{ e.nome }}" {{ "selected" if filtro.empresa == e.nome else "" }}>{{ e.nome }}</option>
           {% endfor %}
         </select>
       </div>
       <div class="campo">
-        <label for="agrupar_por">Agrupar por</label>
-        <select id="agrupar_por" name="agrupar_por" data-alterna-pessoa>
-          <option value="assistente" {{ "selected" if filtro.agrupar_por == "assistente" else "" }}>Assistente</option>
-          <option value="advogada" {{ "selected" if filtro.agrupar_por == "advogada" else "" }}>Advogada</option>
-          <option value="assessoria" {{ "selected" if filtro.agrupar_por == "assessoria" else "" }}>Assessoria</option>
-        </select>
-      </div>
-      <div class="campo" data-mostrar-se-agrupar="assistente">
-        <label for="pessoa-funcionario">Funcionário (individual — deixe em branco para o geral)</label>
-        <select id="pessoa-funcionario" name="pessoa">
+        <label for="assistente">Assistente (opcional — deixe em branco para todos)</label>
+        <select id="assistente" name="assistente">
           <option value="">Todos</option>
           {% for f in funcionarios %}
-            <option value="{{ f.nome }}" {{ "selected" if filtro.pessoa == f.nome else "" }}>{{ f.nome }}</option>
+            <option value="{{ f.nome }}" {{ "selected" if filtro.assistente == f.nome else "" }}>{{ f.nome }}</option>
           {% endfor %}
         </select>
-      </div>
-      <div class="campo" data-mostrar-se-agrupar="advogada,assessoria" style="display:none;">
-        <label for="pessoa-texto">Advogada/assessoria (individual — deixe em branco para o geral)</label>
-        <input type="text" id="pessoa-texto" name="pessoa" value="{{ filtro.pessoa }}" placeholder="Ex.: HUNTING">
       </div>
       <button type="submit">Gerar relatório</button>
     </form>
   </div>
 
   {% if resultado %}
-    <div class="card">
-      <h2>
-        {{ "Relatório de " + filtro.pessoa if filtro.pessoa else "Relatório geral da equipe" }}
-        <a class="botao secundario" style="float:right; font-size:0.82rem; padding:6px 12px;"
-           href="/processos/relatorio.pdf?periodo_ini={{ filtro.periodo_ini }}&periodo_fim={{ filtro.periodo_fim }}&agrupar_por={{ filtro.agrupar_por }}&pessoa={{ filtro.pessoa }}&empresa={{ filtro.empresa }}">
-          Baixar PDF
-        </a>
-      </h2>
-      <p class="subtitulo">{{ resultado.periodo_ini.strftime("%d/%m/%Y") }} a {{ resultado.periodo_fim.strftime("%d/%m/%Y") }}</p>
-      {% if resultado.linhas %}
-        <table>
-          <thead>
-            <tr><th>Pessoa</th><th>Processos</th><th>Eventos</th><th>Cumpridos</th><th>Perdidos</th><th>Pendentes</th><th>Parados</th></tr>
-          </thead>
-          <tbody>
-            {% for l in resultado.linhas %}
-              <tr>
-                <td>{{ l.pessoa }}</td><td>{{ l.processos }}</td><td>{{ l.eventos }}</td>
-                <td>{{ l.prazos_cumpridos }}</td><td>{{ l.prazos_perdidos }}</td>
-                <td>{{ l.prazos_pendentes }}</td><td>{{ l.processos_parados }}</td>
-              </tr>
-            {% endfor %}
-            <tr class="total">
-              <td>{{ resultado.total.pessoa }}</td><td>{{ resultado.total.processos }}</td><td>{{ resultado.total.eventos }}</td>
-              <td>{{ resultado.total.prazos_cumpridos }}</td><td>{{ resultado.total.prazos_perdidos }}</td>
-              <td>{{ resultado.total.prazos_pendentes }}</td><td>{{ resultado.total.processos_parados }}</td>
-            </tr>
-          </tbody>
-        </table>
+    {% if filtro.tipo == "empresa" %}
+      <div class="card">
+        <h2>
+          {{ resultado.empresa }} — {{ resultado.total_processos }} processo(s)
+          <a class="botao secundario" style="float:right; font-size:0.82rem; padding:6px 12px;"
+             href="/processos/relatorio.pdf?periodo_ini={{ filtro.periodo_ini }}&periodo_fim={{ filtro.periodo_fim }}&tipo=empresa&empresa={{ filtro.empresa }}&assistente={{ filtro.assistente }}">
+            Baixar PDF
+          </a>
+        </h2>
+        <p class="subtitulo">{{ resultado.periodo_ini.strftime("%d/%m/%Y") }} a {{ resultado.periodo_fim.strftime("%d/%m/%Y") }}</p>
+        {% if resultado.linhas %}
+          <table>
+            <thead>
+              <tr><th>Assistente</th><th>Nº do processo</th><th>Cliente</th><th>Último evento</th><th>Última observação</th></tr>
+            </thead>
+            <tbody>
+              {% for l in resultado.linhas %}
+                <tr>
+                  <td>{{ l.assistente }}</td>
+                  <td>{{ l.numero_processo }}</td>
+                  <td>{{ l.cliente }}</td>
+                  <td>{{ l.evento }}</td>
+                  <td>{{ l.observacao }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="vazio">Nenhum processo encontrado nesse período.</p>
+        {% endif %}
+      </div>
+    {% else %}
+      {% if resultado.secoes %}
+        {% for secao in resultado.secoes %}
+          <div class="card">
+            <h2>{{ secao.empresa }} — {{ secao.total_processos }} processo(s)</h2>
+            <table>
+              <thead><tr><th>Assistente</th><th>Nº do processo</th><th>Evento</th><th>Fatal</th></tr></thead>
+              <tbody>
+                {% for l in secao.linhas %}
+                  <tr>
+                    <td>{{ l.assistente }}</td>
+                    <td>{{ l.numero_processo }}</td>
+                    <td>{{ l.evento }}</td>
+                    <td>{{ "Sim" if l.fatal else "Não" }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            <h3 style="margin-top: 18px;">Resumo por cliente</h3>
+            <table>
+              <thead><tr><th>Cliente</th><th>Nº do processo</th><th>Último evento</th><th>Última observação</th></tr></thead>
+              <tbody>
+                {% for l in secao.linhas_resumo %}
+                  <tr>
+                    <td>{{ l.cliente }}</td>
+                    <td>{{ l.numero_processo }}</td>
+                    <td>{{ l.evento }}</td>
+                    <td>{{ l.observacao }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endfor %}
+        <div class="card">
+          <a class="botao secundario"
+             href="/processos/relatorio.pdf?periodo_ini={{ filtro.periodo_ini }}&periodo_fim={{ filtro.periodo_fim }}&tipo=geral&assistente={{ filtro.assistente }}">
+            Baixar PDF
+          </a>
+        </div>
       {% else %}
-        <p class="vazio">Nenhum evento encontrado nesse período.</p>
+        <div class="card"><p class="vazio">Nenhum processo encontrado nesse período.</p></div>
       {% endif %}
-    </div>
+    {% endif %}
   {% endif %}
 
   {% if eh_admin %}

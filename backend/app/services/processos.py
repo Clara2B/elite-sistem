@@ -377,170 +377,228 @@ def status_prazo(evento: EventoProcesso, hoje: date | None = None) -> str | None
     return "PERDIDO" if hoje > evento.data_prazo else "PENDENTE"
 
 
-PROCESSO_PARADO_DIAS = 15  # ver DATABASE.md seção 6.1 — número inicial, ajustável
+@dataclass
+class LinhaProcessoGeral:
+    assistente: str
+    numero_processo: str
+    evento: str
+    fatal: bool
 
 
 @dataclass
-class LinhaRelatorioPessoa:
-    pessoa: str
-    processos: int = 0
-    eventos: int = 0
-    prazos_cumpridos: int = 0
-    prazos_perdidos: int = 0
-    prazos_pendentes: int = 0
-    processos_parados: int = 0
+class LinhaProcessoResumo:
+    cliente: str
+    numero_processo: str
+    evento: str
+    observacao: str
 
 
 @dataclass
-class RelatorioProcessos:
+class SecaoEmpresaGeral:
+    empresa: str
+    total_processos: int
+    linhas: list[LinhaProcessoGeral] = field(default_factory=list)
+    linhas_resumo: list[LinhaProcessoResumo] = field(default_factory=list)
+
+
+@dataclass
+class RelatorioGeral:
     periodo_ini: date
     periodo_fim: date
-    linhas: list[LinhaRelatorioPessoa] = field(default_factory=list)
-    total: LinhaRelatorioPessoa = field(default_factory=lambda: LinhaRelatorioPessoa(pessoa="EQUIPE (GERAL)"))
+    secoes: list[SecaoEmpresaGeral] = field(default_factory=list)
 
 
-def _agrupar_por(processo: Processo, agrupar_por: str) -> str:
-    valor = getattr(processo, agrupar_por)
-    return valor.strip() if valor else f"(sem {agrupar_por} informado)"
+@dataclass
+class LinhaProcessoPorEmpresa:
+    assistente: str
+    numero_processo: str
+    cliente: str
+    evento: str
+    observacao: str
 
 
-def gerar_relatorio(
-    db: Session,
-    periodo_ini: date,
-    periodo_fim: date,
-    agrupar_por: str = "assistente",
-    filtro_pessoa: str | None = None,
-    filtro_empresa: str | None = None,
-) -> RelatorioProcessos:
-    """`agrupar_por`: 'assistente', 'advogada' ou 'assessoria'. `filtro_pessoa`:
-    se informado, só essa pessoa/assessoria entra no relatório (relatório
-    individual); senão, todas (relatório geral). `filtro_empresa`: se
-    informado, só processos dessa empresa-cliente entram (2026-09-24)."""
-    if agrupar_por not in {"assistente", "advogada", "assessoria"}:
-        raise ValueError("agrupar_por precisa ser 'assistente', 'advogada' ou 'assessoria'.")
+@dataclass
+class RelatorioPorEmpresa:
+    empresa: str
+    periodo_ini: date
+    periodo_fim: date
+    total_processos: int
+    linhas: list[LinhaProcessoPorEmpresa] = field(default_factory=list)
 
-    empresa_id = None
-    if filtro_empresa:
-        alvo_empresa = normalize(filtro_empresa)
-        empresa = next((e for e in db.scalars(select(EmpresaCliente)) if normalize(e.nome) == alvo_empresa), None)
-        if empresa is None:
-            raise ValueError(f"A empresa '{filtro_empresa}' não foi encontrada.")
-        empresa_id = empresa.id
 
-    hoje = date.today()
-    limite_parado = hoje - timedelta(days=PROCESSO_PARADO_DIAS)
-
-    por_pessoa: dict[str, LinhaRelatorioPessoa] = {}
-    processos_contados: dict[str, set[int]] = {}
-    processos_parados_contados: dict[str, set[int]] = {}
-
-    # Só os eventos DENTRO do período (não a tabela inteira filtrada em
-    # Python depois) — a versão anterior carregava todos os ~5.600
-    # processos e todos os ~45 mil eventos em toda geração de relatório,
-    # mesmo pedindo só um mês; `selectinload` sozinho ainda divide isso em
-    # vários lotes de 500 ids (13 idas e vindas ao banco pra ~5.600
-    # processos). Medido com log real do Render: ~14s por carregamento da
-    # tela de Gestão de Processos (ela já chama esta função com o período
-    # padrão só de abrir a tela, mesmo sem pedir relatório nenhum). Um
-    # período típico de um mês é uma fração pequena do total de eventos, e
-    # a consulta abaixo só traz esses — normalmente cabe num único lote.
-    # `data_e_liberacao` exclui eventos cuja "data" não é a de um andamento
-    # de verdade, só a de quando a Dra inseriu o cliente na planilha (abas
-    # coringa como fatais/Dra Galzo/DOCS E CUSTAS) — contá-los no filtro por
-    # período distorceria o mês (a Clara confirmou, ver DECISIONS.md
-    # 2026-09-24). Eles continuam existindo no sistema normalmente, só não
-    # entram nesse relatório por período.
-    query_eventos = (
-        select(EventoProcesso)
-        .options(selectinload(EventoProcesso.processo))
+def _processos_em_escopo(
+    db: Session, periodo_ini: date, periodo_fim: date, empresa_id: int | None = None
+) -> list[Processo]:
+    """Processos com pelo menos um andamento real (não de "data de
+    liberação" — ver `EventoProcesso.data_e_liberacao`) dentro do período —
+    mesmo filtro que o relatório antigo já usava pra decidir quais
+    processos entram. Só os eventos DENTRO do período (não a tabela inteira
+    filtrada em Python depois) — ver nota de performance equivalente que já
+    existia aqui antes desta reescrita (2026-09-23/24, ver DECISIONS.md)."""
+    query = (
+        select(Processo)
+        .join(EventoProcesso, EventoProcesso.processo_id == Processo.id)
+        .options(selectinload(Processo.empresa_cliente))
         .where(
             EventoProcesso.data >= periodo_ini,
             EventoProcesso.data <= periodo_fim,
             EventoProcesso.data_e_liberacao.is_(False),
         )
+        .distinct()
     )
     if empresa_id is not None:
-        query_eventos = query_eventos.where(
-            EventoProcesso.processo_id.in_(select(Processo.id).where(Processo.empresa_cliente_id == empresa_id))
-        )
-    for evento in db.scalars(query_eventos):
-        processo = evento.processo
-        pessoa = _agrupar_por(processo, agrupar_por)
-        if filtro_pessoa and normalize(pessoa) != normalize(filtro_pessoa):
-            continue
+        query = query.where(Processo.empresa_cliente_id == empresa_id)
+    return list(db.scalars(query))
 
-        linha = por_pessoa.setdefault(pessoa, LinhaRelatorioPessoa(pessoa=pessoa))
-        processos_contados.setdefault(pessoa, set()).add(processo.id)
-        linha.eventos += 1
 
-        st = status_prazo(evento, hoje)
-        if st == "CUMPRIDO":
-            linha.prazos_cumpridos += 1
-        elif st in ("PERDIDO", "CUMPRIDO_COM_ATRASO"):
-            linha.prazos_perdidos += 1
-        elif st == "PENDENTE":
-            linha.prazos_pendentes += 1
-
-    # "Processo parado" precisa do último evento de TODA a história do
-    # processo, não só dentro do período do relatório — por isso é uma
-    # consulta separada, agregada (só processo_id + data máxima, nada de
-    # observação/tipo/etc.) e restrita só aos processos que já entraram no
-    # relatório acima, não a tabela inteira de novo.
-    if processos_contados:
-        ids_relevantes = {pid for ids in processos_contados.values() for pid in ids}
-        ultimo_evento_por_processo = dict(
-            db.execute(
-                select(EventoProcesso.processo_id, func.max(EventoProcesso.data))
-                .where(EventoProcesso.processo_id.in_(ids_relevantes))
-                .group_by(EventoProcesso.processo_id)
-            ).all()
-        )
-        for pessoa, ids in processos_contados.items():
-            for processo_id in ids:
-                if ultimo_evento_por_processo.get(processo_id, hoje) < limite_parado:
-                    processos_parados_contados.setdefault(pessoa, set()).add(processo_id)
-
-    # "EQUIPE (GERAL)" só faz sentido no relatório geral (todo mundo); no
-    # individual (filtro_pessoa preenchido) a linha de total é só a mesma
-    # pessoa duplicada — rótulo "TOTAL" evita a confusão de ler "EQUIPE
-    # (GERAL)" com apenas uma pessoa no relatório.
-    total = LinhaRelatorioPessoa(pessoa="TOTAL" if filtro_pessoa else "EQUIPE (GERAL)")
-    for pessoa, linha in por_pessoa.items():
-        linha.processos = len(processos_contados.get(pessoa, ()))
-        linha.processos_parados = len(processos_parados_contados.get(pessoa, ()))
-        total.processos += linha.processos
-        total.eventos += linha.eventos
-        total.prazos_cumpridos += linha.prazos_cumpridos
-        total.prazos_perdidos += linha.prazos_perdidos
-        total.prazos_pendentes += linha.prazos_pendentes
-        total.processos_parados += linha.processos_parados
-
-    return RelatorioProcessos(
-        periodo_ini=periodo_ini,
-        periodo_fim=periodo_fim,
-        linhas=sorted(por_pessoa.values(), key=lambda linha: normalize(linha.pessoa)),
-        total=total,
+def _ultimo_evento_por_processo(db: Session, processo_ids: set[int]) -> dict[int, EventoProcesso]:
+    """Andamento mais recente de cada processo — a pedido explícito da
+    Clara (2026-09-25): "pela data/hora de registro", ou seja, por
+    `criado_em` (quando a linha foi gravada no sistema, com hora), não por
+    `data` (a data do andamento em si, sem hora). Considera TODA a história
+    do processo, não só o período do relatório — "último evento"/"última
+    observação" descrevem o estado atual do processo, não o que aconteceu
+    só dentro da janela filtrada. Exclui eventos `data_e_liberacao` (não são
+    andamentos de verdade — mesmo motivo de `_processos_em_escopo`), senão
+    a data de quando o cliente foi cadastrado numa aba "coringa" apareceria
+    como se fosse o andamento mais recente."""
+    if not processo_ids:
+        return {}
+    subq = (
+        select(EventoProcesso.processo_id, func.max(EventoProcesso.criado_em).label("max_criado_em"))
+        .where(EventoProcesso.processo_id.in_(processo_ids), EventoProcesso.data_e_liberacao.is_(False))
+        .group_by(EventoProcesso.processo_id)
+        .subquery()
     )
+    query = select(EventoProcesso).join(
+        subq,
+        (EventoProcesso.processo_id == subq.c.processo_id) & (EventoProcesso.criado_em == subq.c.max_criado_em),
+    )
+    return {evento.processo_id: evento for evento in db.scalars(query)}
 
 
-def formatar_texto(relatorio: RelatorioProcessos, titulo: str) -> str:
-    linhas_txt = [
-        titulo,
-        f"Período: {relatorio.periodo_ini.strftime('%d/%m/%Y')} a {relatorio.periodo_fim.strftime('%d/%m/%Y')}",
-        "",
-        f"{'PESSOA':<28}{'PROCESSOS':>11}{'EVENTOS':>10}{'CUMPRIDOS':>11}{'PERDIDOS':>10}{'PENDENTES':>11}{'PARADOS':>10}",
+def _filtrar_por_assistente(processos: list[Processo], filtro_assistente: str | None) -> list[Processo]:
+    if not filtro_assistente:
+        return processos
+    alvo = normalize(filtro_assistente)
+    return [p for p in processos if normalize(p.assistente or "") == alvo]
+
+
+def gerar_relatorio_geral(
+    db: Session, periodo_ini: date, periodo_fim: date, filtro_assistente: str | None = None
+) -> RelatorioGeral:
+    """Tipo "Geral" (2026-09-25, a pedido da Clara): uma seção por empresa,
+    cada uma com duas partes — Parte 1 (Assistente/Nº processo/Evento/Fatal)
+    e Parte 2 (Cliente/Nº processo/Último evento/Última observação), uma
+    linha por processo em cada parte (não por andamento — por isso o total
+    no topo bate com o número de linhas)."""
+    processos = _filtrar_por_assistente(_processos_em_escopo(db, periodo_ini, periodo_fim), filtro_assistente)
+    ultimos = _ultimo_evento_por_processo(db, {p.id for p in processos})
+
+    por_empresa: dict[str, list[Processo]] = {}
+    for p in processos:
+        por_empresa.setdefault(p.empresa_cliente.nome, []).append(p)
+
+    secoes = []
+    for empresa_nome in sorted(por_empresa, key=normalize):
+        procs = por_empresa[empresa_nome]
+        linhas_geral = [
+            LinhaProcessoGeral(
+                assistente=p.assistente or "(sem assistente informado)",
+                numero_processo=p.numero_processo,
+                evento=ultimos[p.id].tipo_evento_nome if p.id in ultimos else "—",
+                fatal=ultimos[p.id].prazo_fatal if p.id in ultimos else False,
+            )
+            for p in sorted(procs, key=lambda p: (normalize(p.assistente or ""), p.numero_processo))
+        ]
+        linhas_resumo = [
+            LinhaProcessoResumo(
+                cliente=p.nome_cliente or "—",
+                numero_processo=p.numero_processo,
+                evento=ultimos[p.id].tipo_evento_nome if p.id in ultimos else "—",
+                observacao=(ultimos[p.id].observacao or "—") if p.id in ultimos else "—",
+            )
+            for p in sorted(procs, key=lambda p: normalize(p.nome_cliente or ""))
+        ]
+        secoes.append(
+            SecaoEmpresaGeral(
+                empresa=empresa_nome, total_processos=len(procs), linhas=linhas_geral, linhas_resumo=linhas_resumo
+            )
+        )
+
+    return RelatorioGeral(periodo_ini=periodo_ini, periodo_fim=periodo_fim, secoes=secoes)
+
+
+def gerar_relatorio_por_empresa(
+    db: Session,
+    empresa_nome: str,
+    periodo_ini: date,
+    periodo_fim: date,
+    filtro_assistente: str | None = None,
+) -> RelatorioPorEmpresa:
+    """Tipo "Por empresa" (2026-09-25): uma linha por processo dessa
+    empresa, com Assistente/Nº processo/Cliente/Último evento/Última
+    observação."""
+    alvo_empresa = normalize(empresa_nome)
+    empresa = next((e for e in db.scalars(select(EmpresaCliente)) if normalize(e.nome) == alvo_empresa), None)
+    if empresa is None:
+        raise ValueError(f"A empresa '{empresa_nome}' não foi encontrada.")
+
+    processos = _filtrar_por_assistente(
+        _processos_em_escopo(db, periodo_ini, periodo_fim, empresa_id=empresa.id), filtro_assistente
+    )
+    ultimos = _ultimo_evento_por_processo(db, {p.id for p in processos})
+    processos.sort(key=lambda p: (normalize(p.assistente or ""), p.numero_processo))
+
+    linhas = [
+        LinhaProcessoPorEmpresa(
+            assistente=p.assistente or "(sem assistente informado)",
+            numero_processo=p.numero_processo,
+            cliente=p.nome_cliente or "—",
+            evento=ultimos[p.id].tipo_evento_nome if p.id in ultimos else "—",
+            observacao=(ultimos[p.id].observacao or "—") if p.id in ultimos else "—",
+        )
+        for p in processos
     ]
-    for linha in relatorio.linhas:
-        linhas_txt.append(
-            f"{linha.pessoa[:27]:<28}{linha.processos:>11}{linha.eventos:>10}"
-            f"{linha.prazos_cumpridos:>11}{linha.prazos_perdidos:>10}{linha.prazos_pendentes:>11}{linha.processos_parados:>10}"
-        )
-    linhas_txt.append("-" * 91)
-    t = relatorio.total
-    linhas_txt.append(
-        f"{t.pessoa[:27]:<28}{t.processos:>11}{t.eventos:>10}"
-        f"{t.prazos_cumpridos:>11}{t.prazos_perdidos:>10}{t.prazos_pendentes:>11}{t.processos_parados:>10}"
+
+    return RelatorioPorEmpresa(
+        empresa=empresa.nome, periodo_ini=periodo_ini, periodo_fim=periodo_fim,
+        total_processos=len(processos), linhas=linhas,
     )
+
+
+def formatar_texto_geral(relatorio: RelatorioGeral) -> str:
+    blocos = []
+    for secao in relatorio.secoes:
+        linhas_txt = [
+            f"EMPRESA: {secao.empresa.upper()}",
+            f"Total de processos: {secao.total_processos}",
+            "",
+            f"{'ASSISTENTE':<26}{'Nº PROCESSO':<24}{'EVENTO':<26}{'FATAL':<6}",
+        ]
+        for l in secao.linhas:
+            linhas_txt.append(
+                f"{l.assistente[:25]:<26}{l.numero_processo:<24}{l.evento[:25]:<26}{'Sim' if l.fatal else 'Não':<6}"
+            )
+        linhas_txt.append("")
+        linhas_txt.append(f"{'CLIENTE':<32}{'Nº PROCESSO':<24}{'ÚLTIMO EVENTO':<26}{'ÚLTIMA OBSERVAÇÃO'}")
+        for l in secao.linhas_resumo:
+            linhas_txt.append(f"{l.cliente[:31]:<32}{l.numero_processo:<24}{l.evento[:25]:<26}{l.observacao}")
+        blocos.append("\n".join(linhas_txt))
+    return "\n\n".join(blocos)
+
+
+def formatar_texto_por_empresa(relatorio: RelatorioPorEmpresa) -> str:
+    linhas_txt = [
+        f"EMPRESA: {relatorio.empresa.upper()}",
+        f"Total de processos: {relatorio.total_processos}",
+        "",
+        f"{'ASSISTENTE':<26}{'Nº PROCESSO':<24}{'CLIENTE':<32}{'ÚLTIMO EVENTO':<26}{'ÚLTIMA OBSERVAÇÃO'}",
+    ]
+    for l in relatorio.linhas:
+        linhas_txt.append(
+            f"{l.assistente[:25]:<26}{l.numero_processo:<24}{l.cliente[:31]:<32}{l.evento[:25]:<26}{l.observacao}"
+        )
     return "\n".join(linhas_txt)
 
 

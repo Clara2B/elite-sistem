@@ -17,7 +17,7 @@ from app.utils import format_brl
 if TYPE_CHECKING:
     from app.services.audiencias import AudienciasResult
     from app.services.laudos import LaudosResult
-    from app.services.processos import RelatorioProcessos
+    from app.services.processos import RelatorioGeral, RelatorioPorEmpresa
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 FUNDO_LAUDOS = ASSETS_DIR / "laudos_logo_0.jpeg"
@@ -165,78 +165,117 @@ def gerar_pdf_audiencias(result: AudienciasResult) -> bytes:
     return buffer.getvalue()
 
 
-def gerar_pdf_processos(relatorio: RelatorioProcessos, titulo: str) -> bytes:
-    """Relatório de Gestão de Processos (Fase 5) — usa a mesma folha
-    timbrada dos laudos, já que o setor é da ELITE."""
+def _nova_pagina_processos(c: canvas.Canvas) -> float:
+    c.showPage()
+    _fundo(c, FUNDO_LAUDOS, cobrir_rodape=True)
+    return TOPO_CONTEUDO - 20
+
+
+def _cabecalho_secao_empresa(c: canvas.Canvas, y: float, empresa: str, total_processos: int) -> float:
+    """Título "EMPRESA: NOME — N processo(s)" dentro do corpo do PDF (não a
+    faixa navy do topo da página, que já mostra "ELITE MEDIAÇÕES" — essa
+    aqui repete uma vez por empresa, no relatório Geral)."""
+    if y < RODAPE_LIMITE + 60:
+        y = _nova_pagina_processos(c)
+    c.setFont("Helvetica-Bold", 10)
+    c.setFillColor(NAVY)
+    c.drawString(MARGEM, y, f"{empresa.upper()} — {total_processos} processo(s)")
+    y -= 6
+    c.setStrokeColor(NAVY)
+    c.line(MARGEM, y, LARGURA - MARGEM, y)
+    return y - 16
+
+
+def _tabela_processos(
+    c: canvas.Canvas, y: float, cabecalhos: list[tuple[str, float, bool]], linhas: list[list[str]]
+) -> float:
+    """Desenha uma tabela simples com quebra de página automática.
+    `cabecalhos`: lista de (texto, posição x, alinhar à direita?)."""
+    altura_linha = 14
+
+    def _cabecalho(y: float) -> float:
+        c.setFont("Helvetica-Bold", 7.5)
+        c.setFillColor(NAVY)
+        for texto, x, direita in cabecalhos:
+            (c.drawRightString if direita else c.drawString)(x, y, texto)
+        y -= 5
+        c.setStrokeColor(NAVY)
+        c.line(MARGEM, y, LARGURA - MARGEM, y)
+        return y - altura_linha
+
+    y = _cabecalho(y)
+    c.setFont("Helvetica", 7.5)
+    for valores in linhas:
+        if y < RODAPE_LIMITE + 20:
+            y = _cabecalho(_nova_pagina_processos(c))
+            c.setFont("Helvetica", 7.5)
+        c.setFillColor(HexColor("#222222"))
+        for valor, (_, x, direita) in zip(valores, cabecalhos, strict=True):
+            (c.drawRightString if direita else c.drawString)(x, y, valor)
+        y -= altura_linha
+    return y
+
+
+def gerar_pdf_processos_geral(relatorio: RelatorioGeral) -> bytes:
+    """Tipo "Geral" (2026-09-25) — uma seção por empresa, com as duas
+    tabelas do Bloco 1: Assistente/Nº processo/Evento/Fatal e depois
+    Cliente/Nº processo/Último evento/Última observação."""
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     _fundo(c, FUNDO_LAUDOS, cobrir_rodape=True)
 
-    periodo = (
-        f"Período: {relatorio.periodo_ini.strftime('%d/%m/%Y')} a {relatorio.periodo_fim.strftime('%d/%m/%Y')}"
-    )
-    y = _cabecalho_empresa(c, TOPO_CONTEUDO, "ELITE MEDIAÇÕES", None, [titulo, periodo])
+    periodo = f"Período: {relatorio.periodo_ini.strftime('%d/%m/%Y')} a {relatorio.periodo_fim.strftime('%d/%m/%Y')}"
+    y = _cabecalho_empresa(c, TOPO_CONTEUDO, "ELITE MEDIAÇÕES", None, ["Relatório geral de processos", periodo])
 
-    col_pessoa_x = MARGEM + 6
-    col_proc_x = MARGEM + 190
-    col_ev_x = MARGEM + 260
-    col_cump_x = MARGEM + 320
-    col_perd_x = MARGEM + 375
-    col_pend_x = MARGEM + 425
-    col_parado_x = LARGURA - MARGEM - 10
-
-    altura_linha = 16
-    c.setFont("Helvetica-Bold", 8)
-    c.setFillColor(NAVY)
-    y -= 6
-    c.drawString(col_pessoa_x, y, "PESSOA")
-    c.drawString(col_proc_x, y, "PROC.")
-    c.drawString(col_ev_x, y, "EVENTOS")
-    c.drawString(col_cump_x, y, "CUMPR.")
-    c.drawString(col_perd_x, y, "PERD.")
-    c.drawString(col_pend_x, y, "PEND.")
-    c.drawRightString(col_parado_x, y, "PARADOS")
-    y -= 6
-    c.setStrokeColor(NAVY)
-    c.line(MARGEM, y, LARGURA - MARGEM, y)
-    y -= altura_linha
-
-    c.setFont("Helvetica", 8)
-
-    def _linha(c, y, item, negrito=False):
-        c.setFont("Helvetica-Bold" if negrito else "Helvetica", 8)
-        c.setFillColor(NAVY if negrito else HexColor("#222222"))
-        c.drawString(col_pessoa_x, y, str(item.pessoa)[:32])
-        c.drawString(col_proc_x, y, str(item.processos))
-        c.drawString(col_ev_x, y, str(item.eventos))
-        c.drawString(col_cump_x, y, str(item.prazos_cumpridos))
-        c.drawString(col_perd_x, y, str(item.prazos_perdidos))
-        c.drawString(col_pend_x, y, str(item.prazos_pendentes))
-        c.drawRightString(col_parado_x, y, str(item.processos_parados))
-
-    for linha in relatorio.linhas:
+    for secao in relatorio.secoes:
+        y = _cabecalho_secao_empresa(c, y, secao.empresa, secao.total_processos)
+        y = _tabela_processos(
+            c, y,
+            [("ASSISTENTE", MARGEM + 4, False), ("Nº PROCESSO", MARGEM + 150, False),
+             ("EVENTO", MARGEM + 280, False), ("FATAL", LARGURA - MARGEM - 4, True)],
+            [[l.assistente[:26], l.numero_processo, l.evento[:26], "Sim" if l.fatal else "Não"] for l in secao.linhas],
+        )
+        y -= 8
+        c.setFont("Helvetica-Bold", 8)
+        c.setFillColor(NAVY)
         if y < RODAPE_LIMITE + 30:
-            c.showPage()
-            _fundo(c, FUNDO_LAUDOS, cobrir_rodape=True)
-            y = TOPO_CONTEUDO - 20
-        _linha(c, y, linha)
-        y -= altura_linha
+            y = _nova_pagina_processos(c)
+        c.drawString(MARGEM, y, "Resumo por cliente")
+        y -= 14
+        y = _tabela_processos(
+            c, y,
+            [("CLIENTE", MARGEM + 4, False), ("Nº PROCESSO", MARGEM + 190, False),
+             ("ÚLTIMO EVENTO", MARGEM + 320, False), ("ÚLTIMA OBSERVAÇÃO", MARGEM + 430, False)],
+            [[l.cliente[:26], l.numero_processo, l.evento[:18], l.observacao[:40]] for l in secao.linhas_resumo],
+        )
+        y -= 18
 
-    y -= 4
-    c.setFillColor(NAVY)
-    c.rect(MARGEM, y - 20, LARGURA - 2 * MARGEM, 22, stroke=0, fill=1)
-    c.setFillColor(whitesmoke)
-    _linha_total_y = y - 14
-    c.setFont("Helvetica-Bold", 8)
-    c.setFillColor(whitesmoke)
-    t = relatorio.total
-    c.drawString(col_pessoa_x, _linha_total_y, t.pessoa[:32])
-    c.drawString(col_proc_x, _linha_total_y, str(t.processos))
-    c.drawString(col_ev_x, _linha_total_y, str(t.eventos))
-    c.drawString(col_cump_x, _linha_total_y, str(t.prazos_cumpridos))
-    c.drawString(col_perd_x, _linha_total_y, str(t.prazos_perdidos))
-    c.drawString(col_pend_x, _linha_total_y, str(t.prazos_pendentes))
-    c.drawRightString(col_parado_x, _linha_total_y, str(t.processos_parados))
+    c.showPage()
+    c.save()
+    return buffer.getvalue()
+
+
+def gerar_pdf_processos_por_empresa(relatorio: RelatorioPorEmpresa) -> bytes:
+    """Tipo "Por empresa" (2026-09-25) — Assistente/Nº processo/Cliente/
+    Último evento/Última observação, só da empresa selecionada."""
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    _fundo(c, FUNDO_LAUDOS, cobrir_rodape=True)
+
+    periodo = f"Período: {relatorio.periodo_ini.strftime('%d/%m/%Y')} a {relatorio.periodo_fim.strftime('%d/%m/%Y')}"
+    titulo = f"{relatorio.total_processos} processo(s)"
+    y = _cabecalho_empresa(c, TOPO_CONTEUDO, relatorio.empresa, None, [titulo, periodo])
+
+    _tabela_processos(
+        c, y,
+        [("ASSISTENTE", MARGEM + 4, False), ("Nº PROCESSO", MARGEM + 100, False),
+         ("CLIENTE", MARGEM + 210, False), ("ÚLTIMO EVENTO", MARGEM + 330, False),
+         ("ÚLTIMA OBSERVAÇÃO", MARGEM + 430, False)],
+        [
+            [l.assistente[:16], l.numero_processo, l.cliente[:20], l.evento[:18], l.observacao[:40]]
+            for l in relatorio.linhas
+        ],
+    )
 
     c.showPage()
     c.save()

@@ -8,23 +8,23 @@ from sqlalchemy import event
 from app.models import EventoProcesso, Processo
 from app.services.empresas import get_or_create_empresa
 from app.services.processos import (
-    PROCESSO_PARADO_DIAS,
     _mes_referencia_da_aba,
     _pessoa_valida,
     _separar_assessoria,
     apagar_todos_processos,
-    gerar_relatorio,
+    gerar_relatorio_geral,
+    gerar_relatorio_por_empresa,
     importar_planilha,
     marcar_resolvido,
     status_prazo,
 )
 
 
-def _processo(db, numero="5012298-14.2025.8.13.0231", advogada="DRA KELLY", assistente="DANILO"):
-    empresa = get_or_create_empresa(db, "ABSOLUTA")
+def _processo(db, numero="5012298-14.2025.8.13.0231", advogada="DRA KELLY", assistente="DANILO", empresa="ABSOLUTA"):
+    empresa_obj = get_or_create_empresa(db, empresa)
     processo = Processo(
         numero_processo=numero,
-        empresa_cliente_id=empresa.id,
+        empresa_cliente_id=empresa_obj.id,
         nome_cliente="Fulano de Tal",
         advogada=advogada,
         assistente=assistente,
@@ -95,51 +95,6 @@ def test_marcar_resolvido(db):
     assert resolvido.resolvido_em is not None
 
 
-def test_relatorio_conta_processos_eventos_e_prazos(db):
-    processo = _processo(db, assistente="DANILO")
-    db.add_all(
-        [
-            EventoProcesso(
-                processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS",
-                prazo_fatal=True, data_prazo=date.today() - timedelta(days=1),  # perdido
-            ),
-            EventoProcesso(
-                processo_id=processo.id, data=date(2026, 9, 10), tipo_evento_nome="DOCUMENTOS",
-                prazo_fatal=False,
-            ),
-        ]
-    )
-    db.commit()
-
-    relatorio = gerar_relatorio(db, date(2026, 9, 1), date(2026, 9, 30))
-    assert len(relatorio.linhas) == 1
-    linha = relatorio.linhas[0]
-    assert linha.pessoa == "DANILO"
-    assert linha.processos == 1
-    assert linha.eventos == 2
-    assert linha.prazos_perdidos == 1
-    assert relatorio.total.processos == 1
-    assert relatorio.total.eventos == 2
-    assert relatorio.total.pessoa == "EQUIPE (GERAL)"
-
-
-def test_relatorio_filtra_por_pessoa(db):
-    p1 = _processo(db, numero="1111111-11.2026.8.11.0001", assistente="DANILO")
-    p2 = _processo(db, numero="2222222-22.2026.8.11.0002", assistente="JULIA")
-    db.add_all(
-        [
-            EventoProcesso(processo_id=p1.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
-            EventoProcesso(processo_id=p2.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
-        ]
-    )
-    db.commit()
-
-    relatorio = gerar_relatorio(db, date(2026, 9, 1), date(2026, 9, 30), filtro_pessoa="danilo")
-    assert len(relatorio.linhas) == 1
-    assert relatorio.linhas[0].pessoa == "DANILO"
-    assert relatorio.total.pessoa == "TOTAL"  # não "EQUIPE (GERAL)" — só uma pessoa no relatório
-
-
 def test_import_prazo_fatal_so_quando_coluna_e_sim(db, tmp_path):
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -207,70 +162,6 @@ def test_pessoa_valida_rejeita_valores_parecidos_com_data():
     assert _pessoa_valida("  ") is None
 
 
-def test_processo_parado_conta_dias_sem_evento_novo(db):
-    processo = _processo(db, assistente="DANILO")
-    data_antiga = date.today() - timedelta(days=PROCESSO_PARADO_DIAS + 5)
-    db.add(EventoProcesso(processo_id=processo.id, data=data_antiga, tipo_evento_nome="CUSTAS"))
-    db.commit()
-
-    relatorio = gerar_relatorio(db, data_antiga, data_antiga)
-    assert relatorio.linhas[0].processos_parados == 1
-
-
-def test_processo_parado_considera_ultimo_evento_de_toda_a_historia_nao_so_do_periodo(db):
-    """`gerar_relatorio` busca só os eventos dentro do período pedido (pra
-    não carregar a tabela inteira em toda geração de relatório — ver
-    DECISIONS.md), mas 'processo parado' precisa saber a data do último
-    evento em TODA a história do processo, não só dentro desse período.
-    Um processo com um evento antigo dentro do período mas um evento bem
-    mais recente fora dele não pode aparecer como 'parado'."""
-    processo = _processo(db, assistente="DANILO")
-    data_periodo = date.today() - timedelta(days=PROCESSO_PARADO_DIAS + 20)
-    db.add(EventoProcesso(processo_id=processo.id, data=data_periodo, tipo_evento_nome="CUSTAS"))
-    # Evento bem mais recente, fora do período do relatório abaixo — o
-    # processo não está parado de verdade, só não teve andamento *nesse*
-    # período específico.
-    db.add(EventoProcesso(processo_id=processo.id, data=date.today() - timedelta(days=1), tipo_evento_nome="DOCUMENTOS"))
-    db.commit()
-
-    relatorio = gerar_relatorio(db, data_periodo, data_periodo)
-    assert relatorio.linhas[0].eventos == 1  # só o evento dentro do período conta pro relatório
-    assert relatorio.linhas[0].processos_parados == 0  # mas não está parado — teve andamento recente
-
-
-def test_relatorio_nao_carrega_processos_fora_do_periodo(db):
-    """Regressão de performance: `gerar_relatorio` não pode mais carregar
-    TODOS os processos/eventos do banco a cada geração (era o que deixava a
-    tela de Gestão de Processos com ~14s de carregamento em produção, log
-    real do Render — ver DECISIONS.md). Cria um processo com evento fora do
-    período pedido e confirma que ele nem aparece no relatório; junto,
-    confirma que o número de consultas SQL não escala com o total de
-    processos no banco (ficaria óbvio numa mudança que volte a carregar a
-    tabela inteira: bastaria criar mais processos fora do período pra ver a
-    contagem de consultas crescer, o que este teste também cobriria)."""
-    dentro = _processo(db, numero="1515151-51.2026.8.11.0014", assistente="DANILO")
-    fora = _processo(db, numero="1616161-61.2026.8.11.0015", assistente="JULIA")
-    db.add(EventoProcesso(processo_id=dentro.id, data=date(2026, 9, 10), tipo_evento_nome="CUSTAS"))
-    db.add(EventoProcesso(processo_id=fora.id, data=date(2020, 1, 1), tipo_evento_nome="CUSTAS"))
-    db.commit()
-
-    consultas = []
-    engine = db.get_bind()
-
-    def ouvinte(conn, cursor, statement, parameters, context, executemany):
-        consultas.append(statement)
-
-    event.listen(engine, "before_cursor_execute", ouvinte)
-    try:
-        relatorio = gerar_relatorio(db, date(2026, 9, 1), date(2026, 9, 30))
-    finally:
-        event.remove(engine, "before_cursor_execute", ouvinte)
-
-    assert len(relatorio.linhas) == 1
-    assert relatorio.linhas[0].pessoa == "DANILO"  # "JULIA" (fora do período) nem aparece
-    assert len(consultas) <= 3  # eventos do período + processo(s) relacionado(s) + max por processo
-
-
 def test_separar_assessoria():
     assert _separar_assessoria("HUNTING - Fulana de Tal (CONTR. Beltrano)") == "HUNTING"
     assert _separar_assessoria("DRA KELLY") is None  # sem "-", não tem assessoria
@@ -292,24 +183,6 @@ def test_import_extrai_assessoria_da_advogada_sem_alterar_advogada(db):
     processo = db.query(Processo).filter_by(numero_processo=numero).one()
     assert processo.advogada == "HUNTING - Fulana de Tal"
     assert processo.assessoria == "HUNTING"
-
-
-def test_relatorio_agrupa_por_assessoria(db):
-    p1 = _processo(db, numero="7777777-77.2026.8.11.0007", advogada="HUNTING - Fulana")
-    p1.assessoria = "HUNTING"
-    p2 = _processo(db, numero="8888888-88.2026.8.11.0008", advogada="DRA KELLY")
-    db.add_all(
-        [
-            EventoProcesso(processo_id=p1.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
-            EventoProcesso(processo_id=p2.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
-        ]
-    )
-    db.commit()
-
-    relatorio = gerar_relatorio(db, date(2026, 9, 1), date(2026, 9, 30), agrupar_por="assessoria")
-    pessoas = {linha.pessoa for linha in relatorio.linhas}
-    assert "HUNTING" in pessoas
-    assert "(sem assessoria informado)" in pessoas  # p2 não tem assessoria
 
 
 def test_import_reimportacao_atualiza_evento_existente_com_dado_novo(db, tmp_path):
@@ -491,8 +364,6 @@ def test_import_reconhece_empresa_em_coluna_propria_alem_do_formato_com_hifen(db
 
     processo = db.query(Processo).filter_by(numero_processo=numero).one()
     assert processo.nome_cliente == "Fulano de Tal"
-    from app.services.empresas import get_or_create_empresa
-
     assert processo.empresa_cliente_id == get_or_create_empresa(db, "ABSOLUTA").id
 
 
@@ -518,9 +389,8 @@ def test_import_marca_data_de_liberacao_e_relatorio_a_exclui_do_periodo(db):
     assert evento.data == date(2026, 9, 5)
     assert evento.data_e_liberacao is True
 
-    relatorio = gerar_relatorio(db, date(2026, 9, 1), date(2026, 9, 30))
-    assert relatorio.total.eventos == 0  # excluído do relatório por período
-    assert relatorio.linhas == []
+    relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30))
+    assert relatorio.secoes == []  # excluído do relatório por período
 
 
 def test_import_data_real_de_aba_dia_nao_e_marcada_como_liberacao(db):
@@ -542,23 +412,16 @@ def test_import_data_real_de_aba_dia_nao_e_marcada_como_liberacao(db):
     evento = db.query(EventoProcesso).join(Processo).filter(Processo.numero_processo == numero).one()
     assert evento.data_e_liberacao is False
 
-    relatorio = gerar_relatorio(db, date(2026, 9, 1), date(2026, 9, 30))
-    assert relatorio.total.eventos == 1
+    relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30))
+    assert relatorio.secoes[0].total_processos == 1
 
 
-def test_relatorio_filtra_por_empresa(db):
-    """Dropdown novo de Empresa no relatório (2026-09-24) — só processos da
-    empresa-cliente escolhida entram na contagem."""
-    p1 = _processo(db, numero="2222222-22.2026.8.11.0021", assistente="DANILO")
-    empresa2 = get_or_create_empresa(db, "OUTRA EMPRESA")
-    p2 = Processo(
-        numero_processo="3333333-33.2026.8.11.0022",
-        empresa_cliente_id=empresa2.id,
-        nome_cliente="Beltrano",
-        assistente="DANILO",
-    )
-    db.add(p2)
-    db.flush()
+# --- Bloco 1 (2026-09-25): relatório Geral / Por empresa ------------------
+
+
+def test_relatorio_geral_uma_secao_por_empresa_ordenadas_alfabeticamente(db):
+    p1 = _processo(db, numero="3030303-30.2026.8.11.0030", assistente="DANILO", empresa="ZENITH")
+    p2 = _processo(db, numero="4040404-40.2026.8.11.0040", assistente="DANILO", empresa="ABSOLUTA")
     db.add_all(
         [
             EventoProcesso(processo_id=p1.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
@@ -567,15 +430,206 @@ def test_relatorio_filtra_por_empresa(db):
     )
     db.commit()
 
-    relatorio = gerar_relatorio(db, date(2026, 9, 1), date(2026, 9, 30), filtro_empresa="ABSOLUTA")
-    assert relatorio.total.processos == 1
-    assert relatorio.total.eventos == 1
-    assert relatorio.linhas[0].pessoa == "DANILO"
+    relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30))
+    assert [s.empresa for s in relatorio.secoes] == ["ABSOLUTA", "ZENITH"]
 
 
-def test_relatorio_empresa_inexistente_gera_erro(db):
+def test_relatorio_geral_total_bate_com_numero_de_linhas(db):
+    p1 = _processo(db, numero="5050505-50.2026.8.11.0050", assistente="DANILO")
+    p2 = _processo(db, numero="6060606-60.2026.8.11.0060", assistente="JULIA")
+    db.add_all(
+        [
+            EventoProcesso(processo_id=p1.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
+            EventoProcesso(processo_id=p1.id, data=date(2026, 9, 6), tipo_evento_nome="DOCUMENTOS"),  # mesmo processo, 2º andamento
+            EventoProcesso(processo_id=p2.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
+        ]
+    )
+    db.commit()
+
+    relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30))
+    secao = relatorio.secoes[0]
+    assert secao.total_processos == 2  # 2 processos, não 3 andamentos
+    assert len(secao.linhas) == 2  # Parte 1: uma linha por processo
+    assert len(secao.linhas_resumo) == 2  # Parte 2: idem
+
+
+def test_relatorio_geral_evento_e_fatal_sao_do_andamento_mais_recente(db):
+    """"Evento"/"Fatal" mostrados são do andamento mais recente do
+    processo, por `criado_em` (data/hora de registro) — a pedido explícito
+    da Clara, não pela ordem de inserção nem pela `data` do andamento."""
+    processo = _processo(db, numero="7070707-70.2026.8.11.0070", assistente="DANILO")
+    db.add_all(
+        [
+            EventoProcesso(
+                processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS",
+                prazo_fatal=False, criado_em=datetime.combine(date(2026, 9, 5), datetime.min.time()),
+            ),
+            EventoProcesso(
+                processo_id=processo.id, data=date(2026, 9, 1), tipo_evento_nome="DOCUMENTOS",
+                # registrado um dia depois, mesmo com `data` (do andamento) menor
+                prazo_fatal=True, criado_em=datetime.combine(date(2026, 9, 6), datetime.min.time()),
+            ),
+        ]
+    )
+    db.commit()
+
+    relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30))
+    linha = relatorio.secoes[0].linhas[0]
+    assert linha.evento == "DOCUMENTOS"
+    assert linha.fatal is True
+
+
+def test_relatorio_geral_fatal_sim_nao(db):
+    processo = _processo(db, numero="8080808-80.2026.8.11.0080", assistente="DANILO")
+    db.add(EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS", prazo_fatal=True))
+    db.commit()
+
+    relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30))
+    assert relatorio.secoes[0].linhas[0].fatal is True
+
+
+def test_relatorio_geral_parte2_so_tem_cliente_processo_evento_observacao(db):
+    processo = _processo(db, numero="9090909-90.2026.8.11.0090", assistente="DANILO")
+    db.add(
+        EventoProcesso(
+            processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS", observacao="obs teste",
+        )
+    )
+    db.commit()
+
+    relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30))
+    linha = relatorio.secoes[0].linhas_resumo[0]
+    assert linha.cliente == "Fulano de Tal"
+    assert linha.numero_processo == "9090909-90.2026.8.11.0090"
+    assert linha.evento == "CUSTAS"
+    assert linha.observacao == "obs teste"
+    assert not hasattr(linha, "assistente")
+    assert not hasattr(linha, "fatal")
+
+
+def test_relatorio_geral_sem_observacao_mostra_travessao(db):
+    processo = _processo(db, numero="1234567-89.2026.8.11.0091", assistente="DANILO")
+    db.add(EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"))
+    db.commit()
+
+    relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30))
+    assert relatorio.secoes[0].linhas_resumo[0].observacao == "—"
+
+
+def test_relatorio_geral_filtra_por_assistente_em_todas_as_empresas(db):
+    p1 = _processo(db, numero="2345678-90.2026.8.11.0092", assistente="DANILO", empresa="ABSOLUTA")
+    p2 = _processo(db, numero="3456789-01.2026.8.11.0093", assistente="JULIA", empresa="ZENITH")
+    db.add_all(
+        [
+            EventoProcesso(processo_id=p1.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
+            EventoProcesso(processo_id=p2.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
+        ]
+    )
+    db.commit()
+
+    relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30), filtro_assistente="danilo")
+    assert [s.empresa for s in relatorio.secoes] == ["ABSOLUTA"]
+
+
+def test_relatorio_geral_empresa_sem_processo_no_periodo_nao_aparece(db):
+    empresa_vazia = get_or_create_empresa(db, "SEM PROCESSO NO PERIODO")
+    db.add(
+        Processo(numero_processo="4567890-12.2026.8.11.0094", empresa_cliente_id=empresa_vazia.id, nome_cliente="X")
+    )
+    db.commit()
+
+    relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30))
+    assert relatorio.secoes == []
+
+
+def test_relatorio_geral_ordena_por_assistente_depois_numero_processo(db):
+    empresa = get_or_create_empresa(db, "ABSOLUTA")
+    p_julia = Processo(numero_processo="9999999-99.2026.8.11.0099", empresa_cliente_id=empresa.id, nome_cliente="Z", assistente="JULIA")
+    p_danilo_b = Processo(numero_processo="8888888-88.2026.8.11.0098", empresa_cliente_id=empresa.id, nome_cliente="Y", assistente="DANILO")
+    p_danilo_a = Processo(numero_processo="7777777-77.2026.8.11.0097", empresa_cliente_id=empresa.id, nome_cliente="X", assistente="DANILO")
+    db.add_all([p_julia, p_danilo_b, p_danilo_a])
+    db.flush()
+    db.add_all(
+        [
+            EventoProcesso(processo_id=p_julia.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
+            EventoProcesso(processo_id=p_danilo_b.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
+            EventoProcesso(processo_id=p_danilo_a.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
+        ]
+    )
+    db.commit()
+
+    relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30))
+    numeros = [l.numero_processo for l in relatorio.secoes[0].linhas]
+    assert numeros == ["7777777-77.2026.8.11.0097", "8888888-88.2026.8.11.0098", "9999999-99.2026.8.11.0099"]
+
+
+def test_relatorio_por_empresa_cinco_colunas_e_total_bate(db):
+    p1 = _processo(db, numero="1112223-34.2026.8.11.0100", assistente="DANILO")
+    p2 = _processo(db, numero="2223334-45.2026.8.11.0101", assistente="JULIA")
+    db.add_all(
+        [
+            EventoProcesso(processo_id=p1.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS", observacao="obs1"),
+            EventoProcesso(processo_id=p2.id, data=date(2026, 9, 5), tipo_evento_nome="DOCUMENTOS"),
+        ]
+    )
+    db.commit()
+
+    relatorio = gerar_relatorio_por_empresa(db, "ABSOLUTA", date(2026, 9, 1), date(2026, 9, 30))
+    assert relatorio.total_processos == 2
+    assert len(relatorio.linhas) == 2
+    linha1 = next(l for l in relatorio.linhas if l.numero_processo == p1.numero_processo)
+    assert linha1.assistente == "DANILO"
+    assert linha1.cliente == "Fulano de Tal"
+    assert linha1.evento == "CUSTAS"
+    assert linha1.observacao == "obs1"
+
+
+def test_relatorio_por_empresa_filtra_por_assistente(db):
+    p1 = _processo(db, numero="3334445-56.2026.8.11.0102", assistente="DANILO")
+    p2 = _processo(db, numero="4445556-67.2026.8.11.0103", assistente="JULIA")
+    db.add_all(
+        [
+            EventoProcesso(processo_id=p1.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
+            EventoProcesso(processo_id=p2.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
+        ]
+    )
+    db.commit()
+
+    relatorio = gerar_relatorio_por_empresa(db, "ABSOLUTA", date(2026, 9, 1), date(2026, 9, 30), filtro_assistente="danilo")
+    assert relatorio.total_processos == 1
+    assert relatorio.linhas[0].assistente == "DANILO"
+
+
+def test_relatorio_por_empresa_inexistente_gera_erro(db):
     try:
-        gerar_relatorio(db, date(2026, 9, 1), date(2026, 9, 30), filtro_empresa="NAO EXISTE")
+        gerar_relatorio_por_empresa(db, "NAO EXISTE", date(2026, 9, 1), date(2026, 9, 30))
         assert False, "deveria ter levantado ValueError"
     except ValueError as e:
         assert "NAO EXISTE" in str(e)
+
+
+def test_relatorio_geral_nao_carrega_processos_fora_do_periodo(db):
+    """Regressão de performance (já cobria a versão antiga do relatório):
+    confirma que o número de consultas SQL não escala com o total de
+    processos no banco."""
+    dentro = _processo(db, numero="5556667-78.2026.8.11.0104", assistente="DANILO")
+    fora = _processo(db, numero="6667778-89.2026.8.11.0105", assistente="JULIA")
+    db.add(EventoProcesso(processo_id=dentro.id, data=date(2026, 9, 10), tipo_evento_nome="CUSTAS"))
+    db.add(EventoProcesso(processo_id=fora.id, data=date(2020, 1, 1), tipo_evento_nome="CUSTAS"))
+    db.commit()
+
+    consultas = []
+    engine = db.get_bind()
+
+    def ouvinte(conn, cursor, statement, parameters, context, executemany):
+        consultas.append(statement)
+
+    event.listen(engine, "before_cursor_execute", ouvinte)
+    try:
+        relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30))
+    finally:
+        event.remove(engine, "before_cursor_execute", ouvinte)
+
+    assert len(relatorio.secoes) == 1
+    assert relatorio.secoes[0].linhas[0].assistente == "DANILO"  # "JULIA" (fora do período) nem aparece
+    assert len(consultas) <= 3  # processos do período + último evento por processo

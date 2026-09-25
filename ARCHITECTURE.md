@@ -1082,3 +1082,56 @@ da lista oficial da seção 4.14 — o PDF que a Clara mandou chamava isso de "a
 - **Reversível:** sim — funções novas e isoladas; nada muda no relatório detalhado existente
   (`gerar_relatorio`/`formatar_texto` continuam exatamente iguais, só reaproveitados por baixo).
 
+### 4.16 Gestão de Processos: relatórios Geral/Por empresa e remoção de "Agrupar por" (2026-09-25)
+
+A Clara pediu um pacote de mudanças em 4 blocos, descritos por ela como sendo da aba "Laudos" —
+investigação mostrou que os Blocos 1-3 (número de processo, evento, fatal, observação, "Agrupar
+por") descrevem campos que só existem em **Gestão de Processos** (`Processo`/`EventoProcesso`),
+não em Laudos; ela confirmou. Bloco 4 (visual do resumo de Laudos) é tratado à parte (seção 4.17).
+Bloco 2 (nomes de Dra junto do nome da empresa) fica pendente até ela mandar a planilha real de
+Laudos onde o padrão acontece — não encontrado nos dados de Processos já em mãos.
+
+- **Decisões de interpretação (perguntei/expliquei antes de implementar):**
+  - **"Evento"/"Fatal"/"Observação" = do andamento mais recente do processo**, uma linha por
+    processo (não por andamento) nos três relatórios — por isso o total no topo bate com o número
+    de linhas listadas.
+  - **"Mais recente" usa `EventoProcesso.criado_em`** (data/hora real de registro no sistema —
+    pedido explícito da Clara), não `data` (a data do andamento em si, sem hora) nem a ordem de
+    inserção. Considera toda a história do processo, não só o período filtrado (mesmo raciocínio
+    de "processo parado", que esta mudança substitui — ver abaixo) — e exclui eventos
+    `data_e_liberacao` (mesmo motivo da seção 4.12: não são andamentos de verdade).
+  - **Fonte do "Fatal":** `EventoProcesso.prazo_fatal` (já existia, mesma marcação "SIM"/"NÃO" da
+    planilha) do andamento mais recente exibido na linha.
+  - **Ordenação:** empresas em ordem alfabética; dentro de cada uma, Parte 1/"Por empresa" por
+    Assistente e depois Nº do processo; Parte 2 (Geral) por Cliente (não tem assistente).
+  - **"Agrupar por" e o pivô antigo (Cumpridos/Perdidos/Pendentes/Parados/"processo parado") foram
+    removidos por completo** — substituídos pelos dois tipos novos. Não havia mais nenhum outro uso
+    desse conceito no sistema (confirmado por busca antes de remover).
+- **`app/services/processos.py`** — `gerar_relatorio`/`RelatorioProcessos`/`LinhaRelatorioPessoa`/
+  `_agrupar_por`/`formatar_texto`/`PROCESSO_PARADO_DIAS` removidos; novos `gerar_relatorio_geral`
+  e `gerar_relatorio_por_empresa`, com helpers compartilhados `_processos_em_escopo` (mesmo filtro
+  de período/`data_e_liberacao` que já existia, sem carregar processos fora do período) e
+  `_ultimo_evento_por_processo` (agregado `MAX(criado_em)` + self-join, sem N+1).
+- **PDF** (`app/pdf_export.py`) — `gerar_pdf_processos` (formato antigo) trocado por
+  `gerar_pdf_processos_geral`/`gerar_pdf_processos_por_empresa`, uma seção por empresa com
+  quebra de página automática.
+- **Filtros** (`processos.html`/`routes_processos.py`/`api/processos.py`) — novo seletor "Tipo de
+  relatório" (Geral/Por empresa); campo "Empresa" (rótulo sem "cliente") fica oculto/desabilitado
+  no tipo Geral (`iniciarAlternanciaTipoRelatorio`, `app/static/app.js`, substitui a função de
+  alternância que existia pro "Agrupar por"); "Assistente" (não mais "Funcionário") sempre um
+  dropdown, sem alternância pra texto livre — não fazia mais sentido sem Advogada/Assessoria como
+  opção de agrupamento.
+- **Renomeação visual "Funcionário" → "Assistente"** estendida também à tela de cadastro
+  `/app/funcionarios` (título, cabeçalhos, mensagens) e ao rótulo do menu lateral ("Assistentes")
+  — mesma lista/tabela/rota por baixo (`Funcionario`, `/app/funcionarios`), só o texto visível
+  mudou, pra não ficar inconsistente com o dropdown "Assistente" que essa tela alimenta.
+- **Testado:** suíte de `test_processos_service.py` reescrita (36 testes, incluindo o critério de
+  "mais recente" por `criado_em` mesmo com `data` menor, total batendo com linhas, ordenação,
+  filtro por assistente, empresa sem processo não aparece, regressão de performance) + testes web
+  novos (Geral mostra seção por empresa com Fatal Sim/Não, Por empresa filtra uma só, filtro sem
+  resultado mostra mensagem amigável) — 139 no total. Validado com Playwright: "Agrupar por"
+  sumiu, rótulos corretos em toda a tela (inclusive `/app/funcionarios`), "último evento"/
+  "observação" batendo com o andamento certo (não o mais antigo) num processo com dois eventos.
+- **Reversível:** sim — mudança de código isolada ao módulo de Processos; o schema do banco não
+  mudou (usa campos que já existiam).
+

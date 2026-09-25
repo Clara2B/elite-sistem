@@ -914,3 +914,34 @@ resumo porque é a mesma regra, não uma reimplementação paralela.
 batendo com o modelo que a Clara deu, e um teste de ponta a ponta com Playwright reproduzindo o
 exemplo do plano apresentado antes de implementar.
 **Reversível:** sim — funções novas e isoladas; o relatório detalhado existente não mudou.
+
+## 2026-09-25 — Gestão de Processos: relatórios Geral/Por empresa, remoção de "Agrupar por" (Blocos 1 e 3)
+
+**Contexto:** a Clara mandou um pedido de 4 blocos, dizendo que era tudo na aba "Laudos". Antes de
+tocar em qualquer código, explorei o modelo de dados dela: "número de processo", "evento", "fatal"
+e "observação" só existem em `Processo`/`EventoProcesso` (Gestão de Processos) — Laudos não tem
+nada disso, nem nunca teve "Agrupar por". Perguntei e ela confirmou: Blocos 1-3 são de Gestão de
+Processos; só o Bloco 4 é de Laudos mesmo.
+**Bloco 2 (nomes de Dra) ficou pendente:** busquei nos dados reais de Processos que ela já tinha
+mandado (colunas EMPRESA e CLIENTE) e não achei nenhum caso do padrão — ela confirmou que acontece
+na planilha de Laudos, que ainda vai mandar.
+**Decisões de interpretação:** "Evento"/"Fatal"/"Observação" nos três formatos de relatório novos
+(Geral Parte 1, Geral Parte 2, Por empresa) são sempre do andamento mais recente do processo —
+uma linha por processo, não por andamento, pra bater com o total no topo. "Mais recente" usa
+`criado_em` (data/hora de registro, pedido explícito dela), considerando toda a história do
+processo — não só o período filtrado — e excluindo eventos "data de liberação" (mesmo motivo da
+entrada de 2026-09-24). Ordenação: empresas alfabética; dentro delas, Assistente e depois Nº do
+processo (Cliente, na Parte 2 que não tem assistente).
+**O que foi removido:** "Agrupar por" e todo o relatório-pivô antigo (Cumpridos/Perdidos/
+Pendentes/Parados, conceito de "processo parado") — substituídos pelos dois tipos novos. Nenhum
+outro lugar do sistema usava isso (confirmado antes de apagar).
+**PDF do relatório de Processos:** reescrito pros dois formatos novos, a pedido da Clara (ela
+confirmou que preferia isso a remover o botão de PDF).
+**Renomeação "Funcionário" → "Assistente":** além dos filtros/rótulos da tela de Processos,
+estendi pra tela de cadastro `/app/funcionarios` (título, mensagens) e pro menu lateral, pra não
+ficar inconsistente com o dropdown que ela alimenta — mesma tabela/rota por baixo, só texto visível.
+**Validação:** suíte de testes de Processos reescrita (36 testes) + testes web novos — 139 no
+total — + verificação de ponta a ponta com Playwright (formatos Geral/Por empresa corretos,
+"último evento"/observação batendo com o andamento certo num processo com histórico, filtro sem
+resultado com mensagem amigável, rótulos corretos em toda parte incluindo a tela de assistentes).
+**Reversível:** sim — mudança isolada ao módulo de Processos; schema do banco não mudou.

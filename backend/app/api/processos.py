@@ -8,7 +8,7 @@ from app.api._shared import salvar_temp
 from app.auth import require_admin, require_operadora
 from app.db import get_db
 from app.models import Usuario
-from app.pdf_export import gerar_pdf_processos
+from app.pdf_export import gerar_pdf_processos_geral, gerar_pdf_processos_por_empresa
 from app.services import processos as processos_service
 from app.services.auditoria import registrar
 from app.utils import nome_arquivo_pdf
@@ -50,45 +50,52 @@ def apagar_tudo(
 def relatorio(
     periodo_ini: date,
     periodo_fim: date,
-    agrupar_por: str = "assistente",
-    pessoa: str | None = None,
+    tipo: str = "geral",
     empresa: str | None = None,
+    assistente: str | None = None,
     usuario: Usuario = Depends(_acesso_elite),
     db: Session = Depends(get_db),
 ):
+    """`tipo`: 'geral' (todas as empresas) ou 'empresa' (exige `empresa`
+    preenchido) — ver ARCHITECTURE.md 2026-09-25."""
     try:
-        resultado = processos_service.gerar_relatorio(db, periodo_ini, periodo_fim, agrupar_por, pessoa, empresa)
+        if tipo == "empresa":
+            if not empresa:
+                raise ValueError("Selecione uma empresa para o relatório 'Por empresa'.")
+            resultado = processos_service.gerar_relatorio_por_empresa(db, empresa, periodo_ini, periodo_fim, assistente)
+            texto = processos_service.formatar_texto_por_empresa(resultado)
+        else:
+            resultado = processos_service.gerar_relatorio_geral(db, periodo_ini, periodo_fim, assistente)
+            texto = processos_service.formatar_texto_geral(resultado)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    titulo = f"Relatório de {pessoa}" if pessoa else "Relatório geral da equipe"
-    registrar(db, usuario, "GEROU_RELATORIO_PROCESSOS", entidade="processo", detalhes=titulo)
-    return {
-        "periodo_ini": resultado.periodo_ini,
-        "periodo_fim": resultado.periodo_fim,
-        "linhas": resultado.linhas,
-        "total": resultado.total,
-        "texto": processos_service.formatar_texto(resultado, titulo),
-    }
+    registrar(db, usuario, "GEROU_RELATORIO_PROCESSOS", entidade="processo", detalhes=f"tipo={tipo}")
+    return {"resultado": resultado, "texto": texto}
 
 
 @router.get("/relatorio.pdf")
 def relatorio_pdf(
     periodo_ini: date,
     periodo_fim: date,
-    agrupar_por: str = "assistente",
-    pessoa: str | None = None,
+    tipo: str = "geral",
     empresa: str | None = None,
+    assistente: str | None = None,
     usuario: Usuario = Depends(_acesso_elite),
     db: Session = Depends(get_db),
 ):
     try:
-        resultado = processos_service.gerar_relatorio(db, periodo_ini, periodo_fim, agrupar_por, pessoa, empresa)
+        if tipo == "empresa":
+            if not empresa:
+                raise ValueError("Selecione uma empresa para o relatório 'Por empresa'.")
+            resultado = processos_service.gerar_relatorio_por_empresa(db, empresa, periodo_ini, periodo_fim, assistente)
+            pdf_bytes = gerar_pdf_processos_por_empresa(resultado)
+        else:
+            resultado = processos_service.gerar_relatorio_geral(db, periodo_ini, periodo_fim, assistente)
+            pdf_bytes = gerar_pdf_processos_geral(resultado)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    titulo = f"Relatório de {pessoa}" if pessoa else "Relatório geral da equipe"
-    registrar(db, usuario, "GEROU_RELATORIO_PROCESSOS_PDF", entidade="processo", detalhes=titulo)
-    pdf_bytes = gerar_pdf_processos(resultado, titulo)
-    nome_arquivo = nome_arquivo_pdf("processos", pessoa or "equipe", str(periodo_ini), str(periodo_fim))
+    registrar(db, usuario, "GEROU_RELATORIO_PROCESSOS_PDF", entidade="processo", detalhes=f"tipo={tipo}")
+    nome_arquivo = nome_arquivo_pdf("processos", empresa or "geral", str(periodo_ini), str(periodo_fim))
     return Response(
         content=pdf_bytes, media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},

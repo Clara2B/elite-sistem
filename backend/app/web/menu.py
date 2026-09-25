@@ -21,5 +21,5 @@ def itens_menu(db: Session, usuario: Usuario) -> list[dict]:
     if usuario.papel_global in PAPEIS_GLOBAIS:
         itens.append({"url": "/app/usuarios", "rotulo": "Usuários", "icone": "usuarios", "descricao": "Cadastrar e gerenciar acessos da equipe."})
         itens.append({"url": "/app/empresas", "rotulo": "Empresas-clientes", "icone": "empresas", "descricao": "Cadastro, CNPJ e ativação das empresas atendidas."})
-        itens.append({"url": "/app/funcionarios", "rotulo": "Funcionários", "icone": "funcionarios", "descricao": "Assistentes de Gestão de Processos — alimenta o relatório."})
+        itens.append({"url": "/app/funcionarios", "rotulo": "Assistentes", "icone": "funcionarios", "descricao": "Assistentes de Gestão de Processos — alimenta o relatório."})
     return itens

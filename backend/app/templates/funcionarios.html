@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block titulo %}Funcionários — Elite Sistem{% endblock %}
+{% block titulo %}Assistentes — Elite Sistem{% endblock %}
 {% block conteudo %}
   {% import "_icones.html" as icones %}
   {% import "_flash.html" as flash %}
-  <h1>Funcionários</h1>
-  <p class="subtitulo">Assistentes de Gestão de Processos — alimenta o dropdown "Funcionário" do relatório.</p>
+  <h1>Assistentes</h1>
+  <p class="subtitulo">Assistentes de Gestão de Processos — alimenta o dropdown "Assistente" do relatório.</p>
 
   {{ flash.toast('sucesso', mensagem) }}
   {{ flash.toast('erro', erro) }}
@@ -52,7 +52,7 @@
         <dialog id="modal-excluir-{{ f.id }}" class="modal-confirmacao">
           <div class="modal-corpo">
             <div class="modal-icone">{{ icones.icone('alerta') }}</div>
-            <h3>Excluir funcionário?</h3>
+            <h3>Excluir assistente?</h3>
             <p>
               Isso vai apagar <strong data-nome-alvo-destino>{{ f.nome }}</strong> definitivamente do
               cadastro — só tira o nome do dropdown do relatório, não mexe em nenhum processo ou
@@ -68,12 +68,12 @@
         </dialog>
       {% endfor %}
     {% else %}
-      <p class="vazio">Nenhum funcionário cadastrado ainda.</p>
+      <p class="vazio">Nenhum assistente cadastrado ainda.</p>
     {% endif %}
   </div>
 
   <div class="card">
-    <div class="card-header"><h2>Novo funcionário</h2></div>
+    <div class="card-header"><h2>Novo assistente</h2></div>
     <form class="formulario" method="post" action="/app/funcionarios">
       <div class="campo">
         <label for="nome">Nome</label>

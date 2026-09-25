@@ -24,7 +24,7 @@ def criar_funcionario(db: Session, nome: str) -> Funcionario:
     alvo = normalize(nome)
     for existente in db.scalars(select(Funcionario)):
         if normalize(existente.nome) == alvo:
-            raise ValueError(f"Já existe um funcionário chamado '{existente.nome}'.")
+            raise ValueError(f"Já existe um assistente chamado '{existente.nome}'.")
     funcionario = Funcionario(nome=nome)
     db.add(funcionario)
     db.commit()
@@ -34,12 +34,12 @@ def criar_funcionario(db: Session, nome: str) -> Funcionario:
 def atualizar_funcionario(db: Session, funcionario_id: int, nome: str) -> Funcionario:
     funcionario = db.get(Funcionario, funcionario_id)
     if funcionario is None:
-        raise ValueError(f"Funcionário {funcionario_id} não encontrado.")
+        raise ValueError(f"Assistente {funcionario_id} não encontrado.")
     nome = nome.strip()
     alvo = normalize(nome)
     for existente in db.scalars(select(Funcionario)):
         if existente.id != funcionario_id and normalize(existente.nome) == alvo:
-            raise ValueError(f"Já existe um funcionário chamado '{existente.nome}'.")
+            raise ValueError(f"Já existe um assistente chamado '{existente.nome}'.")
     funcionario.nome = nome
     db.commit()
     return funcionario
@@ -48,7 +48,7 @@ def atualizar_funcionario(db: Session, funcionario_id: int, nome: str) -> Funcio
 def alterar_ativo_funcionario(db: Session, funcionario_id: int, ativo: bool) -> Funcionario:
     funcionario = db.get(Funcionario, funcionario_id)
     if funcionario is None:
-        raise ValueError(f"Funcionário {funcionario_id} não encontrado.")
+        raise ValueError(f"Assistente {funcionario_id} não encontrado.")
     funcionario.ativo = ativo
     db.commit()
     return funcionario
@@ -62,6 +62,6 @@ def excluir_funcionario(db: Session, funcionario_id: int) -> None:
     nenhum processo/evento já gravado."""
     funcionario = db.get(Funcionario, funcionario_id)
     if funcionario is None:
-        raise ValueError(f"Funcionário {funcionario_id} não encontrado.")
+        raise ValueError(f"Assistente {funcionario_id} não encontrado.")
     db.delete(funcionario)
     db.commit()

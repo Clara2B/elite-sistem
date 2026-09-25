@@ -49,9 +49,9 @@ def tela(
     request: Request,
     periodo_ini: date | None = None,
     periodo_fim: date | None = None,
-    agrupar_por: str = "assistente",
-    pessoa: str | None = None,
+    tipo: str = "geral",
     empresa: str | None = None,
+    assistente: str | None = None,
     mensagem: str | None = None,
     usuario: Usuario = Depends(_acesso_elite),
     db: Session = Depends(get_db),
@@ -62,20 +62,25 @@ def tela(
     contexto["filtro"] = {
         "periodo_ini": periodo_ini or padrao_ini,
         "periodo_fim": periodo_fim or padrao_fim,
-        "agrupar_por": agrupar_por,
-        "pessoa": pessoa or "",
+        "tipo": tipo,
         "empresa": empresa or "",
+        "assistente": assistente or "",
     }
     try:
-        resultado = processos_service.gerar_relatorio(
-            db, contexto["filtro"]["periodo_ini"], contexto["filtro"]["periodo_fim"],
-            agrupar_por, pessoa or None, empresa or None,
-        )
+        if tipo == "empresa":
+            if not empresa:
+                raise ValueError("Selecione uma empresa para o relatório \"Por empresa\".")
+            resultado = processos_service.gerar_relatorio_por_empresa(
+                db, empresa, contexto["filtro"]["periodo_ini"], contexto["filtro"]["periodo_fim"], assistente or None,
+            )
+        else:
+            resultado = processos_service.gerar_relatorio_geral(
+                db, contexto["filtro"]["periodo_ini"], contexto["filtro"]["periodo_fim"], assistente or None,
+            )
     except ValueError as e:
         contexto["erro"] = str(e)
     else:
-        titulo = f"Relatório de {pessoa}" if pessoa else "Relatório geral da equipe"
-        registrar(db, usuario, "GEROU_RELATORIO_PROCESSOS", entidade="processo", detalhes=titulo)
+        registrar(db, usuario, "GEROU_RELATORIO_PROCESSOS", entidade="processo", detalhes=f"tipo={tipo}")
         contexto["resultado"] = resultado
     return templates.TemplateResponse(request, "processos.html", contexto)
 
@@ -92,7 +97,7 @@ async def importar(
     padrao_ini, padrao_fim = _periodo_padrao()
     contexto["filtro"] = {
         "periodo_ini": padrao_ini, "periodo_fim": padrao_fim,
-        "agrupar_por": "assistente", "pessoa": "", "empresa": "",
+        "tipo": "geral", "empresa": "", "assistente": "",
     }
     try:
         resumo = processos_service.importar_planilha(db, path, usuario_id=usuario.id)

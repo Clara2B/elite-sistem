@@ -129,36 +129,33 @@ function iniciarConfirmacaoPorTexto() {
   });
 }
 
-// Relatório de Gestão de Processos: o campo "pessoa" é um dropdown de
-// Funcionário (assistente) ou um texto livre (advogada/assessoria),
-// dependendo do "Agrupar por" escolhido — só uma das duas versões pode
-// estar habilitada de cada vez, senão o formulário manda dois valores pro
-// mesmo campo "pessoa". `[data-mostrar-se-agrupar="valor1,valor2"]` marca
-// cada bloco com os valores de "Agrupar por" em que ele deve aparecer.
-function iniciarAlternanciaFuncionario() {
-  var agrupar = document.getElementById("agrupar_por");
-  var campos = document.querySelectorAll("[data-mostrar-se-agrupar]");
-  if (!agrupar || !campos.length) return;
+// Relatório de Gestão de Processos: o campo "Empresa" só faz sentido pro
+// tipo "Por empresa" — fica escondido (e desabilitado, pra não submeter
+// junto) quando o tipo selecionado é "Geral". `[data-mostrar-se-tipo="valor"]`
+// marca o bloco com o valor de "Tipo de relatório" em que ele deve aparecer.
+function iniciarAlternanciaTipoRelatorio() {
+  var tipo = document.getElementById("tipo");
+  var campos = document.querySelectorAll("[data-mostrar-se-tipo]");
+  if (!tipo || !campos.length) return;
 
   function atualizar() {
-    var valores = agrupar.value;
+    var valor = tipo.value;
     campos.forEach(function (campo) {
-      var aceita = campo.getAttribute("data-mostrar-se-agrupar").split(",");
-      var mostrar = aceita.indexOf(valores) !== -1;
+      var mostrar = campo.getAttribute("data-mostrar-se-tipo") === valor;
       campo.style.display = mostrar ? "" : "none";
       var entrada = campo.querySelector("input, select");
       if (entrada) entrada.disabled = !mostrar;
     });
   }
 
-  agrupar.addEventListener("change", atualizar);
+  tipo.addEventListener("change", atualizar);
   atualizar();
 }
 
 document.addEventListener("DOMContentLoaded", function () {
   iniciarZonasDeUpload();
   iniciarValidacaoDeUpload();
-  iniciarAlternanciaFuncionario();
+  iniciarAlternanciaTipoRelatorio();
   iniciarModaisDeConfirmacao();
   iniciarConfirmacaoPorTexto();
 });

@@ -66,7 +66,7 @@ async def criar(
         return templates.TemplateResponse(request, "funcionarios.html", contexto, status_code=400)
     registrar(db, usuario, "CRIOU_FUNCIONARIO", entidade="funcionario", entidade_id=funcionario.id)
     contexto = _contexto_base(db, usuario)
-    contexto["mensagem"] = f"Funcionário {funcionario.nome} cadastrado."
+    contexto["mensagem"] = f"Assistente {funcionario.nome} cadastrado."
     return templates.TemplateResponse(request, "funcionarios.html", contexto)
 
 
@@ -90,7 +90,7 @@ async def editar(
         return templates.TemplateResponse(request, "funcionarios.html", contexto, status_code=400)
     registrar(db, usuario, "EDITOU_FUNCIONARIO", entidade="funcionario", entidade_id=funcionario_id)
     contexto = _contexto_base(db, usuario)
-    contexto["mensagem"] = f"Funcionário {funcionario.nome} atualizado."
+    contexto["mensagem"] = f"Assistente {funcionario.nome} atualizado."
     return templates.TemplateResponse(request, "funcionarios.html", contexto)
 
 
@@ -131,5 +131,5 @@ def excluir(
         return RedirectResponse(f"/app/funcionarios?erro={quote(str(e))}", status_code=303)
     registrar(db, usuario, "EXCLUIU_FUNCIONARIO", entidade="funcionario", entidade_id=funcionario_id)
     return RedirectResponse(
-        f"/app/funcionarios?mensagem={quote(f'Funcionário {nome} excluído definitivamente.')}", status_code=303
+        f"/app/funcionarios?mensagem={quote(f'Assistente {nome} excluído definitivamente.')}", status_code=303
     )
