@@ -8,26 +8,35 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from reportlab.lib.colors import HexColor, white, whitesmoke
+from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
+from reportlab.platypus import Frame, Paragraph
 
 from app.utils import format_brl
 
 if TYPE_CHECKING:
     from app.services.audiencias import AudienciasResult
+    from app.services.cartas import ConviteCliente
     from app.services.laudos import LaudosResult
     from app.services.processos import RelatorioGeral, RelatorioPorEmpresa
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 FUNDO_LAUDOS = ASSETS_DIR / "laudos_logo_0.jpeg"
 FUNDO_AUDIENCIAS = ASSETS_DIR / "audiencias_logo_0.jpeg"
+# Cartas reaproveita o timbrado da EXIMIA (mesma marca de Audiências) — não
+# existe um fundo próprio pra Cartas e nenhum foi pedido.
+FUNDO_CARTAS = FUNDO_AUDIENCIAS
 
 NAVY = HexColor("#152A40")
+VERMELHO_DESTAQUE = HexColor("#C0392B")
 
 LARGURA, ALTURA = A4
 MARGEM = 42
 TOPO_CONTEUDO = ALTURA - 230
+TOPO_CARTA = ALTURA - 175
 RODAPE_LIMITE = 70
 
 
@@ -280,3 +289,116 @@ def gerar_pdf_processos_por_empresa(relatorio: RelatorioPorEmpresa) -> bytes:
     c.showPage()
     c.save()
     return buffer.getvalue()
+
+
+def _estilos_carta() -> dict[str, ParagraphStyle]:
+    base = {"fontName": "Helvetica-Oblique", "fontSize": 10.5, "leading": 14, "textColor": HexColor("#1A1A1A")}
+    return {
+        "titulo": ParagraphStyle("titulo", alignment=TA_CENTER, spaceAfter=4, **base),
+        "titulo_forte": ParagraphStyle(
+            "titulo_forte", alignment=TA_CENTER, fontName="Helvetica-BoldOblique",
+            fontSize=12, leading=15, spaceAfter=10, textColor=NAVY,
+        ),
+        "parte_centralizada": ParagraphStyle(
+            "parte_centralizada", alignment=TA_CENTER, fontName="Helvetica-BoldOblique",
+            fontSize=11, leading=15, spaceAfter=12, textColor=HexColor("#1A1A1A"),
+        ),
+        "corpo": ParagraphStyle("corpo", alignment=TA_JUSTIFY, spaceAfter=10, **base),
+        "destaque": ParagraphStyle(
+            "destaque", alignment=TA_JUSTIFY, fontName="Helvetica-Bold", fontSize=10.5,
+            leading=14, spaceAfter=12, textColor=HexColor("#1A1A1A"),
+        ),
+        "aviso": ParagraphStyle(
+            "aviso", alignment=TA_JUSTIFY, fontName="Helvetica-BoldOblique", fontSize=10,
+            leading=13, spaceAfter=8, textColor=HexColor("#1A1A1A"),
+        ),
+        "link": ParagraphStyle(
+            "link", alignment=TA_LEFT, fontName="Helvetica-BoldOblique", fontSize=10.5,
+            leading=15, spaceAfter=12, textColor=VERMELHO_DESTAQUE,
+        ),
+        "fechamento": ParagraphStyle("fechamento", alignment=TA_LEFT, spaceAfter=6, **base),
+    }
+
+
+def _preencher_carta(c: canvas.Canvas, fundo: Path, paragrafos: list[Paragraph]) -> None:
+    """Desenha os parágrafos dentro da folha timbrada, com quebra de página
+    automática se o texto (excepcionalmente) não couber em uma só página."""
+    largura_util = LARGURA - 2 * MARGEM
+    restante = list(paragrafos)
+    primeira_pagina = True
+    while restante:
+        if not primeira_pagina:
+            c.showPage()
+            _fundo(c, fundo)
+        frame = Frame(MARGEM, RODAPE_LIMITE, largura_util, TOPO_CARTA - RODAPE_LIMITE, showBoundary=0)
+        frame.addFromList(restante, c)
+        primeira_pagina = False
+
+
+def gerar_pdf_carta_cliente(convite: ConviteCliente) -> bytes:
+    """Carta Convite Cliente (Fase Cartas, 2026-09-25) — texto fixo do
+    modelo CARTA_CONVITE_CLIENTE.pdf, com Autor/Réu/Dia/Hora/Link/plataforma
+    substituídos e o telefone de contato adicionado (aprovado pela Clara)."""
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    _fundo(c, FUNDO_CARTAS)
+
+    estilos = _estilos_carta()
+    paragrafos = [
+        Paragraph("Pré-Processual", estilos["titulo"]),
+        Paragraph("Métodos Consensuais de Solução de Conflitos", estilos["titulo"]),
+        Paragraph(
+            "Convite para Audiência Extrajudicial Administrativa – Ação Revisional",
+            estilos["titulo_forte"],
+        ),
+        Paragraph(f"AUTOR: {convite.autor}<br/>REU: {convite.reu},", estilos["parte_centralizada"]),
+        Paragraph(
+            "Pela presente, solicitamos o seu comparecimento a participar de "
+            "<b>AUDIÊNCIA EXTRAJUDICIAL ADMINISTRATIVA</b>, a ser realizada com a "
+            "finalidade de tentativa de composição amigável",
+            estilos["corpo"],
+        ),
+        Paragraph(
+            "A audiência de Tentativa de Conciliação está sugerida para o dia "
+            f'<font color="#C0392B">{convite.dia.strftime("%d/%m/%Y")}, às {convite.hora}</font>, '
+            "a ser realizada na modalidade Virtual, podendo haver ajustes, mediante prévio contato.",
+            estilos["destaque"],
+        ),
+        Paragraph("NÃO ESQUECER DO DOCUMENTO COM FOTO", estilos["aviso"]),
+        Paragraph(
+            "É OBRIGATÓRIO A PRESENÇA DO TITULAR DO CONTRATO, NÃO SERÁ PERMITIDO A "
+            "ENTRADA DE TERCEIROS EM AUDIÊNCIA SEM A PROCURAÇÃO PÚBLICA",
+            estilos["aviso"],
+        ),
+        Paragraph(
+            "A ENTRADA DE TERCEIROS SEM A PROCURAÇÃO A AUDIÊNCIA SERÁ CANCELADA",
+            estilos["aviso"],
+        ),
+        Paragraph(
+            f"(Segue link abaixo, pela plataforma {convite.plataforma.upper()})<br/>"
+            f'<a href="{_href_absoluto(convite.link)}"><font color="#1A5276"><u>{convite.link}</u></font></a>',
+            estilos["link"],
+        ),
+        Paragraph(
+            "Colocamo-nos à disposição por meio do e-mail: "
+            "<b>conciliacao@camaraeximia.com.</b><br/>"
+            "<b>Telefone: 55 11 93234-6989</b>",
+            estilos["corpo"],
+        ),
+        Paragraph(
+            "Certos da atenção e colaboração, renovamos votos de elevada estima e consideração.",
+            estilos["fechamento"],
+        ),
+        Paragraph("Atenciosamente,", estilos["fechamento"]),
+        Paragraph("Eximia Câmara de Mediação Conciliação e Arbitragem.", estilos["fechamento"]),
+    ]
+    _preencher_carta(c, FUNDO_CARTAS, paragrafos)
+
+    c.showPage()
+    c.save()
+    return buffer.getvalue()
+
+
+def _href_absoluto(link: str) -> str:
+    """Garante um link clicável mesmo quando digitado sem "https://"."""
+    return link if link.startswith(("http://", "https://")) else f"https://{link}"

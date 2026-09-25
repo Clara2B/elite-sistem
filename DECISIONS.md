@@ -965,3 +965,39 @@ filtro de empresa aplicado no relatório) — 139 no total — + Playwright conf
 posicionamento, o botão de copiar funcionando de verdade (toast + conteúdo certo na área de
 transferência) e uma captura de tela do resultado final.
 **Reversível:** sim — mudança de template/rota; a lógica de geração dos dados não mudou.
+
+## 2026-09-25 — Cartas: respostas da Clara às perguntas pendentes (Carta Convite Cliente e Banco)
+
+**Contexto:** pedido novo de uma aba "Cartas" (Carta Convite Cliente + Carta Convite Banco, em
+PDF), aberto pela Clara com uma regra explícita e recorrente pro resto dessa feature: qualquer
+dúvida de texto/layout/comportamento/biblioteca é perguntada antes de decidir, nunca assumida.
+Antes de implementar, levantei a lista completa de dúvidas (formato de data/hora, onde colocar o
+telefone, dois problemas encontrados no próprio modelo oficial da carta do Banco — "GOGGLE MEET"
+com erro de digitação e a pontuação "CNPJ : -" — e mais várias outras) e esperei a resposta.
+**Decisões (registradas para as duas cartas; só a Cliente foi implementada nesta rodada — ver
+ARCHITECTURE.md 4.18):**
+- **Plataforma dinâmica nas duas cartas:** identificada a partir da estrutura do link (não mais
+  texto fixo "GOOGLE MEET"), Google Meet ou Teams; Cliente usa "Google Meet"/"Teams" no texto.
+- **Data:** Cliente passa a ter ano (antes só dia/mês); hora mantém o formato do modelo
+  ("HHhMM", ex. "10H30"), sem o "m" final que aparecia num dos modelos ("17H00m" → "17H00").
+- **Telefone "55 11 93234-6989":** só na Carta Cliente (não na do Banco), numa linha logo abaixo
+  do e-mail de contato existente, mesmo estilo de fonte — exatamente como eu tinha proposto.
+- **Carta Banco (registrado agora, implementação na próxima rodada):** corrigir o "GOGGLE MEET"
+  pra "GOOGLE MEET" certo; corrigir a pontuação "CNPJ : -" pra um formato limpo; adicionar Nome
+  do banco e CNPJ como 2 campos novos no formulário (não são um dos 6 campos originais); CNPJ e
+  nome do banco em caixa alta e negrito no PDF; aceitar o link com ou sem prefixo "https://";
+  manter fixos os trechos em negrito que eu tinha identificado (são os mesmos em todas as cartas).
+- **CPF inválido bloqueia a geração**, com um aviso explicando o motivo (não é só warning).
+- **Nomes sempre em caixa alta** no PDF (Autor/Réu na Cliente; Nome na Banco).
+- **Nome do arquivo:** segue a estrutura proposta ("Carta Convite Cliente/Banco - [nome]") — na
+  prática, o PDF sai com esse nome passado por `nome_arquivo_pdf()` (a mesma função usada em todo
+  o resto do sistema pra nomes de arquivo seguros), que troca espaços por "_" e maiúsculiza —
+  ex. `CARTA_CONVITE_CLIENTE_MARIA_DE_FATIMA_OLIVEIRA.pdf` — mesmo padrão de Laudos/Audiências/
+  Processos, não um texto solto.
+- **Sem persistência:** cartas geradas não ficam salvas/registradas no banco — só o download.
+- **Acesso:** aba "Cartas" só visível para quem tem acesso à EXIMIA (mesma regra de Audiências).
+**Pendente (não decidido ainda, não bloqueia a Carta Cliente):** formato da data da Carta Banco
+(com ou sem ano) não foi perguntado nesta rodada — a Carta Banco tem uma seção "Cliente"
+específica de data no modelo original ("07/10", sem ano) que não foi coberta pelas perguntas
+sobre a Carta Cliente; será perguntado antes de implementar a Carta Banco.
+**Reversível:** decisão de produto, não de código — não se aplica.

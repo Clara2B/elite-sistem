@@ -1168,3 +1168,49 @@ Continuação do pedido de 4 blocos (seção 4.16) — Bloco 4, da aba Laudos de
 - **Reversível:** sim — mudança de template/rota isolada; a função que gera os dados
   (`gerar_resumo_por_assessoria`) não mudou de assinatura nem de regra.
 
+### 4.18 Cartas — Carta Convite Cliente (2026-09-25, Banco pendente de aprovação)
+
+Nova aba "Cartas" (só EXIMIA), gerando cartas-convite em PDF prontas pra envio. Regra explícita
+da Clara para toda essa feature: qualquer dúvida de texto/layout/comportamento é perguntada antes
+de decidir (nunca assumida) — ver DECISIONS.md para o histórico completo de perguntas/respostas.
+Implementado primeiro só a Carta Convite Cliente; Carta Convite Banco entra numa rodada separada,
+depois da aprovação visual desta.
+
+- **Sem persistência:** cada carta é gerada e baixada na hora — nada fica salvo no banco (decisão
+  explícita da Clara). `app/services/cartas.py` só valida/formata os dados recebidos do
+  formulário e devolve um dataclass (`ConviteCliente`) pro `pdf_export.py` desenhar.
+- **Detecção de plataforma pelo link** (`detectar_plataforma`) — o texto fixo original da carta
+  dizia "GOOGLE MEET" fixo; agora é dinâmico: reconhece `meet.google.com/...` → "Google Meet" e
+  `teams.microsoft.com/...` → "Teams", com ou sem prefixo `https://` (Clara, 2026-09-25). Link que
+  não bate com nenhum dos dois **bloqueia a geração** com uma mensagem de erro clara — não existe
+  carta sem plataforma reconhecida pra preencher "pela plataforma ___".
+- **PDF** (`app/pdf_export.py::gerar_pdf_carta_cliente`) — primeira geração de PDF do sistema que
+  não é tabela: usa `reportlab.platypus` (`Paragraph`/`Frame`, dentro do mesmo reportlab já usado
+  em todo o resto, nenhuma lib nova) pra desenhar o texto corrido com negrito/itálico/cor por
+  trecho e quebra de linha automática. Reaproveita o timbrado (`FUNDO_AUDIENCIAS`, a mesma marca
+  EXIMIA) — não existe fundo próprio pra Cartas e nenhum foi pedido. Texto fixo idêntico ao modelo
+  `CARTA_CONVITE_CLIENTE.pdf` (Pré-Processual / Métodos Consensuais / avisos em negrito-itálico /
+  fechamento), com três mudanças aprovadas pela Clara: data com ano (antes só "dia/mês"),
+  plataforma dinâmica (acima) e uma linha nova de telefone
+  ("Telefone: 55 11 93234-6989") logo abaixo do e-mail de contato. Link da audiência sai como
+  hyperlink clicável de verdade no PDF (`<a href=...>`, sublinhado e azul), mesmo se digitado sem
+  "https://". Cabe numa página só.
+- **Validação de CPF, formatação de hora ("HHhMM" sem "m" no final) e o restante da Carta Convite
+  Banco (Nome do banco/CNPJ como campos novos, correção da pontuação "CNPJ : -" do modelo,
+  negrito/caixa-alta) ficam para a próxima rodada** — as respostas já estão registradas em
+  DECISIONS.md, só falta implementar depois da Clara aprovar visualmente esta primeira carta.
+- **Acesso:** `require_operadora_web("EXIMIA")`/`require_operadora("EXIMIA")`, mesmo padrão de
+  Audiências — item de menu só aparece pra quem tem acesso à EXIMIA.
+- **Rotas:** `GET /app/cartas` (tela), `POST /app/cartas/convite-cliente` (gera e devolve o PDF
+  direto, ou re-renderiza a tela com erro se a validação falhar) + espelho em
+  `GET /cartas/convite-cliente.pdf` (`app/api/cartas.py`), mesmo par api/web dos outros módulos.
+- **Testado:** suíte completa (139 testes) sem regressão + lint limpo. Validado end-to-end fora da
+  suíte automatizada (Playwright real, com login): tela renderiza igual ao resto do sistema, item
+  "Cartas" aparece no menu na posição certa, submissão do formulário devolve
+  `Content-Disposition: attachment` com o PDF certo, link inválido bloqueia com a mensagem de erro
+  na tela. PDF de exemplo com dados fictícios conferido manualmente: texto fixo idêntico ao
+  modelo, acentuação correta, link clicável, cabe em uma página.
+- **Reversível:** sim — módulo novo e isolado (`services/cartas.py`, `api/cartas.py`,
+  `web/routes_cartas.py`, `templates/cartas.html`, funções novas em `pdf_export.py`); não mudou
+  nenhum módulo existente além do registro das rotas em `main.py` e do item de menu.
+

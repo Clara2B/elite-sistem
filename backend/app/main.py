@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.audiencias import router as audiencias_router
 from app.api.auth import router as auth_router
+from app.api.cartas import router as cartas_router
 from app.api.empresas import router as empresas_router
 from app.api.funcionarios import router as funcionarios_router
 from app.api.health import router as health_router
@@ -21,6 +22,7 @@ from app.db import init_db
 from app.web.auth import PrecisaLogin, SemPermissao
 from app.web.routes_audiencias import router as web_audiencias_router
 from app.web.routes_auth import router as web_auth_router
+from app.web.routes_cartas import router as web_cartas_router
 from app.web.routes_dashboard import router as web_dashboard_router
 from app.web.routes_empresas import router as web_empresas_router
 from app.web.routes_funcionarios import router as web_funcionarios_router
@@ -123,6 +125,7 @@ app.include_router(pendencias_router)
 app.include_router(processos_router)
 app.include_router(empresas_router)
 app.include_router(funcionarios_router)
+app.include_router(cartas_router)
 
 # Páginas HTML (Fase 6) — autenticação por cookie, ver app/web/auth.py.
 app.include_router(web_auth_router)
@@ -134,3 +137,4 @@ app.include_router(web_processos_router)
 app.include_router(web_usuarios_router)
 app.include_router(web_empresas_router)
 app.include_router(web_funcionarios_router)
+app.include_router(web_cartas_router)

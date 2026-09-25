@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block titulo %}Cartas — Elite Sistem{% endblock %}
+{% block conteudo %}
+  {% import "_flash.html" as flash %}
+  <h1>Cartas</h1>
+  <p class="subtitulo">Gere cartas-convite em PDF, prontas para envio — o texto fixo segue o modelo oficial.</p>
+
+  {{ flash.toast('erro', erro) }}
+
+  <div class="card">
+    <h2>Carta Convite Cliente</h2>
+    <form class="formulario" method="post" action="/app/cartas/convite-cliente">
+      <div class="campo">
+        <label for="autor">Autor</label>
+        <input type="text" id="autor" name="autor" value="{{ valores_cliente.autor or '' }}" required>
+      </div>
+      <div class="campo">
+        <label for="reu">Réu</label>
+        <input type="text" id="reu" name="reu" value="{{ valores_cliente.reu or '' }}" required>
+      </div>
+      <div class="campo">
+        <label for="dia">Dia</label>
+        <input type="date" id="dia" name="dia" value="{{ valores_cliente.dia or '' }}" required>
+      </div>
+      <div class="campo">
+        <label for="hora">Hora</label>
+        <input type="time" id="hora" name="hora" value="{{ valores_cliente.hora or '' }}" required>
+      </div>
+      <div class="campo">
+        <label for="link">Link da audiência</label>
+        <input type="text" id="link" name="link" placeholder="meet.google.com/xxx-xxxx-xxx ou teams.microsoft.com/..."
+               value="{{ valores_cliente.link or '' }}" required>
+      </div>
+      <button type="submit">Gerar PDF</button>
+    </form>
+  </div>
+{% endblock %}
