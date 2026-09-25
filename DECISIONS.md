@@ -1043,3 +1043,19 @@ vale só pro espaçamento; a Carta Banco continua sem telefone.
 regenerados e conferidos visualmente (espaçamento maior visível, gap extra antes da assinatura
 nas duas cartas, novo texto de contato só na Cliente).
 **Reversível:** sim — mudança isolada aos estilos/parágrafos de fechamento em `pdf_export.py`.
+
+## 2026-09-25 — Cartas: mais espaço acima da linha vermelha nas duas cartas
+
+**Contexto:** depois de ver os PDFs de exemplo atualizados, a Clara pediu mais espaço entre a
+"linha em vermelho" e o texto de cima, nos dois documentos. A linha vermelha é diferente em cada
+carta: na Cliente é "(Segue link abaixo, pela plataforma ...)" + o link (estilo `link`); na Banco
+é a linha "Colocamo-nos à disposição por meio do e-mail: ..." (estilo `contato_destaque`).
+**Decisão:** `spaceBefore=14` adicionado aos dois estilos (`link` na Cliente, `contato_destaque`
+na Banco) — afeta só o espaço acima dessas duas linhas específicas, sem alterar o espaçamento do
+resto do texto (o reportlab usa o maior entre o `spaceAfter` do parágrafo anterior e o
+`spaceBefore` do parágrafo seguinte, então o espaço visível aumentou de ~8-10pt pra 14pt nos dois
+casos).
+**Validado:** suíte completa sem regressão (139 testes) + lint limpo + PDFs de exemplo
+regenerados e conferidos visualmente (espaço maior visível acima da linha vermelha nas duas
+cartas).
+**Reversível:** sim — dois valores de estilo em `pdf_export.py::_estilos_carta`.
