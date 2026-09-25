@@ -34,4 +34,46 @@
       <button type="submit">Gerar PDF</button>
     </form>
   </div>
+
+  <div class="card">
+    <h2>Carta Convite Banco</h2>
+    <form class="formulario" method="post" action="/app/cartas/convite-banco">
+      <div class="campo">
+        <label for="banco_nome">Nome do banco</label>
+        <input type="text" id="banco_nome" name="banco_nome" value="{{ valores_banco.banco_nome or '' }}" required>
+      </div>
+      <div class="campo">
+        <label for="banco_cnpj">CNPJ do banco</label>
+        <input type="text" id="banco_cnpj" name="banco_cnpj" placeholder="00.000.000/0000-00"
+               value="{{ valores_banco.banco_cnpj or '' }}" required>
+      </div>
+      <div class="campo">
+        <label for="nome">Nome</label>
+        <input type="text" id="nome" name="nome" value="{{ valores_banco.nome or '' }}" required>
+      </div>
+      <div class="campo">
+        <label for="cpf">CPF</label>
+        <input type="text" id="cpf" name="cpf" placeholder="000.000.000-00"
+               value="{{ valores_banco.cpf or '' }}" required>
+      </div>
+      <div class="campo">
+        <label for="contrato">Nº do contrato</label>
+        <input type="text" id="contrato" name="contrato" value="{{ valores_banco.contrato or '' }}" required>
+      </div>
+      <div class="campo">
+        <label for="data">Data</label>
+        <input type="date" id="data" name="data" value="{{ valores_banco.data or '' }}" required>
+      </div>
+      <div class="campo">
+        <label for="hora_banco">Hora</label>
+        <input type="time" id="hora_banco" name="hora" value="{{ valores_banco.hora or '' }}" required>
+      </div>
+      <div class="campo">
+        <label for="link_banco">Link da audiência</label>
+        <input type="text" id="link_banco" name="link" placeholder="meet.google.com/xxx-xxxx-xxx ou teams.microsoft.com/..."
+               value="{{ valores_banco.link or '' }}" required>
+      </div>
+      <button type="submit">Gerar PDF</button>
+    </form>
+  </div>
 {% endblock %}

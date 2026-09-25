@@ -15,11 +15,12 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Frame, Paragraph
 
+from app.services.cartas import href_absoluto
 from app.utils import format_brl
 
 if TYPE_CHECKING:
     from app.services.audiencias import AudienciasResult
-    from app.services.cartas import ConviteCliente
+    from app.services.cartas import ConviteBanco, ConviteCliente
     from app.services.laudos import LaudosResult
     from app.services.processos import RelatorioGeral, RelatorioPorEmpresa
 
@@ -317,6 +318,23 @@ def _estilos_carta() -> dict[str, ParagraphStyle]:
             leading=15, spaceAfter=12, textColor=VERMELHO_DESTAQUE,
         ),
         "fechamento": ParagraphStyle("fechamento", alignment=TA_LEFT, spaceAfter=6, **base),
+        # Carta Banco — texto do modelo não é itálico (diferente da Cliente).
+        "titulo_banco": ParagraphStyle(
+            "titulo_banco", alignment=TA_CENTER, fontName="Helvetica-Bold",
+            fontSize=12.5, leading=16, spaceAfter=14, textColor=NAVY,
+        ),
+        "link_banco": ParagraphStyle(
+            "link_banco", alignment=TA_LEFT, fontName="Helvetica", fontSize=10.5,
+            leading=15, spaceAfter=12, textColor=HexColor("#1A1A1A"),
+        ),
+        "contato_destaque": ParagraphStyle(
+            "contato_destaque", alignment=TA_LEFT, fontName="Helvetica-Bold", fontSize=10.5,
+            leading=14, spaceAfter=10, textColor=VERMELHO_DESTAQUE,
+        ),
+        "fechamento_caps": ParagraphStyle(
+            "fechamento_caps", alignment=TA_LEFT, fontName="Helvetica", fontSize=10.5,
+            leading=14, spaceAfter=6, textColor=HexColor("#1A1A1A"),
+        ),
     }
 
 
@@ -376,7 +394,7 @@ def gerar_pdf_carta_cliente(convite: ConviteCliente) -> bytes:
         ),
         Paragraph(
             f"(Segue link abaixo, pela plataforma {convite.plataforma.upper()})<br/>"
-            f'<a href="{_href_absoluto(convite.link)}"><font color="#1A5276"><u>{convite.link}</u></font></a>',
+            f'<a href="{href_absoluto(convite.link)}"><font color="#1A5276"><u>{convite.link}</u></font></a>',
             estilos["link"],
         ),
         Paragraph(
@@ -399,6 +417,85 @@ def gerar_pdf_carta_cliente(convite: ConviteCliente) -> bytes:
     return buffer.getvalue()
 
 
-def _href_absoluto(link: str) -> str:
-    """Garante um link clicável mesmo quando digitado sem "https://"."""
-    return link if link.startswith(("http://", "https://")) else f"https://{link}"
+def gerar_pdf_carta_banco(convite: ConviteBanco) -> bytes:
+    """Carta Convite Banco (Fase Cartas, 2026-09-25) — texto fixo do modelo
+    NOVA_CARTA_CONVITE_-_BANCO.pdf, com Nome/CPF/Contrato/Data/Hora/Link/
+    Banco/CNPJ/plataforma substituídos. Corrige dois erros do próprio
+    modelo oficial, aprovados pela Clara (ver DECISIONS.md): "GOGGLE MEET"
+    -> plataforma certa e dinâmica, e a pontuação "CNPJ : -" do
+    destinatário -> "CNPJ: ..." limpo."""
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    _fundo(c, FUNDO_CARTAS)
+
+    estilos = _estilos_carta()
+    plataforma_caps = convite.plataforma.upper()
+    paragrafos = [
+        Paragraph(
+            "Convite para Audiência Extrajudicial Administrativa – Ação Revisional",
+            estilos["titulo_banco"],
+        ),
+        Paragraph("Ao", estilos["titulo"]),
+        Paragraph(f"{convite.banco_nome} – CNPJ: {convite.banco_cnpj},", estilos["parte_centralizada"]),
+        Paragraph("Prezados Senhores,", estilos["titulo"]),
+        Paragraph(
+            f"Por meio da presente, o(a) Sr.(a) <b>{convite.nome},</b> inscrito(a) no "
+            f"<b>CPF: {convite.cpf},</b> titular da unidade de n° <b>{convite.contrato},</b> "
+            "vem, respeitosamente, CONVIDAR essa instituição financeira para participar de "
+            "<b>AUDIÊNCIA EXTRAJUDICIAL ADMINISTRATIVA</b>, a ser realizada com a finalidade "
+            "de tentativa de composição amigável.",
+            estilos["corpo"],
+        ),
+        Paragraph(
+            "Esclarece-se que, encontra-se em nosso escritório o contrato de financiamento do "
+            "Reclamante, acima citado, cujo objetivo consiste na revisão de cláusulas "
+            "contratuais reputadas abusivas, notadamente quanto a <b>juros, encargos, "
+            "capitalização, tarifas etc</b>.",
+            estilos["corpo"],
+        ),
+        Paragraph(
+            "Não obstante, antes da judicialização da demanda, a parte Reclamante demonstra "
+            "pleno interesse na solução consensual, em consonância com os princípios da "
+            "boa-fé objetiva, da cooperação e da autocomposição, motivo pelo qual propõe a "
+            "realização da referida audiência extrajudicial.",
+            estilos["corpo"],
+        ),
+        Paragraph(
+            f'A audiência está sugerida para o dia {convite.data.strftime("%d/%m/%Y")}, às '
+            f"{convite.hora}, a ser realizada na modalidade Virtual, podendo haver ajustes, "
+            "mediante prévio contato.",
+            estilos["destaque"],
+        ),
+        Paragraph(
+            f'<a href="{href_absoluto(convite.link)}"><font color="#1A5276">'
+            f"<u>{convite.link}</u></font></a>",
+            estilos["link_banco"],
+        ),
+        Paragraph(
+            "A Audiência de Tentativa de Conciliação será realizada de forma virtual, através "
+            f"do aplicativo {plataforma_caps}.",
+            estilos["destaque"],
+        ),
+        Paragraph(
+            "Solicita-se, desde já, que essa Instituição indique representante com poderes "
+            "para negociar e transigir, a fim de possibilitar a efetiva resolução do "
+            "conflito.",
+            estilos["corpo"],
+        ),
+        Paragraph(
+            "Colocamo-nos à disposição por meio do e-mail: "
+            "<b>conciliacao@camaraeximia.com.</b>",
+            estilos["contato_destaque"],
+        ),
+        Paragraph(
+            "Certos da atenção e colaboração, renovamos votos de elevada estima e consideração.",
+            estilos["fechamento"],
+        ),
+        Paragraph("Atenciosamente,", estilos["fechamento"]),
+        Paragraph("EXÍMIA CÂMARA DE CONCILIAÇÃO, MEDIAÇÃO E ARBITRAGEM", estilos["fechamento_caps"]),
+    ]
+    _preencher_carta(c, FUNDO_CARTAS, paragrafos)
+
+    c.showPage()
+    c.save()
+    return buffer.getvalue()

@@ -1168,48 +1168,64 @@ Continuação do pedido de 4 blocos (seção 4.16) — Bloco 4, da aba Laudos de
 - **Reversível:** sim — mudança de template/rota isolada; a função que gera os dados
   (`gerar_resumo_por_assessoria`) não mudou de assinatura nem de regra.
 
-### 4.18 Cartas — Carta Convite Cliente (2026-09-25, Banco pendente de aprovação)
+### 4.18 Cartas — Carta Convite Cliente e Carta Convite Banco (2026-09-25)
 
 Nova aba "Cartas" (só EXIMIA), gerando cartas-convite em PDF prontas pra envio. Regra explícita
 da Clara para toda essa feature: qualquer dúvida de texto/layout/comportamento é perguntada antes
 de decidir (nunca assumida) — ver DECISIONS.md para o histórico completo de perguntas/respostas.
-Implementado primeiro só a Carta Convite Cliente; Carta Convite Banco entra numa rodada separada,
-depois da aprovação visual desta.
+Implementado em duas rodadas, uma carta de cada vez, com aprovação visual da Cliente antes de
+começar a Banco (pedido explícito da Clara), e a Carta Banco colocada abaixo da Cliente na mesma
+tela, na mesma ordem em que foram pedidas.
 
 - **Sem persistência:** cada carta é gerada e baixada na hora — nada fica salvo no banco (decisão
   explícita da Clara). `app/services/cartas.py` só valida/formata os dados recebidos do
-  formulário e devolve um dataclass (`ConviteCliente`) pro `pdf_export.py` desenhar.
-- **Detecção de plataforma pelo link** (`detectar_plataforma`) — o texto fixo original da carta
-  dizia "GOOGLE MEET" fixo; agora é dinâmico: reconhece `meet.google.com/...` → "Google Meet" e
-  `teams.microsoft.com/...` → "Teams", com ou sem prefixo `https://` (Clara, 2026-09-25). Link que
-  não bate com nenhum dos dois **bloqueia a geração** com uma mensagem de erro clara — não existe
-  carta sem plataforma reconhecida pra preencher "pela plataforma ___".
-- **PDF** (`app/pdf_export.py::gerar_pdf_carta_cliente`) — primeira geração de PDF do sistema que
-  não é tabela: usa `reportlab.platypus` (`Paragraph`/`Frame`, dentro do mesmo reportlab já usado
-  em todo o resto, nenhuma lib nova) pra desenhar o texto corrido com negrito/itálico/cor por
-  trecho e quebra de linha automática. Reaproveita o timbrado (`FUNDO_AUDIENCIAS`, a mesma marca
-  EXIMIA) — não existe fundo próprio pra Cartas e nenhum foi pedido. Texto fixo idêntico ao modelo
-  `CARTA_CONVITE_CLIENTE.pdf` (Pré-Processual / Métodos Consensuais / avisos em negrito-itálico /
-  fechamento), com três mudanças aprovadas pela Clara: data com ano (antes só "dia/mês"),
-  plataforma dinâmica (acima) e uma linha nova de telefone
-  ("Telefone: 55 11 93234-6989") logo abaixo do e-mail de contato. Link da audiência sai como
-  hyperlink clicável de verdade no PDF (`<a href=...>`, sublinhado e azul), mesmo se digitado sem
-  "https://". Cabe numa página só.
-- **Validação de CPF, formatação de hora ("HHhMM" sem "m" no final) e o restante da Carta Convite
-  Banco (Nome do banco/CNPJ como campos novos, correção da pontuação "CNPJ : -" do modelo,
-  negrito/caixa-alta) ficam para a próxima rodada** — as respostas já estão registradas em
-  DECISIONS.md, só falta implementar depois da Clara aprovar visualmente esta primeira carta.
+  formulário e devolve um dataclass (`ConviteCliente`/`ConviteBanco`) pro `pdf_export.py` desenhar.
+- **Detecção de plataforma pelo link** (`detectar_plataforma`), usada pelas duas cartas — o texto
+  fixo original dizia "GOOGLE MEET"/"GOGGLE MEET" (com erro de digitação, na Banco) fixo; agora é
+  dinâmico: reconhece `meet.google.com/...` → "Google Meet" e `teams.microsoft.com/...` → "Teams",
+  com ou sem prefixo `https://` (Clara, 2026-09-25). Link que não bate com nenhum dos dois
+  **bloqueia a geração** com uma mensagem de erro clara — não existe carta sem plataforma
+  reconhecida pra preencher "pela plataforma ___"/"através do aplicativo ___".
+- **Validação de CPF** (`cpf_valido`, dígitos verificadores) só na Carta Banco (único campo de
+  CPF) — **CPF inválido bloqueia a geração**, com uma mensagem de erro explicando o motivo (não é
+  só aviso, Clara 2026-09-25). CPF válido é normalizado pro formato `000.000.000-00`
+  (`formatar_cpf`) no PDF, não importa como foi digitado no formulário.
+- **PDF** (`app/pdf_export.py`) — primeira geração de PDF do sistema que não é tabela: usa
+  `reportlab.platypus` (`Paragraph`/`Frame`, dentro do mesmo reportlab já usado em todo o resto,
+  nenhuma lib nova) pra desenhar texto corrido com negrito/itálico/cor por trecho e quebra de
+  linha automática, dentro do mesmo timbrado (`FUNDO_AUDIENCIAS`, a mesma marca EXIMIA — não
+  existe fundo próprio pra Cartas e nenhum foi pedido). Link da audiência sai como hyperlink
+  clicável de verdade no PDF (`<a href=...>`, sublinhado e azul) nas duas cartas, mesmo se
+  digitado sem "https://". As duas cabem numa página só.
+  - `gerar_pdf_carta_cliente` — texto fixo idêntico ao modelo `CARTA_CONVITE_CLIENTE.pdf`
+    (Pré-Processual / Métodos Consensuais / avisos em negrito-itálico / fechamento), com três
+    mudanças aprovadas pela Clara: data com ano (antes só "dia/mês"), plataforma dinâmica (acima)
+    e uma linha nova de telefone ("Telefone: 55 11 93234-6989") logo abaixo do e-mail de contato
+    — só nesta carta, não na do Banco.
+  - `gerar_pdf_carta_banco` — texto fixo idêntico ao modelo `NOVA_CARTA_CONVITE_-_BANCO.pdf`
+    (trechos em negrito mantidos fixos como identificados: nome, CPF, nº do contrato, "AUDIÊNCIA
+    EXTRAJUDICIAL ADMINISTRATIVA", "juros, encargos, capitalização, tarifas etc", a frase de
+    data/hora inteira, a frase de anúncio da plataforma inteira), com data também passando a
+    incluir o ano (mesma decisão da Cliente, confirmada separadamente pra essa carta) e dois
+    erros do próprio modelo oficial corrigidos, ambos aprovados pela Clara: "GOGGLE MEET" (faltava
+    um "O") vira a plataforma certa e dinâmica; a pontuação "CNPJ : -" do destinatário vira
+    "CNPJ: ..." limpo. Nome do banco e CNPJ do banco são 2 campos novos (não estavam nos 6
+    campos originais do pedido) — aprovados pela Clara — e saem em caixa alta e negrito no PDF,
+    igual ao Nome do titular.
 - **Acesso:** `require_operadora_web("EXIMIA")`/`require_operadora("EXIMIA")`, mesmo padrão de
   Audiências — item de menu só aparece pra quem tem acesso à EXIMIA.
-- **Rotas:** `GET /app/cartas` (tela), `POST /app/cartas/convite-cliente` (gera e devolve o PDF
-  direto, ou re-renderiza a tela com erro se a validação falhar) + espelho em
-  `GET /cartas/convite-cliente.pdf` (`app/api/cartas.py`), mesmo par api/web dos outros módulos.
-- **Testado:** suíte completa (139 testes) sem regressão + lint limpo. Validado end-to-end fora da
-  suíte automatizada (Playwright real, com login): tela renderiza igual ao resto do sistema, item
-  "Cartas" aparece no menu na posição certa, submissão do formulário devolve
-  `Content-Disposition: attachment` com o PDF certo, link inválido bloqueia com a mensagem de erro
-  na tela. PDF de exemplo com dados fictícios conferido manualmente: texto fixo idêntico ao
-  modelo, acentuação correta, link clicável, cabe em uma página.
+- **Rotas:** `GET /app/cartas` (tela, com os dois formulários), `POST /app/cartas/convite-cliente`
+  e `POST /app/cartas/convite-banco` (cada um gera e devolve o PDF direto, ou re-renderiza a tela
+  com erro se a validação falhar) + espelhos em `GET /cartas/convite-cliente.pdf` e
+  `GET /cartas/convite-banco.pdf` (`app/api/cartas.py`), mesmo par api/web dos outros módulos.
+- **Testado:** suíte completa (139 testes) sem regressão + lint limpo, nas duas rodadas. Validado
+  end-to-end fora da suíte automatizada (Playwright real, com login): tela renderiza igual ao
+  resto do sistema, item "Cartas" aparece no menu na posição certa, os dois cards aparecem na
+  ordem certa (Cliente acima, Banco abaixo), submissão de cada formulário devolve
+  `Content-Disposition: attachment` com o PDF certo, link inválido e CPF inválido bloqueiam com a
+  mensagem de erro certa na tela. PDFs de exemplo com dados fictícios conferidos manualmente:
+  texto fixo idêntico aos modelos (com as mudanças aprovadas), acentuação correta, link clicável,
+  detecção de plataforma testada com Meet e com Teams, cabem em uma página.
 - **Reversível:** sim — módulo novo e isolado (`services/cartas.py`, `api/cartas.py`,
   `web/routes_cartas.py`, `templates/cartas.html`, funções novas em `pdf_export.py`); não mudou
   nenhum módulo existente além do registro das rotas em `main.py` e do item de menu.

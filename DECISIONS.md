@@ -996,8 +996,24 @@ ARCHITECTURE.md 4.18):**
   Processos, não um texto solto.
 - **Sem persistência:** cartas geradas não ficam salvas/registradas no banco — só o download.
 - **Acesso:** aba "Cartas" só visível para quem tem acesso à EXIMIA (mesma regra de Audiências).
-**Pendente (não decidido ainda, não bloqueia a Carta Cliente):** formato da data da Carta Banco
-(com ou sem ano) não foi perguntado nesta rodada — a Carta Banco tem uma seção "Cliente"
-específica de data no modelo original ("07/10", sem ano) que não foi coberta pelas perguntas
-sobre a Carta Cliente; será perguntado antes de implementar a Carta Banco.
 **Reversível:** decisão de produto, não de código — não se aplica.
+
+## 2026-09-25 — Cartas: Carta Convite Banco aprovada e implementada
+
+**Contexto:** depois da aprovação visual da Carta Convite Cliente (ver entrada acima), a Clara
+pediu a Carta Convite Banco, "com a estrutura do prompt" (os 6 campos originais + Nome do
+banco/CNPJ já aprovados) e posicionada abaixo da Carta Cliente na mesma tela.
+**Última dúvida pendente resolvida:** a Carta Banco também mostra a data com ano (ex.
+"07/10/2026"), mesma decisão já tomada pra Carta Cliente — perguntei especificamente porque essa
+carta tem sua própria seção de data no modelo original ("07/10", sem ano) que não tinha sido
+coberta pelas perguntas anteriores (essas eram só sobre a Carta Cliente).
+**Implementado:** `montar_convite_banco`/`ConviteBanco` (`app/services/cartas.py`) e
+`gerar_pdf_carta_banco` (`app/pdf_export.py`) — ver ARCHITECTURE.md 4.18 para os detalhes
+técnicos completos (detecção de plataforma, validação/formatação de CPF, correção dos dois erros
+do modelo oficial, negrito/caixa-alta do banco). Formulário da Carta Banco adicionado à mesma
+tela `/app/cartas`, abaixo do formulário da Carta Cliente.
+**Validado:** suíte completa sem regressão (139 testes) + lint limpo + PDF de exemplo com dados
+fictícios conferido manualmente (Meet e Teams testados, CPF válido formatado corretamente) +
+bloqueio de CPF inválido e de link inválido testados e confirmados + Playwright end-to-end (login
+real, os dois cards na ordem certa, download funcionando pelos dois formulários).
+**Reversível:** sim — mesma observação da entrada de implementação da Carta Cliente.
