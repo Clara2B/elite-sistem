@@ -294,6 +294,9 @@ def gerar_pdf_processos_por_empresa(relatorio: RelatorioPorEmpresa) -> bytes:
 
 def _estilos_carta() -> dict[str, ParagraphStyle]:
     base = {"fontName": "Helvetica-Oblique", "fontSize": 10.5, "leading": 14, "textColor": HexColor("#1A1A1A")}
+    # Fechamento das duas cartas (contato/despedida/assinatura) — leading maior a pedido da
+    # Clara (2026-09-25), separado do resto do corpo pra não mudar o espaçamento do texto todo.
+    base_fechamento = {**base, "leading": 17}
     return {
         "titulo": ParagraphStyle("titulo", alignment=TA_CENTER, spaceAfter=4, **base),
         "titulo_forte": ParagraphStyle(
@@ -317,7 +320,13 @@ def _estilos_carta() -> dict[str, ParagraphStyle]:
             "link", alignment=TA_LEFT, fontName="Helvetica-BoldOblique", fontSize=10.5,
             leading=15, spaceAfter=12, textColor=VERMELHO_DESTAQUE,
         ),
-        "fechamento": ParagraphStyle("fechamento", alignment=TA_LEFT, spaceAfter=6, **base),
+        "fechamento": ParagraphStyle("fechamento", alignment=TA_LEFT, spaceAfter=8, **base_fechamento),
+        "atenciosamente": ParagraphStyle(
+            "atenciosamente", alignment=TA_LEFT, spaceAfter=24, **base_fechamento
+        ),
+        "contato_cliente": ParagraphStyle(
+            "contato_cliente", alignment=TA_LEFT, spaceAfter=14, **base_fechamento
+        ),
         # Carta Banco — texto do modelo não é itálico (diferente da Cliente).
         "titulo_banco": ParagraphStyle(
             "titulo_banco", alignment=TA_CENTER, fontName="Helvetica-Bold",
@@ -329,11 +338,11 @@ def _estilos_carta() -> dict[str, ParagraphStyle]:
         ),
         "contato_destaque": ParagraphStyle(
             "contato_destaque", alignment=TA_LEFT, fontName="Helvetica-Bold", fontSize=10.5,
-            leading=14, spaceAfter=10, textColor=VERMELHO_DESTAQUE,
+            leading=17, spaceAfter=16, textColor=VERMELHO_DESTAQUE,
         ),
         "fechamento_caps": ParagraphStyle(
             "fechamento_caps", alignment=TA_LEFT, fontName="Helvetica", fontSize=10.5,
-            leading=14, spaceAfter=6, textColor=HexColor("#1A1A1A"),
+            leading=17, spaceAfter=6, textColor=HexColor("#1A1A1A"),
         ),
     }
 
@@ -398,16 +407,16 @@ def gerar_pdf_carta_cliente(convite: ConviteCliente) -> bytes:
             estilos["link"],
         ),
         Paragraph(
-            "Colocamo-nos à disposição por meio do e-mail: "
-            "<b>conciliacao@camaraeximia.com.</b><br/>"
+            "Colocamo-nos à disposição por meio dos contatos:<br/>"
+            "<b>E-mail: conciliacao@camaraeximia.com</b><br/>"
             "<b>Telefone: 55 11 93234-6989</b>",
-            estilos["corpo"],
+            estilos["contato_cliente"],
         ),
         Paragraph(
             "Certos da atenção e colaboração, renovamos votos de elevada estima e consideração.",
             estilos["fechamento"],
         ),
-        Paragraph("Atenciosamente,", estilos["fechamento"]),
+        Paragraph("Atenciosamente,", estilos["atenciosamente"]),
         Paragraph("Eximia Câmara de Mediação Conciliação e Arbitragem.", estilos["fechamento"]),
     ]
     _preencher_carta(c, FUNDO_CARTAS, paragrafos)
@@ -491,7 +500,7 @@ def gerar_pdf_carta_banco(convite: ConviteBanco) -> bytes:
             "Certos da atenção e colaboração, renovamos votos de elevada estima e consideração.",
             estilos["fechamento"],
         ),
-        Paragraph("Atenciosamente,", estilos["fechamento"]),
+        Paragraph("Atenciosamente,", estilos["atenciosamente"]),
         Paragraph("EXÍMIA CÂMARA DE CONCILIAÇÃO, MEDIAÇÃO E ARBITRAGEM", estilos["fechamento_caps"]),
     ]
     _preencher_carta(c, FUNDO_CARTAS, paragrafos)

@@ -1017,3 +1017,29 @@ fictícios conferido manualmente (Meet e Teams testados, CPF válido formatado c
 bloqueio de CPF inválido e de link inválido testados e confirmados + Playwright end-to-end (login
 real, os dois cards na ordem certa, download funcionando pelos dois formulários).
 **Reversível:** sim — mesma observação da entrada de implementação da Carta Cliente.
+
+## 2026-09-25 — Cartas: ajuste de espaçamento e texto de contato no fechamento
+
+**Contexto:** depois de ver o PDF de exemplo da Carta Cliente, a Clara pediu ajustes no bloco de
+fechamento (contato/despedida/assinatura), mostrando um recorte da própria Carta Cliente como
+referência.
+**Dúvida levantada e resolvida:** ela disse "em ambos os documentos" antes de duas coisas — o
+ajuste de espaçamento E a troca da frase de contato — mas a frase de contato mostrada já incluía
+telefone (só existe na Carta Cliente; a Banco nunca teve telefone, por decisão anterior). Perguntei
+se isso reabria a decisão de telefone só na Cliente. Resposta: **não** — "em ambos os documentos"
+vale só pro espaçamento; a Carta Banco continua sem telefone.
+**Decisões:**
+- **Espaçamento maior** (mais espaço entre linhas + um espaço extra entre "Atenciosamente," e a
+  assinatura) no bloco de fechamento **das duas cartas** — estilos dedicados só pra essa parte
+  (`fechamento`, `atenciosamente`, `contato_cliente`, `contato_destaque`, `fechamento_caps` em
+  `app/pdf_export.py::_estilos_carta`), sem mudar o espaçamento do corpo principal do texto.
+- **Texto de contato da Carta Cliente** trocado de "Colocamo-nos à disposição por meio do
+  e-mail: conciliacao@camaraeximia.com. / Telefone: ..." para "Colocamo-nos à disposição por
+  meio dos contatos: / E-mail: conciliacao@camaraeximia.com / Telefone: ..." (3 linhas com label,
+  sem ponto final depois do e-mail) — só na Carta Cliente.
+- **Carta Banco:** texto de contato não muda (continua só "Colocamo-nos à disposição por meio do
+  e-mail: conciliacao@camaraeximia.com."), só ganha o mesmo espaçamento maior.
+**Validado:** suíte completa sem regressão (139 testes) + lint limpo + PDFs de exemplo
+regenerados e conferidos visualmente (espaçamento maior visível, gap extra antes da assinatura
+nas duas cartas, novo texto de contato só na Cliente).
+**Reversível:** sim — mudança isolada aos estilos/parágrafos de fechamento em `pdf_export.py`.

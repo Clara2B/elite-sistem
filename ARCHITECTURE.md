@@ -1229,4 +1229,11 @@ tela, na mesma ordem em que foram pedidas.
 - **Reversível:** sim — módulo novo e isolado (`services/cartas.py`, `api/cartas.py`,
   `web/routes_cartas.py`, `templates/cartas.html`, funções novas em `pdf_export.py`); não mudou
   nenhum módulo existente além do registro das rotas em `main.py` e do item de menu.
+- **Ajuste de fechamento (2026-09-25, depois da aprovação visual):** espaçamento maior no bloco
+  final (contato/despedida/assinatura) das duas cartas, com um espaço extra entre
+  "Atenciosamente," e a assinatura — estilos dedicados só pra essa parte, sem afetar o resto do
+  texto. Texto de contato da Carta Cliente reestruturado em 3 linhas ("...por meio dos contatos:
+  / E-mail: ... / Telefone: ..."); a Carta Banco manteve o texto igual, só com o espaçamento
+  maior — ver DECISIONS.md pra decisão completa (inclusive a dúvida levantada sobre se o
+  telefone também entraria na Banco, e por que não).
 
