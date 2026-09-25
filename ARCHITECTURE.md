@@ -1135,3 +1135,36 @@ Laudos onde o padrão acontece — não encontrado nos dados de Processos já em
 - **Reversível:** sim — mudança de código isolada ao módulo de Processos; o schema do banco não
   mudou (usa campos que já existiam).
 
+### 4.17 Resumo de Laudos: sempre geral, visual em cards (Bloco 4, 2026-09-25)
+
+Continuação do pedido de 4 blocos (seção 4.16) — Bloco 4, da aba Laudos de verdade dessa vez.
+
+- **Sempre geral, ignorando o filtro de Empresa:** antes (seção 4.15), selecionar uma empresa no
+  relatório detalhado também filtrava a lista-resumo pra essa mesma empresa. A Clara pediu
+  explicitamente o contrário: o resumo é **sempre** um único consolidado com todas as empresas,
+  não importa o que estiver selecionado no filtro de Empresa do relatório detalhado —
+  `routes_laudos.py::tela` parou de passar `filtro_empresa` pra
+  `gerar_resumo_por_assessoria` (a função em si manteve o parâmetro, só não é mais usado por essa
+  rota). Continua respeitando período/status, que são os únicos filtros que fazem sentido pra ele.
+- **Posição:** movido pra baixo do relatório detalhado (antes ficava logo depois do formulário,
+  acima de tudo) — agora fica entre o relatório e a "Zona de perigo".
+- **Visual novo** (`laudos.html`) — trocado o `<textarea readonly>` monoespaçado por um card
+  "Resumo de Laudos" + um `.card` por assessoria (mesmo componente usado em todo o resto do
+  sistema, e no relatório "Geral" novo de Processos — seção 4.16), com uma tabela Tipo/Quantidade/
+  Valor individual, números e valores alinhados à direita, `R$ 1.234,56` no padrão brasileiro
+  (já era assim antes). Responsivo/legível em tela pequena pelo mesmo CSS que já cobre `.card` e
+  `table` no resto do sistema — nada dedicado precisou ser escrito.
+- **Cópia mantida, sem campo de texto visível:** um botão "Copiar resumo" (`data-copiar-resumo`,
+  `app/static/app.js::iniciarCopiaDeResumo`) lê o mesmo texto simples de antes
+  (`formatar_texto_resumo_assessorias`, sem mudança de formato) de um
+  `<script type="application/json">` escondido — escapado com segurança pelo filtro `tojson` do
+  Jinja2 (não é HTML cru) — e copia pra área de transferência via `navigator.clipboard.writeText`,
+  com um toast de confirmação (reaproveita `mostrarToast`, já existente).
+- **Testado:** 2 testes web reescritos/novos (cards visíveis por assessoria, sem mais
+  `<textarea>`, resumo continua mostrando todas as empresas mesmo com o relatório filtrado por
+  uma) — 139 no total. Validado com Playwright: ordem das seções na página, botão de copiar
+  realmente copiando o texto certo pra área de transferência (com toast de sucesso), captura de
+  tela do visual novo.
+- **Reversível:** sim — mudança de template/rota isolada; a função que gera os dados
+  (`gerar_resumo_por_assessoria`) não mudou de assinatura nem de regra.
+

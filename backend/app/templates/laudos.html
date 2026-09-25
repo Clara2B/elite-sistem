@@ -60,20 +60,6 @@
     </form>
   </div>
 
-  {% if resumo_texto is not none %}
-    <div class="card">
-      <h2>Resumo por assessoria (texto)</h2>
-      <p class="subtitulo">
-        Mesmo período/status do relatório acima — pronto pra selecionar e copiar.
-      </p>
-      {% if resumo_texto %}
-        <textarea readonly rows="16" style="width:100%; font-family: monospace; font-size: 0.86rem; padding: 10px;">{{ resumo_texto }}</textarea>
-      {% else %}
-        <p class="vazio">Nenhum laudo encontrado nesse período/status.</p>
-      {% endif %}
-    </div>
-  {% endif %}
-
   {% if resultado %}
     <div class="card">
       <h2>
@@ -118,6 +104,55 @@
         <p class="vazio">Nenhum laudo encontrado nesse período.</p>
       {% endif %}
     </div>
+  {% endif %}
+
+  {% if resumo_texto is not none %}
+    <div class="card">
+      <div class="card-header">
+        <h2>Resumo de Laudos</h2>
+        {% if resumo_texto %}
+          <button type="button" class="secundario" data-copiar-resumo="resumo-texto-copia"
+                  style="font-size:0.82rem; padding:6px 12px;">
+            Copiar resumo
+          </button>
+        {% endif %}
+      </div>
+      <p class="subtitulo">
+        Mesmo período/status do relatório acima — todas as empresas, em ordem alfabética.
+      </p>
+    </div>
+    <script type="application/json" id="resumo-texto-copia">{{ resumo_texto | tojson }}</script>
+
+    {% if resumo %}
+      {% for r in resumo %}
+        <div class="card">
+          <h2>{{ r.assessoria }}</h2>
+          <p class="subtitulo">Total de laudos: {{ r.total_laudos }}</p>
+          <div class="tabela-wrap">
+            <table>
+              <thead><tr><th>Tipo de laudo</th><th>Quantidade</th><th>Valor individual</th></tr></thead>
+              <tbody>
+                {% for t in r.tipos %}
+                  <tr>
+                    <td>{{ t.tipo }}</td>
+                    <td style="text-align:right;">{{ t.quantidade }}</td>
+                    <td style="text-align:right;">
+                      {% if t.valor_unitario is not none %}
+                        R$ {{ "%.2f"|format(t.valor_unitario)|replace(".", ",") }}
+                      {% else %}
+                        (sem valor cadastrado)
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="card"><p class="vazio">Nenhum laudo encontrado nesse período/status.</p></div>
+    {% endif %}
   {% endif %}
 
   {% if eh_admin %}

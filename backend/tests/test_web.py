@@ -458,11 +458,17 @@ def test_laudos_resumo_por_assessoria_sem_empresa_cobre_todas(client, db):
         params={"ano": 2026, "mes": 1, "status": "Solicitação + Corrigido (cobrança)"},
     )
     assert resposta.status_code == 200
-    assert "ASSESSORIA: ABSOLUTA" in resposta.text
-    assert "ASSESSORIA: HUNTING" in resposta.text
+    # cards visíveis (não mais fonte monoespaçada) — um <h2> por assessoria
+    assert "<h2>ABSOLUTA</h2>" in resposta.text
+    assert "<h2>HUNTING</h2>" in resposta.text
+    assert "data-copiar-resumo" in resposta.text  # botão "Copiar resumo"
+    assert "<textarea" not in resposta.text  # não é mais o campo de texto simples de antes
 
 
-def test_laudos_resumo_por_assessoria_com_empresa_filtra_uma_so(client, db):
+def test_laudos_resumo_por_assessoria_sempre_cobre_todas_mesmo_com_empresa_filtrada(client, db):
+    """Bloco 4 (2026-09-25, a pedido da Clara): o resumo é sempre geral —
+    filtrar o relatório detalhado por uma empresa não deve mais restringir
+    o resumo, diferente do comportamento anterior (2026-09-24)."""
     db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
     absoluta = EmpresaCliente(nome="ABSOLUTA")
     hunting = EmpresaCliente(nome="HUNTING")
@@ -482,8 +488,8 @@ def test_laudos_resumo_por_assessoria_com_empresa_filtra_uma_so(client, db):
         params={"empresa": "ABSOLUTA", "ano": 2026, "mes": 1, "status": "Solicitação + Corrigido (cobrança)"},
     )
     assert resposta.status_code == 200
-    assert "ASSESSORIA: ABSOLUTA" in resposta.text
-    assert "ASSESSORIA: HUNTING" not in resposta.text
+    assert "<h2>ABSOLUTA</h2>" in resposta.text
+    assert "<h2>HUNTING</h2>" in resposta.text  # resumo continua geral mesmo filtrando o relatório
     # relatório detalhado da empresa também aparece, como já acontecia antes
     assert "AUTO" in resposta.text
 

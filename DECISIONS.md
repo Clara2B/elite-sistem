@@ -945,3 +945,23 @@ total — + verificação de ponta a ponta com Playwright (formatos Geral/Por em
 "último evento"/observação batendo com o andamento certo num processo com histórico, filtro sem
 resultado com mensagem amigável, rótulos corretos em toda parte incluindo a tela de assistentes).
 **Reversível:** sim — mudança isolada ao módulo de Processos; schema do banco não mudou.
+
+## 2026-09-25 — Resumo de Laudos: sempre geral e visual em cards (Bloco 4)
+
+**Contexto:** Bloco 4 do pedido de 4 blocos — da aba Laudos de verdade (diferente dos Blocos 1-3,
+que eram de Gestão de Processos, ver entrada acima). Dois pedidos: (1) o resumo deve ser sempre
+geral, cobrindo todas as empresas, mesmo que o relatório detalhado esteja filtrado por uma só;
+(2) visual limpo, com a identidade do sistema, em vez do campo de texto monoespaçado atual.
+**Decisão:** `routes_laudos.py` parou de passar o filtro de empresa pra
+`gerar_resumo_por_assessoria` — o resumo sempre cobre todas, só período/status valem pra ele.
+Visual trocado de `<textarea readonly>` pra um `.card` por assessoria (mesmo componente usado em
+todo o resto do sistema), com tabela Tipo/Quantidade/Valor alinhada à direita. A função de cópia
+foi mantida (botão "Copiar resumo", mesmo texto simples de antes, via clipboard API), só mudou a
+forma de guardar o texto na página (um `<script type="application/json">` escondido em vez do
+campo visível) — sem regredir a funcionalidade que já existia.
+**Posição:** movido pra baixo do relatório detalhado, como pedido — antes ficava acima dele.
+**Validação:** 2 testes web (cards visíveis, sem mais textarea; resumo continua geral mesmo com
+filtro de empresa aplicado no relatório) — 139 no total — + Playwright confirmando visualmente o
+posicionamento, o botão de copiar funcionando de verdade (toast + conteúdo certo na área de
+transferência) e uma captura de tela do resultado final.
+**Reversível:** sim — mudança de template/rota; a lógica de geração dos dados não mudou.

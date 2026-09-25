@@ -44,23 +44,24 @@ def tela(
         "filtro": {"empresa": empresa, "ano": ano, "mes": mes, "status": status},
         "mensagem": mensagem,
         "resultado": None,
+        "resumo": None,
         "resumo_texto": None,
         "erro": erro,
         "eh_admin": usuario.papel_global in PAPEIS_GLOBAIS,
     }
-    # "Empresa-cliente" é opcional aqui (diferente do relatório de uma
-    # empresa só, que sempre exigiu): vazio faz a lista-resumo por
-    # assessoria cobrir todas, preenchido filtra pra uma só — a pedido da
-    # Clara (2026-09-25, ver DECISIONS.md). Sem empresa, só a lista-resumo é
-    # gerada (o relatório detalhado por laudo continua exigindo uma empresa,
-    # já que ele lista laudo por laudo).
+    # O resumo é sempre GERAL — cobre todas as empresas, ignorando o filtro
+    # de "Empresa" do relatório detalhado (que continua servindo só pra
+    # filtrar a tabela de laudo por laudo abaixo). Pedido explícito da
+    # Clara (Bloco 4, 2026-09-25, ver DECISIONS.md): um único resumo
+    # consolidado, nunca isolado por empresa/relatório.
     if ano and mes and status:
         periodo_ini, periodo_fim = laudos_service.periodo_20_a_20(ano, mes)
         try:
-            resumo = laudos_service.gerar_resumo_por_assessoria(db, periodo_ini, periodo_fim, status, empresa or None)
+            resumo = laudos_service.gerar_resumo_por_assessoria(db, periodo_ini, periodo_fim, status)
         except ValueError as e:
             contexto["erro"] = str(e)
         else:
+            contexto["resumo"] = resumo
             contexto["resumo_texto"] = laudos_service.formatar_texto_resumo_assessorias(resumo)
 
         if empresa and not contexto["erro"]:
@@ -90,6 +91,7 @@ async def importar(
         "hoje": date.today(),
         "filtro": {},
         "resultado": None,
+        "resumo": None,
         "resumo_texto": None,
         "mensagem": None,
         "erro": None,

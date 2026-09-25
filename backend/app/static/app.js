@@ -152,10 +152,29 @@ function iniciarAlternanciaTipoRelatorio() {
   atualizar();
 }
 
+// Botão "Copiar resumo" (Laudos) — o texto vem de um <script type="application/json">
+// (escapado com segurança pelo `tojson` do Jinja2, não HTML cru), pra
+// manter a mesma forma de copiar que o campo de texto antigo tinha, agora
+// com o resumo mostrado em cards em vez de fonte monoespaçada.
+function iniciarCopiaDeResumo() {
+  document.querySelectorAll("[data-copiar-resumo]").forEach(function (botao) {
+    var elemento = document.getElementById(botao.getAttribute("data-copiar-resumo"));
+    if (!elemento) return;
+    botao.addEventListener("click", function () {
+      var texto = JSON.parse(elemento.textContent);
+      navigator.clipboard.writeText(texto).then(
+        function () { mostrarToast("Resumo copiado.", "sucesso"); },
+        function () { mostrarToast("Não foi possível copiar — selecione o texto manualmente.", "erro"); }
+      );
+    });
+  });
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   iniciarZonasDeUpload();
   iniciarValidacaoDeUpload();
   iniciarAlternanciaTipoRelatorio();
   iniciarModaisDeConfirmacao();
   iniciarConfirmacaoPorTexto();
+  iniciarCopiaDeResumo();
 });
