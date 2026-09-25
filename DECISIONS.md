@@ -1059,3 +1059,15 @@ casos).
 regenerados e conferidos visualmente (espaço maior visível acima da linha vermelha nas duas
 cartas).
 **Reversível:** sim — dois valores de estilo em `pdf_export.py::_estilos_carta`.
+
+## 2026-09-25 — Cartas: espaço acima da linha de e-mail da Banco aumentado de novo
+
+**Contexto:** depois do ajuste anterior (mais espaço acima da linha vermelha nas duas cartas), a
+Clara pediu, especificamente pra linha "Colocamo-nos à disposição por meio do e-mail:
+conciliacao@camaraeximia.com" (texto exato só existe na Carta Banco — a Cliente já tinha sido
+reestruturada em 3 linhas com telefone), ainda mais espaço em relação a todo o texto acima.
+**Decisão:** `spaceBefore` do estilo `contato_destaque` (só usado na Carta Banco) subiu de 14
+pra 26 — não mexeu no `link`/Cliente, que já tinha ficado do jeito que ela queria.
+**Validado:** suíte completa sem regressão (139 testes) + lint limpo + PDF de exemplo da Banco
+regenerado e conferido visualmente (espaço bem mais largo acima dessa linha agora).
+**Reversível:** sim — um valor de estilo em `pdf_export.py::_estilos_carta`.

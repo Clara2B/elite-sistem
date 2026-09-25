@@ -338,7 +338,7 @@ def _estilos_carta() -> dict[str, ParagraphStyle]:
         ),
         "contato_destaque": ParagraphStyle(
             "contato_destaque", alignment=TA_LEFT, fontName="Helvetica-Bold", fontSize=10.5,
-            leading=17, spaceBefore=14, spaceAfter=16, textColor=VERMELHO_DESTAQUE,
+            leading=17, spaceBefore=26, spaceAfter=16, textColor=VERMELHO_DESTAQUE,
         ),
         "fechamento_caps": ParagraphStyle(
             "fechamento_caps", alignment=TA_LEFT, fontName="Helvetica", fontSize=10.5,
