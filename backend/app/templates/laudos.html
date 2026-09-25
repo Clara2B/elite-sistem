@@ -28,9 +28,9 @@
     <h2>Gerar relatório</h2>
     <form class="formulario" method="get" action="/app/laudos">
       <div class="campo">
-        <label for="empresa">Empresa-cliente</label>
-        <select id="empresa" name="empresa" required>
-          <option value="">Selecione...</option>
+        <label for="empresa">Empresa-cliente (opcional — deixe em branco para a lista-resumo cobrir todas)</label>
+        <select id="empresa" name="empresa">
+          <option value="">Todas</option>
           {% for e in empresas %}
             <option value="{{ e.nome }}" {{ "selected" if filtro.empresa == e.nome else "" }}>{{ e.nome }}</option>
           {% endfor %}
@@ -59,6 +59,20 @@
       <button type="submit">Gerar relatório</button>
     </form>
   </div>
+
+  {% if resumo_texto is not none %}
+    <div class="card">
+      <h2>Resumo por assessoria (texto)</h2>
+      <p class="subtitulo">
+        Mesmo período/status do relatório acima — pronto pra selecionar e copiar.
+      </p>
+      {% if resumo_texto %}
+        <textarea readonly rows="16" style="width:100%; font-family: monospace; font-size: 0.86rem; padding: 10px;">{{ resumo_texto }}</textarea>
+      {% else %}
+        <p class="vazio">Nenhum laudo encontrado nesse período/status.</p>
+      {% endif %}
+    </div>
+  {% endif %}
 
   {% if resultado %}
     <div class="card">

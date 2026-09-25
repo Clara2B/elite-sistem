@@ -20,7 +20,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.excel_reader import load_data_sheets
-from app.models import Laudo, TipoLaudo
+from app.models import EmpresaCliente, Laudo, TipoLaudo
 from app.services.empresas import get_or_create_empresa
 from app.utils import cell_text, normalize, parse_date_cell
 
@@ -202,6 +202,34 @@ def _valor_tipo(db: Session, tipo: str, cache: dict[str, float | None]) -> float
     return None
 
 
+def _resolver_status(status_opcao: str) -> tuple[str, str]:
+    """(status_normalizado, rótulo pra exibição) — usado tanto por
+    `gerar_relatorio` quanto por `gerar_resumo_por_assessoria`, pra manter
+    exatamente a mesma interpretação de status nos dois."""
+    status_key = normalize(status_opcao)
+    status_normalizado = STATUS_OPCAO_MAP.get(status_key, STATUS_MAP.get(status_key, status_key))
+    status_label = {
+        STATUS_AMBOS: "Solicitação + Corrigido",
+        "SOLICITAÇÃO": "Solicitação",
+        "CORREÇÃO": "Corrigido",
+    }.get(status_normalizado, status_normalizado)
+    return status_normalizado, status_label
+
+
+def _status_bate(status_laudo: str, status_normalizado: str) -> bool:
+    if status_normalizado == STATUS_AMBOS:
+        return status_laudo in STATUS_VALIDOS
+    return status_laudo == status_normalizado
+
+
+def _resolver_empresa(db: Session, empresa_nome: str) -> EmpresaCliente | None:
+    alvo = normalize(empresa_nome)
+    for e in db.scalars(select(EmpresaCliente)):
+        if normalize(e.nome) == alvo:
+            return e
+    return None
+
+
 def gerar_relatorio(
     db: Session,
     empresa_nome: str,
@@ -210,25 +238,11 @@ def gerar_relatorio(
     status_opcao: str,
     cnpj: str | None = None,
 ) -> LaudosResult:
-    from app.models import EmpresaCliente
-
-    alvo_empresa = normalize(empresa_nome)
-    empresa = None
-    for e in db.scalars(select(EmpresaCliente)):
-        if normalize(e.nome) == alvo_empresa:
-            empresa = e
-            break
+    empresa = _resolver_empresa(db, empresa_nome)
     if empresa is None:
         raise ValueError(f"A empresa '{empresa_nome}' não foi encontrada.")
 
-    status_key = normalize(status_opcao)
-    status_normalizado = STATUS_OPCAO_MAP.get(status_key, STATUS_MAP.get(status_key, status_key))
-
-    status_label = {
-        STATUS_AMBOS: "Solicitação + Corrigido",
-        "SOLICITAÇÃO": "Solicitação",
-        "CORREÇÃO": "Corrigido",
-    }.get(status_normalizado, status_normalizado)
+    status_normalizado, status_label = _resolver_status(status_opcao)
 
     query = select(Laudo).where(
         Laudo.empresa_cliente_id == empresa.id,
@@ -241,10 +255,7 @@ def gerar_relatorio(
     valor_cache: dict[str, float | None] = {}
 
     for laudo in db.scalars(query):
-        if status_normalizado == STATUS_AMBOS:
-            if laudo.status not in STATUS_VALIDOS:
-                continue
-        elif laudo.status != status_normalizado:
+        if not _status_bate(laudo.status, status_normalizado):
             continue
 
         valor = _valor_tipo(db, laudo.tipo_laudo_nome, valor_cache)
@@ -294,3 +305,93 @@ def formatar_texto(result: LaudosResult) -> str:
     linhas_txt.append("")
     linhas_txt.append(f"Total{' ' * 70}{format_brl(result.total)}")
     return "\n".join(linhas_txt)
+
+
+@dataclass
+class LinhaResumoTipo:
+    tipo: str
+    quantidade: int
+    valor_unitario: float | None  # None = tipo sem valor cadastrado em tipos_laudo
+
+
+@dataclass
+class ResumoAssessoria:
+    assessoria: str
+    total_laudos: int
+    tipos: list[LinhaResumoTipo] = field(default_factory=list)
+
+
+def gerar_resumo_por_assessoria(
+    db: Session,
+    periodo_ini: date,
+    periodo_fim: date,
+    status_opcao: str,
+    filtro_empresa: str | None = None,
+) -> list[ResumoAssessoria]:
+    """Lista-resumo em texto simples (a pedido da Clara, 2026-09-25): pra
+    cada assessoria, total de laudos e a quantidade por tipo com o valor
+    individual do tipo. Usa EXATAMENTE o mesmo filtro de status
+    (`_status_bate`/`_resolver_status`) e valor por tipo (`_valor_tipo`) que
+    `gerar_relatorio` já usa — os números batem entre os dois porque é a
+    mesma regra, não uma reimplementação separada. `filtro_empresa`: se
+    informado, a lista cobre só essa assessoria (mesmo filtro do relatório
+    de uma empresa só); se não informado, cobre todas as assessorias com
+    laudo no período/status. Um tipo sem valor cadastrado em `tipos_laudo`
+    fica com `valor_unitario=None` (não é descartado nem vira R$ 0,00 —
+    ver `formatar_texto_resumo_assessorias`)."""
+    status_normalizado, _ = _resolver_status(status_opcao)
+
+    empresa_id_filtro = None
+    if filtro_empresa:
+        empresa = _resolver_empresa(db, filtro_empresa)
+        if empresa is None:
+            raise ValueError(f"A empresa '{filtro_empresa}' não foi encontrada.")
+        empresa_id_filtro = empresa.id
+
+    query = (
+        select(Laudo.tipo_laudo_nome, Laudo.status, EmpresaCliente.nome)
+        .join(EmpresaCliente, Laudo.empresa_cliente_id == EmpresaCliente.id)
+        .where(Laudo.data >= periodo_ini, Laudo.data <= periodo_fim)
+    )
+    if empresa_id_filtro is not None:
+        query = query.where(Laudo.empresa_cliente_id == empresa_id_filtro)
+
+    # assessoria -> tipo -> quantidade. Só entra quem realmente tem laudo
+    # contado — sem isso apareceriam assessorias/tipos com zero, que a
+    # Clara pediu explicitamente pra não listar.
+    contagem: dict[str, dict[str, int]] = {}
+    for tipo, status_laudo, empresa_nome in db.execute(query):
+        if not _status_bate(status_laudo, status_normalizado):
+            continue
+        contagem.setdefault(empresa_nome, {}).setdefault(tipo, 0)
+        contagem[empresa_nome][tipo] += 1
+
+    valor_cache: dict[str, float | None] = {}
+    resultado: list[ResumoAssessoria] = []
+    for empresa_nome in sorted(contagem, key=normalize):
+        tipos_contagem = contagem[empresa_nome]
+        linhas_tipo = [
+            LinhaResumoTipo(tipo=tipo, quantidade=qtd, valor_unitario=_valor_tipo(db, tipo, valor_cache))
+            for tipo, qtd in sorted(tipos_contagem.items(), key=lambda item: normalize(item[0]))
+        ]
+        resultado.append(
+            ResumoAssessoria(
+                assessoria=empresa_nome,
+                total_laudos=sum(tipos_contagem.values()),
+                tipos=linhas_tipo,
+            )
+        )
+    return resultado
+
+
+def formatar_texto_resumo_assessorias(resumo: list[ResumoAssessoria]) -> str:
+    from app.utils import format_brl
+
+    blocos = []
+    for r in resumo:
+        linhas_txt = [f"ASSESSORIA: {r.assessoria.upper()}", f"Total de laudos: {r.total_laudos}"]
+        for t in r.tipos:
+            valor_str = format_brl(t.valor_unitario) if t.valor_unitario is not None else "(sem valor cadastrado)"
+            linhas_txt.append(f"{t.tipo}: {t.quantidade} laudos - Valor individual: {valor_str}")
+        blocos.append("\n".join(linhas_txt))
+    return "\n\n".join(blocos)

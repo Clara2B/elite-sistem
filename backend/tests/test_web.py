@@ -390,6 +390,56 @@ def test_apagar_todos_laudos_via_web_bloqueado_para_nao_admin(client, db):
     assert db.query(Laudo).count() == 1  # nada foi apagado
 
 
+def test_laudos_resumo_por_assessoria_sem_empresa_cobre_todas(client, db):
+    db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    absoluta = EmpresaCliente(nome="ABSOLUTA")
+    hunting = EmpresaCliente(nome="HUNTING")
+    db.add_all([absoluta, hunting])
+    db.flush()
+    db.add_all(
+        [
+            Laudo(empresa_cliente_id=absoluta.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 25), nome_cliente="Fulano", status="SOLICITAÇÃO"),
+            Laudo(empresa_cliente_id=hunting.id, tipo_laudo_nome="IMÓVEL", data=date(2026, 1, 25), nome_cliente="Beltrano", status="SOLICITAÇÃO"),
+        ]
+    )
+    db.commit()
+    client.post("/login", data={"email": "fulano@teste.local", "senha": "certa"})
+
+    resposta = client.get(
+        "/app/laudos",
+        params={"ano": 2026, "mes": 1, "status": "Solicitação + Corrigido (cobrança)"},
+    )
+    assert resposta.status_code == 200
+    assert "ASSESSORIA: ABSOLUTA" in resposta.text
+    assert "ASSESSORIA: HUNTING" in resposta.text
+
+
+def test_laudos_resumo_por_assessoria_com_empresa_filtra_uma_so(client, db):
+    db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    absoluta = EmpresaCliente(nome="ABSOLUTA")
+    hunting = EmpresaCliente(nome="HUNTING")
+    db.add_all([absoluta, hunting])
+    db.flush()
+    db.add_all(
+        [
+            Laudo(empresa_cliente_id=absoluta.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 25), nome_cliente="Fulano", status="SOLICITAÇÃO"),
+            Laudo(empresa_cliente_id=hunting.id, tipo_laudo_nome="IMÓVEL", data=date(2026, 1, 25), nome_cliente="Beltrano", status="SOLICITAÇÃO"),
+        ]
+    )
+    db.commit()
+    client.post("/login", data={"email": "fulano@teste.local", "senha": "certa"})
+
+    resposta = client.get(
+        "/app/laudos",
+        params={"empresa": "ABSOLUTA", "ano": 2026, "mes": 1, "status": "Solicitação + Corrigido (cobrança)"},
+    )
+    assert resposta.status_code == 200
+    assert "ASSESSORIA: ABSOLUTA" in resposta.text
+    assert "ASSESSORIA: HUNTING" not in resposta.text
+    # relatório detalhado da empresa também aparece, como já acontecia antes
+    assert "AUTO" in resposta.text
+
+
 def test_apagar_todas_audiencias_via_web_exige_admin(client, db):
     db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
     empresa = EmpresaCliente(nome="ABSOLUTA")

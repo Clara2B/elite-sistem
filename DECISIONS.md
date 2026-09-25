@@ -890,3 +890,27 @@ Starlette casava com a rota de editar primeiro (`empresa_id="sincronizar-lista-o
 (3 cenários: empresa sem vínculo excluída, empresa com laudo vinculado preservada e reportada, CNPJ
 de uma empresa já existente corrigido) batendo exatamente com o esperado.
 **Reversível:** não — as exclusões são definitivas; criação/CNPJ são triviais de reverter.
+
+## 2026-09-25 — Resumo por assessoria em texto simples, na aba Laudos
+
+**Contexto:** a Clara pediu uma lista-resumo em texto puro (sem PDF, pra copiar e colar), gerada
+junto com o relatório de Laudos, com total de laudos e quantidade por tipo (+ valor individual) por
+assessoria — seguindo um modelo de texto exato que ela deu.
+**Pergunta antes de implementar:** o relatório de Laudos sempre exigiu uma empresa específica, mas
+o exemplo dela mostrava várias assessorias na mesma lista — perguntei se a lista deveria cobrir só
+a assessoria selecionada (sempre 1 bloco) ou todas do período/status (vários blocos, como no
+exemplo). Ela escolheu "todas as assessorias do período/status" — o campo "Empresa-cliente" virou
+opcional: vazio cobre todas, preenchido filtra pra uma só (mesmo filtro do relatório detalhado).
+**Pontos que ela pediu pra eu avisar em vez de decidir sozinho, resolvidos ao explorar o código:**
+(1) variação de valor do mesmo tipo — não pode acontecer, o valor é sempre resolvido ao vivo da
+tabela de preços atual, nunca gravado por laudo; (2) laudo sem assessoria/tipo — não existe no
+banco, o import já descarta essas linhas antes de gravar; o único caso real de dado faltando é tipo
+sem valor cadastrado, tratado com "(sem valor cadastrado)" em vez de R$ 0,00 ou descarte silencioso.
+**Decisão/implementação:** `gerar_resumo_por_assessoria()` (`app/services/laudos.py`) reaproveita a
+mesma lógica de filtro de status e de valor por tipo que `gerar_relatorio()` já usava (extraí
+`_status_bate`/`_resolver_status` pra ficarem compartilhadas) — os números batem entre relatório e
+resumo porque é a mesma regra, não uma reimplementação paralela.
+**Validação:** 10 testes novos — 132 no total — incluindo um que confirma o formato exato de saída
+batendo com o modelo que a Clara deu, e um teste de ponta a ponta com Playwright reproduzindo o
+exemplo do plano apresentado antes de implementar.
+**Reversível:** sim — funções novas e isoladas; o relatório detalhado existente não mudou.

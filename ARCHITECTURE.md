@@ -1037,3 +1037,48 @@ JUSTOS, PERES, ROYAL, REGULARIZE, REVISALPHA, TEG, WN FAST); ela confirmou inclu
 - **Reversível:** não — as exclusões são definitivas (mesma natureza das outras zonas de perigo);
   criação/atualização de CNPJ são triviais de reverter, mas uma empresa excluída não volta sozinha.
 
+### 4.15 Resumo por assessoria em texto simples, na aba Laudos (2026-09-25)
+
+A Clara pediu uma lista-resumo em texto puro (sem PDF), agrupada por assessoria, gerada junto com
+o relatório de Laudos — total de laudos e quantidade por tipo (com o valor individual do tipo) por
+assessoria. "Assessoria" aqui é o mesmo conceito de `empresas_clientes` de sempre (a mesma tabela
+da lista oficial da seção 4.14 — o PDF que a Clara mandou chamava isso de "assessorias").
+
+- **Decisão de escopo (perguntei antes de implementar):** o relatório de Laudos sempre exigiu uma
+  empresa específica (campo obrigatório) — mas o exemplo de saída da Clara mostrava várias
+  assessorias na mesma lista. Confirmado com ela: a lista-resumo cobre **todas** as assessorias do
+  período/status quando o campo "Empresa-cliente" fica em branco (agora opcional), e filtra pra uma
+  só quando ele é preenchido — mesmo filtro que já vale pro relatório detalhado de uma empresa.
+- **`gerar_resumo_por_assessoria(db, periodo_ini, periodo_fim, status_opcao, filtro_empresa=None)`**
+  (`app/services/laudos.py`) — reaproveita literalmente a mesma lógica de filtro de status
+  (`_status_bate`/`_resolver_status`, extraídas de dentro de `gerar_relatorio` pros dois
+  reaproveitarem) e a mesma resolução de valor por tipo (`_valor_tipo`, direto de `tipos_laudo`,
+  igual ao relatório já fazia) — os números batem entre os dois porque é a mesma regra, não uma
+  reimplementação paralela, como a Clara pediu explicitamente.
+- **Sobre variação de valor dentro do mesmo tipo** (a Clara pediu pra avisar em vez de tirar média):
+  não existe, por construção — o valor de um tipo de laudo não é gravado por laudo individual, é
+  sempre resolvido na hora a partir de `TipoLaudo.valor_padrao` (mesma tabela de preços atual),
+  então todo laudo do mesmo tipo tem sempre o mesmo valor, em qualquer assessoria.
+- **Sobre laudo sem assessoria/tipo/valor** (a Clara pediu pra avisar em vez de descartar em
+  silêncio): `importar_planilha` já descarta linhas sem empresa ou sem tipo antes de gravar (ver
+  seção 4.6) — não existe `Laudo` no banco sem esses dois campos. O único caso real de dado
+  faltando é um tipo sem valor cadastrado em `tipos_laudo`; nesse caso `valor_unitario=None` e o
+  texto mostra `(sem valor cadastrado)` no lugar do R$, em vez de contar como R$ 0,00 — mesmo
+  espírito do aviso `tipos_sem_valor` que o relatório detalhado já tinha.
+- **Formato:** `formatar_texto_resumo_assessorias` — texto puro, sem HTML/tabela, um bloco por
+  assessoria (`ASSESSORIA: NOME` / `Total de laudos: N` / uma linha por tipo), ordem alfabética
+  (`normalize`) tanto de assessoria quanto de tipo dentro dela, e só entra quem tem pelo menos 1
+  laudo contado (sem linha de zero).
+- **Tela:** campo "Empresa-cliente" do formulário de Laudos deixou de ser obrigatório; novo card
+  "Resumo por assessoria (texto)" com um `<textarea readonly>` (selecionável/copiável, sem
+  download nem PDF, como pedido) exibido sempre que período+status forem submetidos — junto com o
+  relatório detalhado de uma empresa quando ela for selecionada.
+- **Testado:** 10 testes novos (`tests/test_laudos_service.py` — agrupamento/ordenação, exclui
+  quem não tem laudo no período, filtro por empresa, empresa inexistente gera erro, tipo sem valor,
+  mesmo filtro de status do relatório, formato exato de saída batendo com o modelo da Clara;
+  `tests/test_web.py` — tela sem empresa mostra todas as assessorias, tela com empresa filtra só
+  uma e mantém o relatório detalhado) — 132 no total. Validado também com Playwright contra um
+  banco local: a saída bateu exatamente com o exemplo apresentado no plano antes de implementar.
+- **Reversível:** sim — funções novas e isoladas; nada muda no relatório detalhado existente
+  (`gerar_relatorio`/`formatar_texto` continuam exatamente iguais, só reaproveitados por baixo).
+
