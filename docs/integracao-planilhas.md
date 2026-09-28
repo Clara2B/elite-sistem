@@ -1,40 +1,44 @@
 # Integração com planilhas — Laudos, Audiências, Pendências e Gestão de Processos
 
 > **Documento de análise e recomendação — nenhum código foi alterado para produzi-lo.**
-> Não inicio nenhuma implementação até a Clara aprovar o plano e responder às perguntas da seção 8.
+> Não inicio nenhuma implementação até a Clara aprovar o plano e me passar exemplos reais das
+> planilhas (ver seção 8 — a maioria das perguntas já foi respondida em 28/09).
 
 ---
 
 ## 0. Resumo executivo
 
+**Atualizado em 28/09, com as respostas da Clara.** Confirmado: as planilhas ficam no Google Drive
+(Google Sheets), o sistema deve **só ler** (nunca escrever nelas), o mecanismo é a **API do Google
+Sheets**, e a frequência precisa ser de **no mínimo 10 vezes por mês** — porque o problema real,
+confirmado pela Clara, é o trabalho manual de ter que subir a planilha toda vez, não uma segunda
+via de digitação (ver seção 8).
+
 Hoje o sistema **já lê planilhas `.xlsx`** para essas 4 áreas — é a única forma de entrada de dados
 que existe (não há formulário de cadastro manual paralelo em nenhuma delas). O que falta não é
 "aprender a ler planilha" — isso já existe, testado e validado com dados reais — é **trocar o
 gatilho**: hoje alguém precisa lembrar de baixar/exportar a planilha e fazer o upload manual na
-tela; a proposta é que o sistema busque os dados **direto na fonte**, sob demanda (um botão
-"Atualizar agora") em vez de esperar um upload.
+tela; a proposta é que o sistema busque os dados **direto na fonte**, automaticamente, numa
+frequência que folgadamente cobre o mínimo pedido.
 
 **Recomendação, em uma frase:** manter o parser atual (`app/excel_reader.py` + os quatro
 `services/*.py`) exatamente como está, e trocar só a **origem dos bytes** — de "arquivo enviado pelo
-navegador" para "arquivo baixado da API do Google Sheets" (ou Microsoft Graph, se as planilhas
-estiverem no OneDrive/SharePoint — **isso ainda precisa ser confirmado, ver seção 8**) — começando
-por **sincronização sob demanda** (um clique, não agendada) numa única área piloto, sem mexer em
-agendamento automático nem em escrita de volta na planilha por enquanto.
+navegador" para "arquivo baixado da API do Google Sheets" — com uma **sincronização automática
+agendada** (ex. algumas vezes por dia, bem acima do mínimo de 10x/mês) desde o início, mais um botão
+"Atualizar agora" pra quando alguém quiser forçar uma leitura na hora — começando por **uma área
+piloto** (Laudos, ver seção 4), sem escrita de volta na planilha em nenhuma hipótese.
 
-Por quê essa é a rota de menor risco: reaproveita ~95% do código já testado (inclusive todas as
-defesas contra dado sujo já descobertas em produção — cabeçalho que muda de nome entre abas, texto
-data-de-liberação sendo confundido com data de andamento, número de processo fora do padrão,
-"EMPRESA - Cliente" numa célula só etc.), não exige nenhuma peça de infraestrutura nova (agendador/
-cron não existe no projeto hoje), e mantém uma pessoa no controle de quando os relatórios são
-atualizados — importante enquanto a qualidade do dado na origem ainda não foi validada com exemplos
-reais (ver lacuna na seção 2).
+Por quê essa é a rota de menor risco mesmo sendo automática: reaproveita ~95% do código já testado
+(inclusive todas as defesas contra dado sujo já descobertas em produção — cabeçalho que muda de
+nome entre abas, texto data-de-liberação sendo confundido com data de andamento, número de processo
+fora do padrão, "EMPRESA - Cliente" numa célula só etc.), a credencial usada é **só leitura** (nunca
+consegue alterar a planilha, mesmo que o código tenha um bug), e começar por uma única área piloto
+reduz o raio de qualquer erro de configuração antes de replicar pras outras 3.
 
-**A peça que falta pra eu fechar esta análise de verdade:** nenhuma planilha de exemplo foi
-encontrada no repositório, e os campos "onde ficam"/"cópias de exemplo"/"quem edita" do seu pedido
-ficaram em branco (com o texto `[PREENCHA...]` do modelo). Uma resposta a essas perguntas **já
-existe registrada neste projeto**, de 21/09 (`ARCHITECTURE.md` seção 1.9): Google Sheets, atualizado
-todo dia pela equipe. Não sei se isso ainda vale — por isso pergunto de novo na seção 8, em vez de
-simplesmente reusar a resposta antiga sem confirmar.
+**A única peça que ainda falta pra eu fechar esta análise de verdade:** nenhuma planilha de exemplo
+foi encontrada no repositório — preciso que você me envie um recorte pequeno (pode ter dado
+fictício) de cada planilha real, pra eu confirmar que os cabeçalhos que o sistema já espera hoje
+ainda batem com o que a equipe usa. Detalhes de como me enviar isso na seção 8, pergunta 2.
 
 ---
 
@@ -67,7 +71,7 @@ simplesmente reusar a resposta antiga sem confirmar.
 a única via de entrada é o upload de `.xlsx`. O parser (`app/excel_reader.py::load_data_sheets`) é
 **compartilhado pelas 4 áreas**: recebe o caminho do arquivo e a lista de cabeçalhos obrigatórios,
 varre todas as abas do workbook, aproveita só as que têm esses cabeçalhos nas 5 primeiras linhas, e
-devolve tudo empilhado num único DataFrame. Cada área then aplica sua própria regra de negócio em
+devolve tudo empilhado num único DataFrame. Cada área aplica sua própria regra de negócio em
 cima desse DataFrame (`app/services/{laudos,audiencias,pendencias,processos}.py`).
 
 | Área | Operadora | Rota de import (web) | Rota de import (API) | Tabela(s) |
@@ -180,10 +184,9 @@ equipe usa hoje ainda batem com isso**, nem apontar problemas que só apareceria
 arquivo de verdade. Assim que eu tiver acesso a exemplos (mesmo pequenos/anonimizados), volto e
 completo esta seção de verdade.
 
-**O que já sei, de uma resposta anterior sua registrada em `ARCHITECTURE.md` (21/09, seção 1.9,
-item 1):** as planilhas ficam no **Google Sheets**, atualizadas todo dia pela equipe. Não presumo
-que isso ainda vale — pergunto de novo na seção 8, porque você deixou o campo em branco desta vez
-(pode ter mudado, ou só não ter preenchido o modelo).
+**Atualização 28/09:** confirmado — Google Sheets, no Google Drive (bate com a resposta anterior
+registrada em `ARCHITECTURE.md` 21/09, seção 1.9, item 1). O que ainda falta é um **exemplo real**
+de arquivo — a confirmação de "onde" não substitui ver a estrutura de verdade (seção 8, pergunta 2).
 
 ### 2.2 O que o sistema já espera de cada planilha (visto do lado do código)
 
@@ -252,12 +255,11 @@ acima), que é parecido mas não é exatamente isso. Preciso de um exemplo real 
 
 ## 3. Opções de integração (Etapa 3)
 
-Comparação assumindo Google Sheets (resposta anterior, a confirmar — seção 8). Se for Microsoft
-(Excel no OneDrive/SharePoint), a Opção A troca `google-api-python-client`/`gspread` por Microsoft
-Graph (`msal` + chamadas REST) — o resto da comparação (esforço relativo, confiabilidade, frequência,
-custo) é essencialmente o mesmo.
+**Confirmado pela Clara em 28/09: Google Sheets, no Google Drive.** A comparação abaixo (mantida
+por registro/transparência) foi escrita antes dessa confirmação considerando também a hipótese
+Microsoft — como não é mais o caso, a Opção A já assume Google Sheets API diretamente.
 
-### Opção A — Leitura direta via API (Google Sheets API / Microsoft Graph)
+### Opção A — Leitura direta via API (Google Sheets API) — confirmada como a escolhida
 
 **Como eu integraria isso ao que já existe:** em vez de escrever um parser novo pra ler linhas via
 API, eu bateria na API só pra **baixar o arquivo inteiro como `.xlsx`** (o Google Sheets API/Drive
@@ -273,8 +275,9 @@ entregaria esses bytes pro `load_data_sheets` **exatamente como ele já funciona
   um erro de digitação na aba pode entrar sem revisão humana, dependendo da frequência escolhida.
 - **Frequência possível:** qualquer uma — sob demanda, agendada, ou quase-tempo-real (webhook, ver
   Opção D) — a API não limita isso, a arquitetura de quem chama ela que decide.
-- **Segurança/LGPD:** exige uma credencial de serviço (conta de serviço do Google, ou app registrado
-  no Azure AD) com acesso **só de leitura** à planilha — nunca a senha de uma pessoa. Essa credencial
+- **Segurança/LGPD:** exige uma credencial de serviço (conta de serviço do Google) com acesso **só
+  de leitura** à planilha (a Clara confirmou: "o sistema não deve mexer em NADA nas planilhas") —
+  nunca a senha de uma pessoa. Essa credencial
   vai como variável de ambiente no Render, nunca commitada (mesmo cuidado já documentado em
   `SECURITY.md` pra `DATABASE_URL`/credenciais SMTP — e mesmo cuidado que faltou no incidente do
   repositório `leitor-relatorio`, que teve planilha e banco expostos no histórico do Git).
@@ -342,92 +345,101 @@ Você não pediu isso, mas o pedido original menciona comparar. Registro rapidam
 - Exige credencial com permissão de **escrita**, não só leitura — maior superfície de risco de
   segurança pra um ganho que, pelo que você descreveu ("evitar digitação duplicada"), não parece
   necessário: ninguém digita no sistema hoje, só na planilha.
-- **Não recomendo** para este caso, a menos que surja um motivo concreto que eu não enxerguei — fica
-  como pergunta em aberto na seção 8, mas minha leitura é que só leitura resolve o problema descrito.
+- **Confirmado como fora de escopo em 28/09** — a Clara decidiu: "o sistema apenas LERIA as
+  planilhas". Registrado aqui só por transparência de que a comparação foi feita.
 
 ---
 
-## 4. Recomendação final
+## 4. Recomendação final (atualizada com as respostas de 28/09)
 
-1. **Direção:** só leitura (sistema lê da planilha) — a menos que você confirme uma necessidade real
-   de escrita de volta (ver pergunta 8.1).
-2. **Mecanismo:** Opção A (API da plataforma onde as planilhas estão — a confirmar, provavelmente
-   Google Sheets pela resposta de 21/09), exportando o arquivo inteiro como `.xlsx` e entregando pro
-   `load_data_sheets` já existente — reaproveita tudo que já foi validado com dado real, sem
-   reescrever o parser.
-3. **Frequência:** começar **sob demanda** (botão "Atualizar agora"), não agendada — menor esforço,
-   nenhuma infraestrutura nova, e mantém uma pessoa no controle enquanto a qualidade dos dados de
-   origem ainda não foi revalidada com exemplos reais. Agendamento fica como evolução natural depois
-   que o botão sob demanda estiver rodando de forma confiável por um tempo.
+1. **Direção:** só leitura — **confirmado pela Clara** ("o sistema apenas LERIA as planilhas"; "não
+   deve mexer em NADA nas planilhas"). A credencial usada é tecnicamente restrita a leitura (acesso
+   "Visualizador" no compartilhamento do Google Sheets), não é só uma promessa no código — mesmo que
+   um bug tentasse escrever, a permissão não deixaria.
+2. **Mecanismo:** Opção A, confirmada — Google Sheets API, exportando o arquivo inteiro como `.xlsx`
+   e entregando pro `load_data_sheets` já existente. Reaproveita tudo que já foi validado com dado
+   real, sem reescrever o parser.
+3. **Frequência:** **automática, agendada** — não só sob demanda. A Clara pediu no mínimo 10x/mês
+   (~1 a cada 3 dias) e explicou que o problema real é "o trabalho que está dando ter que subir as
+   atualizações toda vez" — ou seja, depender de alguém clicar num botão não resolveria o incômodo
+   que ela quer resolver. Proposta: rodar algumas vezes por dia (ex. a cada 4-6h, ou 2-3x/dia) —
+   folga confortável acima do mínimo pedido, sem sobrecarregar a API do Google (a cota gratuita
+   suporta muito mais que isso, ver Opção A). Um botão "Atualizar agora" continua fazendo sentido
+   junto — útil pra testar, e pra quem quiser forçar uma leitura fora do horário agendado.
 4. **Escopo inicial:** uma área piloto, não as 4 de uma vez — reduz o raio de um erro de configuração
    de credencial/permissão, e valida o mecanismo (comparando contagens: import via API vs. upload
-   manual da mesma planilha no mesmo momento) antes de replicar. **Qual área começar é uma decisão
-   sua** (pergunta 8.4) — minha sugestão, só como ponto de partida pra conversa: Laudos ou Pendências
-   são estruturalmente mais simples (menos abas, sem a complexidade de "evento dentro de processo"
-   que Gestão de Processos tem) — bom primeiro teste do mecanismo antes de encarar a área mais
-   complexa e de maior volume.
-5. **O upload manual continua existindo** em paralelo, como alternativa — não é substituído, só deixa
-   de ser a única via.
+   manual da mesma planilha no mesmo momento) antes de replicar. A Clara deixou a critério — **minha
+   recomendação: Laudos.** Motivo: operadora única (ELITE), o menor conjunto de colunas entre as 4
+   áreas, nenhum dado pessoal sensível tipo CPF (diferente de Audiências), e já tem um comportamento
+   conhecido e bem coberto por teste (a preferência pela "coluna A" na leitura de data) — um bom
+   primeiro caso pra validar o mecanismo ponta a ponta antes de encarar Processos (a mais complexa,
+   21 abas).
+5. **O upload manual continua existindo** em paralelo, como alternativa (ex. se a API cair, ou pra um
+   arquivo pontual fora da planilha oficial) — não é substituído, só deixa de ser a única via.
 
-**Por que não a Opção D (Apps Script/Power Automate) como primeira fase:** o ganho de "quase tempo
-real" não parece necessário pelo que você descreveu (o problema é divergência por upload atrasado,
-não por minutos de defasagem) — o custo de manutenção (código em dois lugares, gatilhos com cota e
-exceções) não parece compensar nesta fase. Fica como evolução possível depois, se a frequência sob
-demanda/agendada não for suficiente na prática.
+**Por que não a Opção D (Apps Script) mesmo com frequência mínima definida:** "10x/mês" e "algumas
+vezes por dia" são perfeitamente atendidos por um agendamento simples (Opção B) — não precisam do
+tempo-quase-real que só a Opção D ofereceria, e essa continua tendo o custo de manutenção mais alto
+(código em dois lugares, gatilhos com cota, sem revisão humana antes do dado entrar). Fica descartada
+para esta fase.
 
 ---
 
-## 5. Plano de implementação em fases
+## 5. Plano de implementação em fases (atualizado com as respostas de 28/09)
 
-### Fase A — Preparação (sem código)
-- Confirmar plataforma, local exato e forma de acesso às planilhas (seção 8).
-- Conseguir exemplos reais (mesmo recortados/anonimizados) de cada planilha — sem isso, a Etapa 2
-  desta análise fica sempre incompleta, e qualquer código escrito às cegas corre risco de não bater
-  com a estrutura real.
-- Decidir, com você: área piloto, direção, frequência, e se algum ajuste na estrutura da planilha é
-  aceitável (seção 6).
-- **Critério de sucesso:** perguntas da seção 8 respondidas; pelo menos um exemplo real por área
-  disponível pra mim analisar.
+### Fase A — Preparação (sem código) — quase concluída
+- ~~Confirmar plataforma, local exato e forma de acesso às planilhas~~ — **feito**: Google Sheets,
+  no Google Drive, várias pessoas editam.
+- ~~Decidir direção, frequência, área piloto~~ — **feito**: só leitura, automática (≥10x/mês),
+  Laudos como piloto (item 4 da seção 4).
+- **Falta só:** exemplos reais (mesmo recortados/anonimizados) de cada planilha, pra eu confirmar
+  que os cabeçalhos que o sistema já espera hoje batem com o que existe de verdade — ver pergunta 2
+  da seção 8 pra como me enviar isso.
+- Ajustes na estrutura da planilha (seção 6): ainda não confirmado se são aceitáveis — pergunta 8
+  revisada, ver seção 8.
+- **Critério de sucesso:** pelo menos um exemplo real de Laudos (a área piloto) disponível pra mim
+  analisar.
 
 ### Fase B — Credencial e acesso (baixo risco, isolado)
-- Criar a credencial de serviço (conta de serviço Google, só leitura, OU app registrado no Azure AD,
-  conforme a resposta da Fase A) e configurá-la como variável de ambiente no Render — nunca no
-  código/commit (mesma disciplina já usada para `DATABASE_URL` e para as credenciais de SMTP).
+- Criar a conta de serviço do Google (só leitura) e compartilhar a planilha de Laudos com ela como
+  "Visualizador" — nunca "Editor".
+- Configurar a credencial como variável de ambiente no Render — nunca no código/commit (mesma
+  disciplina já usada para `DATABASE_URL` e para as credenciais de SMTP).
 - Validar, num script isolado (fora do sistema em produção), que dá pra baixar o `.xlsx` da planilha
-  real com essa credencial.
+  real de Laudos com essa credencial.
 - **Critério de sucesso:** arquivo baixado com sucesso, sem tocar em nenhuma rota do sistema ainda.
 
-### Fase C — Piloto sob demanda, uma área
+### Fase C — Piloto em Laudos: leitura automática + botão manual
 - Endpoint novo que baixa o arquivo da planilha (Fase B) e chama o `service` de import já existente
-  da área escolhida — sem mudar o `service` em si.
-- Botão "Atualizar agora" na tela daquela área, ao lado do upload manual (que continua funcionando).
-- Auditoria: mesmo registro que o import manual já grava hoje (`IMPORTOU_LAUDOS` etc.), com uma
-  variação no `detalhes` indicando que veio da API, não de upload.
-- **Critério de sucesso:** rodar a sincronização e comparar o resultado (linhas novas/já existentes)
-  contra um upload manual da mesma planilha, feito no mesmo momento — os números precisam bater.
-  Validado por você em produção, como as fases anteriores deste projeto sempre foram.
+  de Laudos — sem mudar o `service` em si.
+- Agendamento automático (ex. a cada 4-6h) usando uma das peças de infraestrutura da seção 3 (Opção
+  B) — nenhuma existe no projeto hoje, então essa fase inclui escolher e configurar uma.
+- Botão "Atualizar agora" na tela de Laudos, ao lado do upload manual (que continua funcionando) —
+  pra testar e pra forçar uma leitura fora do horário agendado.
+- Auditoria: mesmo registro que o import manual já grava hoje (`IMPORTOU_LAUDOS`), com uma variação
+  no `detalhes` indicando se veio da API (automática ou manual) ou de upload.
+- **Critério de sucesso:** rodar a sincronização (automática e pelo botão) e comparar o resultado
+  (linhas novas/já existentes) contra um upload manual da mesma planilha, feito no mesmo momento —
+  os números precisam bater. Sincronização automática rodando sozinha por pelo menos uma semana sem
+  divergência detectada. Validado por você em produção, como as fases anteriores deste projeto
+  sempre foram.
 
-### Fase D — Expandir para as outras áreas
-- Repetir a Fase C pras 3 áreas restantes, uma de cada vez, sempre com o mesmo critério de validação
-  por paridade contra upload manual.
-- **Complexidade esperada, da mais simples pra mais complexa:** Pendências/Laudos (mais simples) →
-  Audiências (parecido, mais um campo pessoal — CPF — pra atenção de LGPD) → Gestão de Processos
-  (mais complexa: 21 abas, volume maior, lógica de evento-dentro-de-processo).
-- **Critério de sucesso:** as 4 áreas com o botão "Atualizar agora" funcionando e validado.
+### Fase D — Expandir para as outras 3 áreas
+- Repetir a Fase C (endpoint + agendamento + botão manual) pras 3 áreas restantes, uma de cada vez,
+  sempre com o mesmo critério de validação por paridade contra upload manual.
+- **Complexidade esperada, da mais simples pra mais complexa:** Pendências → Audiências (mais um
+  campo pessoal — CPF — pra atenção de LGPD) → Gestão de Processos (mais complexa: **todas as 21
+  abas**, confirmado pela Clara — volume maior, lógica de evento-dentro-de-processo).
+- **Critério de sucesso:** as 4 áreas com sincronização automática rodando e o botão "Atualizar
+  agora" disponível, todas validadas por paridade.
 
-### Fase E — Agendamento automático (só se aprovado depois de ver a Fase D em uso real)
-- Escolher a peça de infraestrutura (Render Cron Job / GitHub Actions `schedule:` / biblioteca
-  interna — ver seção 3, Opção B) e definir a frequência.
-- **Critério de sucesso:** sincronização rodando sozinha na frequência combinada, sem intervenção
-  manual, por pelo menos uma semana sem divergência not detectada.
-
-### Fase F (opcional, fora do escopo inicial) — Escrita/bidirecional
-- Só se você decidir, depois de ver a leitura funcionando, que há um caso real de negócio pra isso
-  (ver Opção E, seção 3). Não está no plano por padrão.
+### Fase E (fora de escopo, confirmado) — Escrita/bidirecional
+- A Clara confirmou explicitamente que o sistema não deve escrever nas planilhas em nenhuma
+  hipótese. Removida do plano — registrada só por transparência (Opção E, seção 3).
 
 ---
 
-## 6. Ajustes recomendados nas planilhas (sujeitos à sua confirmação — seção 8.5)
+## 6. Ajustes recomendados nas planilhas (sujeitos à sua confirmação — seção 8, "ainda em aberto")
 
 Sem ver a planilha real, estas são sugestões genéricas baseadas nos problemas **já conhecidos**
 (seção 2.3) — não uma lista fechada, e nenhuma delas é pré-requisito pra começar a Fase A:
@@ -466,7 +478,7 @@ estão, a integração ainda funciona — só herda as mesmas limitações que o
   banco expostos no histórico do Git do sistema antigo, `SECURITY.md` seção 2).
 - **Auditoria:** toda sincronização (manual ou automática) precisa continuar gravando em
   `logs_auditoria`, igual o import manual já faz — pra uma sincronização sem uma pessoa logada por
-  trás (ex. um cron futuro), decidir na Fase E se ela grava com um usuário de sistema dedicado ou
+  trás (a automática, agendada), decidir na Fase C se ela grava com um usuário de sistema dedicado ou
   sem usuário (`usuario_id` já é opcional na tabela).
 - **Nenhum identificador único de linha em 3 das 4 áreas** (seção 2.2) — significa que "detectar uma
   edição" numa linha já importada depende de comparar o conteúdo inteiro, não um id estável; isso já
@@ -475,43 +487,71 @@ estão, a integração ainda funciona — só herda as mesmas limitações que o
   mudou desde a última vez").
 - **Qualidade do dado na origem ainda não revalidada:** os problemas da seção 2.3 foram encontrados
   numa planilha real, mas não sei se a planilha de hoje tem os mesmos problemas, mais, ou menos —
-  começar sob demanda (não agendado) dá uma chance de acompanhar isso de perto nas primeiras
-  execuções antes de automatizar de vez.
+  por isso a Fase C (piloto) acompanha de perto as primeiras execuções (comparando com upload manual)
+  antes de replicar pras outras 3 áreas na Fase D, mesmo já rodando de forma agendada desde o início.
 - **Retenção de dados pessoais** já está registrada como pendência em aberto em `SECURITY.md` seção
   6 (por quanto tempo manter CPF/nome de cliente) — não é bloqueante pra esta integração, mas é uma
   decisão de negócio relacionada que continua pendente, independente do que decidirmos aqui.
 
 ---
 
-## 8. Perguntas pendentes — preciso da sua resposta antes de qualquer implementação
+## 8. Perguntas — status em 28/09
 
-1. **Onde as planilhas ficam hoje** — Google Sheets, Excel no OneDrive/SharePoint, arquivo `.xlsx`
-   em pasta de rede, ou outro? Você tinha confirmado Google Sheets em 21/09 (`ARCHITECTURE.md`
-   1.9) — ainda vale, ou mudou?
-2. **Cópias de exemplo** — pode me indicar onde estão (ou anexar/colar um recorte pequeno, com dado
-   fictício/anonimizado se preferir) de cada uma das 4 planilhas? Sem isso, a Etapa 2 desta análise
-   fica sempre parcial (seção 2.1).
-3. **Quem edita as planilhas hoje** — assistentes, líderes, outra pessoa?
-4. **Direção da integração** — só leitura, só escrita, ou os dois? (Minha recomendação é só
-   leitura — seção 4.)
-5. **Fonte oficial em caso de conflito** — se um dia o sistema e a planilha divergirem num mesmo
-   dado, qual prevalece?
-6. **Frequência necessária** — sob demanda (um botão), algumas vezes por dia, tempo real, ou não
-   tem preferência ainda?
-7. **Escopo — as 4 áreas de uma vez ou por etapas?** Se por etapas, qual é a prioridade? (Minha
-   sugestão de ponto de partida, só pra conversa: Laudos ou Pendências, por serem estruturalmente
-   mais simples — seção 4, item 4.)
-8. **As planilhas podem ter a estrutura ajustada** (cabeçalho padronizado, menus suspensos — seção
-   6) ou precisam continuar exatamente como estão?
-9. **Minha leitura sobre "digitação duplicada"/"divergência"** — hoje ninguém digita duas vezes no
-   sentido literal (só a planilha é editada; o sistema só lê, nunca tem formulário de cadastro
-   manual paralelo). O problema que entendi é: alguém precisa lembrar de fazer o upload sempre que a
-   planilha mudar, e enquanto isso não acontece, o sistema fica desatualizado em relação à planilha.
-   Essa leitura está certa, ou existe outro cenário de duplicidade que eu não enxerguei?
-10. **Gestão de Processos especificamente** — a planilha real tem ~21 abas (mensais, por advogada,
-    "fatais"). A leitura via API deveria considerar automaticamente todas as abas existentes no
-    momento (do jeito que o parser já faz hoje com upload), ou só abas específicas?
+A maioria foi respondida. Restam duas coisas reais antes de eu poder começar a Fase B.
 
-Assim que essas respostas chegarem (e, principalmente, assim que eu tiver acesso a um exemplo real
-de pelo menos uma planilha), completo a Etapa 2 de verdade e ajusto este plano antes de qualquer
-linha de código.
+### Respondidas
+
+1. **Onde as planilhas ficam** → Google Drive, Google Sheets.
+3. **Quem edita** → muitas pessoas, por planilha.
+4. **Direção** → só leitura. Confirmado, sem ambiguidade: "o sistema apenas LERIA as planilhas" e
+   "não deve mexer em NADA nas planilhas".
+5. **Fonte oficial em conflito** → não se aplica mais nesse desenho: como o sistema só lê (nunca
+   grava por conta própria), a planilha é sempre a autoridade — não existe um dado "do sistema"
+   competindo com o da planilha.
+6. **Frequência** → no mínimo 10x/mês. Interpretei como "quero isso automático, não manual" (ver
+   pergunta 9) — proposta: algumas vezes por dia (seção 4, item 3). Se preferir um número exato
+   diferente, me diga.
+7. **Escopo/prioridade** → você deixou a meu critério. Recomendação: uma área por vez, começando por
+   **Laudos** (seção 4, item 4).
+9. **Minha leitura sobre "o trabalho de subir toda vez"** → confirmada. Não é duas fontes de dado
+   concorrentes, é o esforço manual de manter o sistema atualizado — por isso a recomendação virou
+   "automático desde o início", não "sob demanda primeiro".
+10. **Gestão de Processos — todas as 21 abas** → confirmado, sim.
+
+### Ainda em aberto
+
+**Pergunta 2 — exemplos reais (bloqueante, preciso disso antes da Fase B).** Você perguntou "quais
+exemplos você precisa?" — resposta:
+
+- **O que:** pra cada planilha (começando só pela de **Laudos**, já que é a área piloto — as outras
+  3 podem esperar até a Fase D), um recorte pequeno que preserve os **cabeçalhos reais das colunas**,
+  os **nomes das abas**, e algumas linhas de exemplo — os valores em si podem ser trocados por dado
+  fictício (nome de cliente, valor, data) se preferir; o que eu preciso ver é a *estrutura*, não o
+  conteúdo real.
+- **Como me enviar:** três jeitos, qualquer um funciona —
+  1. Anexar o arquivo (ou um print de cada aba, se for mais rápido) aqui nesta conversa, do mesmo
+     jeito que você já me mandou a captura de tela da tela de Setores antes;
+  2. Exportar do Google Sheets como `.xlsx` (Arquivo → Fazer download → Microsoft Excel) e colocar
+     no repositório, num caminho tipo `docs/planilhas-exemplo/laudos.xlsx`, me avisando quando
+     estiver lá;
+  3. Compartilhar comigo, no chat, o link da planilha real do Google Sheets com "qualquer pessoa com
+     o link pode visualizar" — funciona, mas eu não recomendo essa opção pros dados reais (a
+     planilha tem nome de cliente/CNPJ/valor — ficaria temporariamente pública pra qualquer um com o
+     link); prefira a opção 1 ou 2 com dado fictício.
+- **Não preciso das 21 abas de Processos agora** — como a área piloto é Laudos, um exemplo de
+  Processos só entra na conversa quando chegarmos na Fase D. Pra Laudos, um recorte de 1-2 abas já
+  é suficiente pra eu validar o mapeamento da seção 1.3/2.2.
+
+**Pergunta 8 — ajuste na estrutura das planilhas (acho que houve um cruzamento com a pergunta 4).**
+Sua resposta ("o sistema não deve mexer em NADA nas planilhas, apenas lê-las") responde bem à
+pergunta 4 (direção — o sistema nunca escreve), mas a pergunta 8 era outra coisa: se **a equipe**
+(vocês, os humanos que editam) topa **padronizar** algumas colunas por conta própria — cabeçalho
+com o mesmo texto em todas as abas, menu suspenso em vez de texto livre em campos tipo "TIPO DE
+LAUDO"/"PAGO" (seção 6) — pra reduzir os problemas reais já documentados (seção 2.3). Não é o
+sistema alterando nada — seria vocês, na própria planilha, se topar. Pode ser "não, deixa como
+está" sem problema — a integração funciona de qualquer jeito, só herda as mesmas limitações que o
+upload manual já tem hoje. Só quero confirmar que entendi certo a pergunta, já que a resposta que
+veio parece ter respondido a outra.
+
+Assim que eu tiver o exemplo de Laudos (pergunta 2), completo a Etapa 2 de verdade pra essa área e
+já posso te dar um plano bem mais concreto pra Fase B — sem nenhuma linha de código até lá.

@@ -1399,3 +1399,49 @@ usado pra outras fases de levantamento deste projeto (ex.: Fase 5/Gestão de Pro
 documentada como levantamento antes de qualquer implementação).
 
 **Reversível:** não se aplica — nada foi implementado.
+
+## 2026-09-28 — Integração com planilhas: respostas da Clara e ajuste da recomendação
+
+**Contexto:** a Clara respondeu às perguntas pendentes de `docs/integracao-planilhas.md` (mesmo dia
+da análise inicial). Confirmado: Google Sheets no Google Drive; muitas pessoas editam cada
+planilha; o sistema deve **só ler** ("não deve mexer em NADA nas planilhas"); mecanismo = API;
+frequência = no mínimo 10x/mês; escopo/prioridade das áreas ficou a meu critério; o problema real é
+"o trabalho que está dando ter que subir as atualizações toda vez" (confirmou minha leitura); Gestão
+de Processos deve considerar automaticamente as 21 abas.
+
+**Mudança de recomendação, com justificativa:** a análise original recomendava começar por
+sincronização **sob demanda** (um botão), deixando o agendamento automático para uma fase posterior,
+como forma de reduzir risco/esforço inicial. A resposta da Clara sobre frequência mínima (10x/mês) e,
+principalmente, sua explicação do problema real ("o trabalho de subir toda vez") tornam essa
+recomendação inadequada: um botão manual não resolve o incômodo dela, que é justamente depender de
+alguém lembrar de agir. Revisei a recomendação para **sincronização automática agendada desde o
+início** (ex. algumas vezes por dia — folga confortável acima do mínimo pedido), mantendo um botão
+manual como complemento (útil para testar e para forçar uma atualização pontual), não como a solução
+principal.
+
+**Duas respostas que pareceram cruzar com outras perguntas — sinalizado à Clara, não assumido:**
+- A pergunta sobre "fonte oficial em caso de conflito" ficou sem resposta direta — mas como a
+  direção é só leitura (confirmada), a pergunta deixa de fazer sentido no desenho atual (não existe
+  dado "do sistema" competindo com o da planilha) — resolvida por inferência, registrada como tal.
+- A pergunta sobre se a **equipe** (os humanos que editam as planilhas) toparia padronizar
+  cabeçalhos/usar menus suspensos veio respondida com "o sistema não deve mexer em NADA nas
+  planilhas" — que responde a uma pergunta diferente (se o *sistema* escreve nelas, já coberta pela
+  pergunta de direção). Não presumi que isso também respondia à pergunta sobre ajuste feito pelos
+  *humanos* — re-perguntei de forma mais clara no documento, sem travar o restante do plano por
+  causa disso.
+
+**Escolhi a área piloto (Laudos), já que a Clara deixou a critério meu:** operadora única (ELITE),
+menor conjunto de colunas entre as 4 áreas, sem CPF (diferente de Audiências), e um comportamento
+já bem coberto por teste (preferência pela coluna A na leitura de data) — bom primeiro caso pra
+validar o mecanismo ponta a ponta antes de Processos (a mais complexa).
+
+**Único bloqueio real que continua em aberto:** exemplo real de planilha (Laudos, pelo menos) — sem
+isso não dá pra confirmar se os cabeçalhos que o sistema já espera hoje ainda batem com o que existe
+de verdade, nem detectar problemas de dado que só apareceriam numa planilha real. `docs/
+integracao-planilhas.md` seção 8 explica três formas de me enviar isso (anexar no chat, exportar pro
+repositório, ou compartilhar o link — com recomendação contra a terceira opção por expor dado real).
+
+**Nenhum código, dado ou planilha foi alterado** — só o documento de análise foi atualizado, e a
+entrada em `ARCHITECTURE.md` (seção 4.24) complementada com este resumo.
+
+**Reversível:** não se aplica — nada foi implementado.

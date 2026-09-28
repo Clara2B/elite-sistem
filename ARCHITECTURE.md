@@ -1637,6 +1637,16 @@ já registrada (seção 1.9 item 1, 21/09: Google Sheets, atualizado todo dia) p
 valendo — não presumida, pendente de confirmação. A Etapa 2 da análise (mapeamento de colunas da
 planilha real) ficou parcial por esse motivo — feita só a partir do que o sistema já espera hoje,
 não de um exemplo real. Lista completa de perguntas pendentes na seção 8 do documento.
+
+**Atualização 28/09 — respostas da Clara:** confirmado Google Sheets/Google Drive, só leitura (o
+sistema nunca escreve na planilha), mecanismo via API, frequência mínima de 10x/mês. O motivo real
+por trás do pedido, confirmado por ela, é o trabalho manual de subir a planilha toda vez — não duas
+fontes de dado concorrentes. Isso mudou a recomendação de "sob demanda primeiro" para
+**sincronização automática agendada desde o início** (ex. algumas vezes por dia), com um botão
+manual como complemento, não como a via principal. Área piloto ficou a critério da Clara — escolhida
+Laudos (operadora única, menor conjunto de colunas, sem CPF). Único bloqueio real que continua em
+aberto: exemplo real de pelo menos uma planilha (Laudos, a piloto) — sem isso a Fase B (credencial)
+ainda não pode começar. Documento atualizado com todos os detalhes.
 - **Reversível:** não se aplica — nenhum código, dado ou planilha foi alterado; só o documento de
   análise foi criado.
 
