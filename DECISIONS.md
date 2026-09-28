@@ -1071,3 +1071,28 @@ pra 26 — não mexeu no `link`/Cliente, que já tinha ficado do jeito que ela q
 **Validado:** suíte completa sem regressão (139 testes) + lint limpo + PDF de exemplo da Banco
 regenerado e conferido visualmente (espaço bem mais largo acima dessa linha agora).
 **Reversível:** sim — um valor de estilo em `pdf_export.py::_estilos_carta`.
+
+## 2026-09-28 — Configuração/Processos: plano de 5 blocos apresentado, Bloco 1 adiantado por urgência
+
+**Contexto:** pedido novo com a mesma regra de "pergunte antes de decidir" e processo exigido
+(explorar → plano único com todas as perguntas → implementar bloco a bloco com aprovação). Os 5
+blocos: Bloco 1 (editar usuário), Bloco 2 (separar Usuário/Empresa/Cliente como área
+administrativa), Bloco 3 (`papel_global` vira só 4 valores: Administrador Geral/T.I./Gerente/
+Líder), Bloco 4 (tirar Assistente do relatório de Processos) e Bloco 5 (coluna de Observação sem
+corte/rolagem horizontal). Apresentei o plano com achados (nenhuma área admin tem brecha de
+acesso hoje — já são bloqueadas nas duas camadas; não existe "exclusão" de usuário hoje, só
+inativar; "Líder" já existe como papel por setor, colidindo de nome com o "Líder" global pedido
+no Bloco 3; não encontrei uma área "Cliente" separada de "Empresa"; não tenho acesso ao banco de
+produção pra contar usuários por papel) e a lista completa de perguntas dos 5 blocos.
+**Decisão sobre o Bloco 1 (única resposta até agora):** a Clara pediu urgência só na edição de
+usuário, sem responder às perguntas específicas do Bloco 1 ainda. Implementei usando as opções
+que eu mesma já tinha proposto no plano (sem contestação da Clara): todos os campos editáveis
+(nome/e-mail/papel global/senha opcional/setores), proteção contra remover o último admin do
+sistema, e formato inline reaproveitando o layout do cadastro — ver ARCHITECTURE.md 4.19 para
+os detalhes técnicos completos.
+**Ainda pendente:** Blocos 2-5 continuam esperando as respostas da Clara — nenhum foi
+implementado.
+**Validado:** suíte completa sem regressão (145 testes, 6 novos) + lint limpo + Playwright real
+(login, expandir edição, trocar nome/papel, salvar, confirmar toast e dados atualizados).
+**Reversível:** sim — mudança isolada às rotas/template de usuários; nenhuma coluna de banco
+mudou.

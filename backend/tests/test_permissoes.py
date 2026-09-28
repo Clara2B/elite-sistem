@@ -102,3 +102,77 @@ def test_admin_cria_usuario(client, admin_token, db):
 
     login = client.post("/auth/login", json={"email": "dra.fulana@teste.local", "senha": "senha123"})
     assert login.status_code == 200
+
+
+def test_admin_edita_usuario(client, admin_token, db):
+    setor = db.scalar(select(Setor).where(Setor.nome == "Doutores(as)"))
+    criado = client.post(
+        "/usuarios",
+        json={"nome": "Dra. Fulana", "email": "fulana@teste.local", "senha": "senha123"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    ).json()
+
+    resp = client.patch(
+        f"/usuarios/{criado['id']}",
+        json={
+            "nome": "Dra. Fulana de Tal",
+            "email": "fulana.novo@teste.local",
+            "senha": "senha-nova",
+            "setores": [{"setor_id": setor.id, "papel": "LIDER"}],
+        },
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["nome"] == "Dra. Fulana de Tal"
+    assert body["email"] == "fulana.novo@teste.local"
+    assert body["setores"] == [{"setor_id": setor.id, "setor": "Doutores(as)", "operadora": "ELITE", "papel": "LIDER"}]
+
+    # senha antiga não funciona mais, a nova sim
+    assert client.post("/auth/login", json={"email": "fulana.novo@teste.local", "senha": "senha123"}).status_code == 401
+    assert client.post("/auth/login", json={"email": "fulana.novo@teste.local", "senha": "senha-nova"}).status_code == 200
+
+
+def test_edicao_sem_senha_mantem_a_senha_atual(client, admin_token, db):
+    criado = client.post(
+        "/usuarios",
+        json={"nome": "Dra. Fulana", "email": "mantem@teste.local", "senha": "senha123"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    ).json()
+
+    resp = client.patch(
+        f"/usuarios/{criado['id']}",
+        json={"nome": "Dra. Fulana", "email": "mantem@teste.local"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200
+    assert client.post("/auth/login", json={"email": "mantem@teste.local", "senha": "senha123"}).status_code == 200
+
+
+def test_edicao_nao_pode_deixar_sistema_sem_admin(client, admin_token, db):
+    admin_id = db.scalar(select(Usuario.id).where(Usuario.email == "admin@teste.local"))
+    resp = client.patch(
+        f"/usuarios/{admin_id}",
+        json={"nome": "Admin Teste", "email": "admin@teste.local", "papel_global": None},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 400
+    assert "último administrador" in resp.json()["detail"]
+    assert db.scalar(select(Usuario.papel_global).where(Usuario.id == admin_id)) == "ADMIN_SUPERIOR"
+
+
+def test_edicao_permite_trocar_admin_se_houver_outro(client, admin_token, db):
+    client.post(
+        "/usuarios",
+        json={"nome": "Segundo Admin", "email": "segundo@teste.local", "senha": "senha123", "papel_global": "ADMIN_TI"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    admin_id = db.scalar(select(Usuario.id).where(Usuario.email == "admin@teste.local"))
+
+    resp = client.patch(
+        f"/usuarios/{admin_id}",
+        json={"nome": "Admin Teste", "email": "admin@teste.local", "papel_global": None},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["papel_global"] is None

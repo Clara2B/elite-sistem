@@ -1237,3 +1237,50 @@ tela, na mesma ordem em que foram pedidas.
   maior — ver DECISIONS.md pra decisão completa (inclusive a dúvida levantada sobre se o
   telefone também entraria na Banco, e por que não).
 
+### 4.19 Configuração/Processos — plano de 5 blocos apresentado; Bloco 1 (editar usuário) implementado com urgência (2026-09-28)
+
+Pedido novo da Clara, com a mesma regra de "pergunte antes de decidir" e um plano único exigido
+antes de qualquer implementação, cobrindo: Bloco 1 (editar usuário), Bloco 2 (separar
+Usuário/Empresa/Cliente como área administrativa), Bloco 3 (`papel_global` vira só 4 valores:
+Administrador Geral/T.I./Gerente/Líder), Bloco 4 (tirar Assistente do relatório de Processos) e
+Bloco 5 (coluna de Observação sem corte/rolagem horizontal). Explorei o projeto inteiro
+(modelo de permissões, telas de Usuário/Empresa/Assistente, relatório de Processos) e apresentei
+o plano com todas as perguntas pendentes dos 5 blocos — **nenhum dos outros 4 blocos foi
+implementado ainda**, aguardando as respostas da Clara.
+
+**Achado que muda o risco do Bloco 2:** as 3 áreas administrativas (Usuários, Empresas-clientes,
+Assistentes) **já são bloqueadas para quem não é admin, nas duas camadas** hoje —
+`admin_logado_web`/`require_admin` em toda rota de listar/criar/editar/excluir (web e API), e
+`menu.py` já esconde os 3 itens do menu de quem não tem `papel_global` em `PAPEIS_GLOBAIS`. O que
+falta pro Bloco 2 é só a reorganização visual (uma área "Administração" separada, mais destacada),
+não uma correção de brecha de segurança.
+
+**Bloco 1 — editar usuário, implementado sob pedido de urgência da Clara** (antes das respostas
+do plano completo — usando as opções que eu mesma já tinha proposto no plano, sem contestação):
+
+- **`app/auth.py::restaria_sem_admin`** — helper compartilhado (web + API) que impede uma edição
+  de deixar o sistema sem nenhum usuário com `papel_global` em `PAPEIS_GLOBAIS`. Bloqueia com
+  mensagem clara ("Não é possível remover o papel administrativo do último administrador do
+  sistema") em vez de aplicar a mudança.
+- **Campos editáveis:** nome, e-mail, papel global, senha (opcional — vazio mantém a atual) e os
+  vínculos de setor/papel-no-setor (substituição completa do conjunto, mesmo padrão do cadastro).
+  Status ativo/inativo **não** entrou no formulário de edição — continua só no botão dedicado
+  Ativar/Desativar que já existia, pra não duplicar o mesmo controle de duas formas.
+- **Formato:** reaproveita o layout do formulário "Novo usuário" (mesmos campos/tabela de
+  setores), mas dentro de um `<details>` nativo por linha da tabela ("▸ Editar" expande, "▾
+  Editar" fecha) — sem JavaScript novo, mesmo padrão visual do resto do sistema. Pré-preenchido
+  com os dados atuais do usuário (`vinculos_por_usuario`, um dict pré-computado na rota pra achar
+  o papel de cada setor sem lógica pesada no template).
+- **Rotas:** `POST /app/usuarios/{id}` (web, re-renderiza a tela com erro ou com o toast de
+  sucesso) e `PATCH /usuarios/{id}` (API, mesma validação, `setores: None` significa "não mexe
+  nos vínculos atuais" — diferente do form web, que sempre reenvia o conjunto completo).
+- **Testado:** 6 testes novos (edição bem-sucedida com troca de e-mail/senha/setor, edição sem
+  senha mantém a atual, bloqueio do último admin — web e API — e edição permitida quando existe
+  outro admin) — 145 no total, sem regressão. Validado com Playwright real (login, expandir
+  "Editar", trocar nome e papel global, salvar, confirmar toast + dados atualizados na tabela).
+- **Reversível:** sim — rotas/template novos, isolados; nenhuma coluna de banco mudou.
+
+**Pendente:** Blocos 2-5 continuam aguardando as respostas da Clara ao plano (ver mensagem
+correspondente no histórico da conversa — contagem de usuários por papel para o Bloco 3 ainda
+precisa vir dela, já que este ambiente não tem acesso ao banco de produção).
+

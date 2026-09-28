@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.auth import PAPEIS_GLOBAIS, hash_senha, require_admin
+from app.auth import PAPEIS_GLOBAIS, hash_senha, require_admin, restaria_sem_admin
 from app.db import get_db
 from app.models import Setor, Usuario, UsuarioSetor
 from app.services.auditoria import registrar
@@ -24,6 +24,14 @@ class NovoUsuario(BaseModel):
     senha: str
     papel_global: str | None = None  # 'ADMIN_SUPERIOR' | 'ADMIN_TI' | None
     setores: list[SetorVinculo] = []
+
+
+class EdicaoUsuario(BaseModel):
+    nome: str
+    email: str
+    papel_global: str | None = None  # 'ADMIN_SUPERIOR' | 'ADMIN_TI' | None
+    senha: str | None = None  # None/vazio = mantém a senha atual
+    setores: list[SetorVinculo] | None = None  # None = não mexe nos vínculos atuais
 
 
 def _perfil(usuario: Usuario) -> dict:
@@ -80,6 +88,49 @@ def criar_usuario(payload: NovoUsuario, admin: Usuario = Depends(require_admin),
 
     db.commit()
     registrar(db, admin, "CRIOU_USUARIO", entidade="usuario", entidade_id=usuario.id)
+    db.refresh(usuario)
+    return _perfil(usuario)
+
+
+@router.patch("/usuarios/{usuario_id}")
+def editar_usuario(
+    usuario_id: int,
+    payload: EdicaoUsuario,
+    admin: Usuario = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    usuario = db.get(Usuario, usuario_id)
+    if usuario is None:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    if payload.papel_global is not None and payload.papel_global not in PAPEIS_GLOBAIS:
+        raise HTTPException(status_code=400, detail=f"papel_global precisa ser um de {sorted(PAPEIS_GLOBAIS)} ou nulo.")
+
+    email = payload.email.strip().lower()
+    if db.scalar(select(Usuario).where(Usuario.email == email, Usuario.id != usuario_id)) is not None:
+        raise HTTPException(status_code=400, detail="Já existe um usuário com esse e-mail.")
+    if restaria_sem_admin(db, usuario_id, payload.papel_global):
+        raise HTTPException(
+            status_code=400, detail="Não é possível remover o papel administrativo do último administrador do sistema."
+        )
+
+    usuario.nome = payload.nome.strip()
+    usuario.email = email
+    usuario.papel_global = payload.papel_global
+    if payload.senha:
+        usuario.senha_hash = hash_senha(payload.senha)
+
+    if payload.setores is not None:
+        db.execute(delete(UsuarioSetor).where(UsuarioSetor.usuario_id == usuario.id))
+        for vinculo in payload.setores:
+            setor = db.get(Setor, vinculo.setor_id)
+            if setor is None:
+                raise HTTPException(status_code=400, detail=f"Setor {vinculo.setor_id} não existe.")
+            if vinculo.papel not in {"LIDER", "COLABORADOR"}:
+                raise HTTPException(status_code=400, detail="papel do setor precisa ser 'LIDER' ou 'COLABORADOR'.")
+            db.add(UsuarioSetor(usuario_id=usuario.id, setor_id=setor.id, papel=vinculo.papel))
+
+    db.commit()
+    registrar(db, admin, "EDITOU_USUARIO", entidade="usuario", entidade_id=usuario.id)
     db.refresh(usuario)
     return _perfil(usuario)
 

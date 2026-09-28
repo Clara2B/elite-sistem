@@ -71,6 +71,44 @@ def test_usuario_sem_papel_global_nao_ve_usuarios_no_menu_e_leva_403(client, db)
     assert "restrit" in resposta.text.lower()
 
 
+def test_admin_edita_usuario_pela_tela(client, db):
+    admin = Usuario(nome="Admin", email="admin.web@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR")
+    db.add(admin)
+    alvo = Usuario(nome="Fulana", email="fulana.web@teste.local", senha_hash=hash_senha("x"))
+    db.add(alvo)
+    db.commit()
+    db.refresh(alvo)
+
+    client.post("/login", data={"email": "admin.web@teste.local", "senha": "certa"})
+
+    resposta = client.post(
+        f"/app/usuarios/{alvo.id}",
+        data={"nome": "Fulana de Tal", "email": "fulana.editada@teste.local", "papel_global": ""},
+    )
+    assert resposta.status_code == 200
+    assert "atualizado" in resposta.text
+    assert "Fulana de Tal" in resposta.text
+    assert "fulana.editada@teste.local" in resposta.text
+
+
+def test_edicao_pela_tela_nao_pode_deixar_sistema_sem_admin(client, db):
+    admin = Usuario(nome="Admin", email="unico.admin@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR")
+    db.add(admin)
+    db.commit()
+    db.refresh(admin)
+
+    client.post("/login", data={"email": "unico.admin@teste.local", "senha": "certa"})
+
+    resposta = client.post(
+        f"/app/usuarios/{admin.id}",
+        data={"nome": "Admin", "email": "unico.admin@teste.local", "papel_global": ""},
+    )
+    assert resposta.status_code == 400
+    assert "último administrador" in resposta.text
+    db.refresh(admin)
+    assert admin.papel_global == "ADMIN_SUPERIOR"
+
+
 def test_logout_limpa_sessao(client, db):
     db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
     db.commit()

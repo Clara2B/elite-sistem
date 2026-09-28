@@ -107,6 +107,20 @@ def operadoras_acessiveis(db: Session, usuario: Usuario) -> set[str]:
     return {v.setor.operadora.nome for v in vinculos}
 
 
+def restaria_sem_admin(db: Session, usuario_id: int, novo_papel_global: str | None) -> bool:
+    """True se trocar o papel_global de `usuario_id` para `novo_papel_global`
+    deixaria o sistema sem nenhum usuário com papel_global em PAPEIS_GLOBAIS
+    (2026-09-28: edição de usuário não pode remover o último admin)."""
+    if novo_papel_global in PAPEIS_GLOBAIS:
+        return False
+    outros_admins = db.scalar(
+        select(Usuario.id)
+        .where(Usuario.papel_global.in_(PAPEIS_GLOBAIS), Usuario.id != usuario_id)
+        .limit(1)
+    )
+    return outros_admins is None
+
+
 def require_operadora(nome_operadora: str):
     """Dependency factory: garante que o usuário logado tem acesso à
     operadora dona do módulo (ex.: Laudos = ELITE, Audiências = EXIMIA)."""

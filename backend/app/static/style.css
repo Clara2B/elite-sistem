@@ -433,6 +433,30 @@ tbody tr:hover {
 .card thead th:first-child { border-top-left-radius: var(--radius-sm); }
 .card thead th:last-child { border-top-right-radius: var(--radius-sm); }
 
+/* Linha de edição expansível (ex.: "Editar" em Usuários) — <details> nativo,
+   sem JS extra. */
+details.editar-usuario > summary {
+  cursor: pointer;
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--navy);
+  list-style: none;
+}
+details.editar-usuario > summary::-webkit-details-marker {
+  display: none;
+}
+details.editar-usuario > summary::before {
+  content: "▸ ";
+}
+details.editar-usuario[open] > summary::before {
+  content: "▾ ";
+}
+details.editar-usuario[open] > summary {
+  background: #f8f9fb;
+  border-bottom: 1px solid var(--border);
+}
+
 /* aviso contextual dentro de um card (ex.: "tipo sem valor cadastrado") —
    fica no lugar, ao contrário de .mensagem (toast flutuante no topo). */
 .aviso-inline {
