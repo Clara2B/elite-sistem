@@ -11,6 +11,7 @@ from app.services.empresas import (
     atualizar_empresa,
     criar_empresa,
     excluir_empresa,
+    excluir_empresas_inativas,
     listar_empresas,
     sincronizar_lista_oficial,
 )
@@ -101,6 +102,26 @@ def excluir(
         raise HTTPException(status_code=400, detail=str(e))
     registrar(db, usuario, "EXCLUIU_EMPRESA", entidade="empresa_cliente", entidade_id=empresa_id)
     return {"ok": True}
+
+
+@router.post("/excluir-inativas")
+def excluir_inativas(
+    usuario: Usuario = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Exclui de verdade toda empresa-cliente desativada (a pedido da
+    Clara, 2026-09-28) — bloqueado por empresa se houver histórico
+    vinculado (ver services/empresas.py::excluir_empresas_inativas).
+    Irreversível para quem for excluída; só Admin Superior/T.I."""
+    resumo = excluir_empresas_inativas(db)
+    registrar(
+        db, usuario, "EXCLUIU_EMPRESAS_INATIVAS", entidade="empresa_cliente",
+        detalhes=(
+            f"{len(resumo.excluidas)} excluída(s), "
+            f"{len(resumo.nao_excluidas_por_vinculo)} não excluída(s) por vínculo"
+        ),
+    )
+    return {"excluidas": resumo.excluidas, "nao_excluidas_por_vinculo": resumo.nao_excluidas_por_vinculo}
 
 
 @router.post("/sincronizar-lista-oficial")

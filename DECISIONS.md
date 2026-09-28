@@ -1207,3 +1207,27 @@ confirmação e toast), dashboard, e a tela de login — em desktop e num viewpo
 **Reversível:** sim — só CSS/HTML/JS (`style.css`, `app.js`, `_icones.html`, `base.html`,
 `login.html`, `erro.html`, `_tema_inline.html` novo); nenhuma coluna de banco, nenhuma rota, nada
 no backend mudou.
+
+## 2026-09-28 — "Excluir todas as empresas inativas" (Empresas-clientes)
+
+**Contexto:** a Clara desativou as empresas que não quer mais usar e pediu pra excluí-las do
+banco. Ela pediu inicialmente pra eu apagar direto no banco de produção — recusei fazer isso por
+dois motivos: (1) este ambiente não tem acesso direto ao banco de produção; (2) mesmo se tivesse,
+um `DELETE` direto pularia a proteção que a própria tela já tem contra apagar empresa com
+histórico vinculado (laudo/audiência/cobrança/processo). Perguntei se ela queria que eu excluísse
+pela tela (uma por uma) ou construísse um botão de "excluir todas as inativas" — ela escolheu o
+botão.
+**Decisão:** novo botão na "Zona de perigo" de Empresas-clientes, mesmo padrão visual e de
+confirmação (digitar uma palavra pra destravar o botão) que "Sincronizar com a lista oficial" já
+usa. Reaproveita `excluir_empresa` (a mesma função com a proteção contra histórico vinculado) pra
+cada empresa com `ativo=False` — não é um DELETE em massa sem checagem, é a mesma exclusão
+individual seguro, só disparada pra todas de uma vez. Uma empresa com histórico vinculado fica de
+fora da exclusão e aparece na mensagem de resultado, exatamente como já acontece na sincronização
+com a lista oficial.
+**Testado:** suíte completa sem regressão (160 testes, 5 novos: 3 de serviço + 2 web) + lint
+limpo + Playwright end-to-end (modal de confirmação com contagem certa, botão travado até digitar
+"EXCLUIR", empresa inativa sem vínculo excluída de verdade, empresa inativa COM vínculo mantida e
+citada na mensagem, empresa ativa nunca tocada).
+**Reversível:** sim — módulo novo e isolado (`excluir_empresas_inativas` em
+`services/empresas.py` + rotas web/API espelhando o padrão de `sincronizar-lista-oficial`); não
+mudou nenhuma rota/função existente.

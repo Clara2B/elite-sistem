@@ -107,6 +107,18 @@
     <button type="button" class="perigo" data-abrir-confirmacao="modal-sincronizar-empresas">
       {{ icones.icone('empresas') }} Sincronizar com a lista oficial
     </button>
+
+    {% set inativas = empresas | selectattr('ativo', 'equalto', false) | list %}
+    <p class="subtitulo" style="margin-top: 22px;">
+      Exclui de verdade todas as {{ inativas | length }} empresa(s) marcada(s) como
+      <strong>Inativa</strong> hoje (mesma proteção: uma empresa só é excluída se não tiver laudo,
+      audiência, cobrança ou processo vinculado a ela — se tiver, fica de fora da exclusão e
+      aparece na mensagem de resultado).
+    </p>
+    <button type="button" class="perigo" data-abrir-confirmacao="modal-excluir-inativas"
+            {{ "disabled" if not inativas else "" }}>
+      {{ icones.icone('lixeira') }} Excluir todas as empresas inativas
+    </button>
   </div>
 
   <dialog id="modal-sincronizar-empresas" class="modal-confirmacao">
@@ -128,6 +140,29 @@
       <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
       <form method="post" action="/app/empresas/sincronizar-lista-oficial">
         <button type="submit" class="perigo" data-confirmar-alvo>Sincronizar</button>
+      </form>
+    </div>
+  </dialog>
+
+  <dialog id="modal-excluir-inativas" class="modal-confirmacao">
+    <div class="modal-corpo">
+      <div class="modal-icone">{{ icones.icone('alerta') }}</div>
+      <h3>Excluir todas as empresas inativas?</h3>
+      <p>
+        Isso vai <strong>excluir de verdade</strong> todas as {{ inativas | length }} empresa(s)
+        marcada(s) como Inativa hoje, sem volta — exceto quem tiver laudo, audiência, cobrança ou
+        processo vinculado, que fica de fora da exclusão.
+      </p>
+      <div class="campo" style="margin-top: 14px;">
+        <label for="confirmar-excluir-inativas">Digite EXCLUIR para confirmar</label>
+        <input type="text" id="confirmar-excluir-inativas" autocomplete="off"
+               data-confirmar-texto="EXCLUIR" placeholder="EXCLUIR">
+      </div>
+    </div>
+    <div class="modal-acoes">
+      <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
+      <form method="post" action="/app/empresas/excluir-inativas">
+        <button type="submit" class="perigo" data-confirmar-alvo>Excluir todas as inativas</button>
       </form>
     </div>
   </dialog>

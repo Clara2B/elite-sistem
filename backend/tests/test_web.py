@@ -248,6 +248,39 @@ def test_empresas_pagina_restrita_a_admin(client, db):
     assert resposta.status_code == 403
 
 
+def test_excluir_empresas_inativas_via_web(client, db):
+    admin = Usuario(nome="Admin", email="admin.inativas@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR")
+    db.add(admin)
+    ativa = EmpresaCliente(nome="ATIVA WEB")
+    inativa = EmpresaCliente(nome="INATIVA WEB", ativo=False)
+    db.add_all([ativa, inativa])
+    db.commit()
+    client.post("/login", data={"email": "admin.inativas@teste.local", "senha": "certa"})
+
+    resposta = client.post("/app/empresas/excluir-inativas", follow_redirects=False)
+    assert resposta.status_code == 303
+    assert "mensagem=" in resposta.headers["location"]
+
+    assert db.get(EmpresaCliente, ativa.id) is not None
+    assert db.get(EmpresaCliente, inativa.id) is None
+
+
+def test_excluir_empresas_inativas_bloqueado_para_nao_admin(client, db):
+    setor = db.query(Setor).first()
+    usuario = Usuario(nome="Colaboradora", email="colab.inativas@teste.local", senha_hash=hash_senha("certa"))
+    db.add(usuario)
+    db.flush()
+    db.add(UsuarioSetor(usuario_id=usuario.id, setor_id=setor.id, papel="COLABORADOR"))
+    inativa = EmpresaCliente(nome="INATIVA PROTEGIDA", ativo=False)
+    db.add(inativa)
+    db.commit()
+    client.post("/login", data={"email": "colab.inativas@teste.local", "senha": "certa"})
+
+    resposta = client.post("/app/empresas/excluir-inativas")
+    assert resposta.status_code == 403
+    assert db.get(EmpresaCliente, inativa.id) is not None
+
+
 def test_funcionarios_admin_cria_edita_e_desativa(client, db):
     db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
     db.commit()

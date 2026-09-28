@@ -14,6 +14,7 @@ from app.services.empresas import (
     atualizar_empresa,
     criar_empresa,
     excluir_empresa,
+    excluir_empresas_inativas,
     listar_empresas,
     sincronizar_lista_oficial,
 )
@@ -99,6 +100,37 @@ def sincronizar(
         f"{len(resumo.criadas)} criada(s), {len(resumo.atualizadas_cnpj)} com CNPJ atualizado, "
         f"{len(resumo.excluidas)} excluída(s)."
     )
+    if resumo.nao_excluidas_por_vinculo:
+        mensagem += (
+            f" {len(resumo.nao_excluidas_por_vinculo)} não puderam ser excluídas por terem histórico "
+            f"vinculado: {', '.join(resumo.nao_excluidas_por_vinculo)}."
+        )
+    return RedirectResponse(f"/app/empresas?mensagem={quote(mensagem)}", status_code=303)
+
+
+@router.post("/excluir-inativas")
+def excluir_inativas(
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Exclui de verdade toda empresa-cliente desativada (a pedido da
+    Clara, 2026-09-28) — a confirmação (obrigatória, com o texto digitado)
+    acontece no navegador antes desse POST (ver empresas.html e
+    static/app.js). O backend recusa excluir qualquer uma com histórico
+    vinculado. Precisa ficar ANTES de `POST /{empresa_id}` abaixo — mesmo
+    motivo de `sincronizar-lista-oficial`."""
+    resumo = excluir_empresas_inativas(db)
+    registrar(
+        db, usuario, "EXCLUIU_EMPRESAS_INATIVAS", entidade="empresa_cliente",
+        detalhes=(
+            f"{len(resumo.excluidas)} excluída(s), "
+            f"{len(resumo.nao_excluidas_por_vinculo)} não excluída(s) por vínculo"
+        ),
+    )
+    if resumo.excluidas:
+        mensagem = f"{len(resumo.excluidas)} empresa(s) inativa(s) excluída(s): {', '.join(resumo.excluidas)}."
+    else:
+        mensagem = "Nenhuma empresa inativa para excluir."
     if resumo.nao_excluidas_por_vinculo:
         mensagem += (
             f" {len(resumo.nao_excluidas_por_vinculo)} não puderam ser excluídas por terem histórico "

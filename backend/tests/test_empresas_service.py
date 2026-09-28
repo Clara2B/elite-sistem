@@ -3,6 +3,7 @@ from datetime import date
 from app.models import EmpresaCliente, Laudo
 from app.services.empresas import (
     LISTA_OFICIAL_EMPRESAS,
+    excluir_empresas_inativas,
     get_or_create_empresa,
     sincronizar_lista_oficial,
 )
@@ -65,6 +66,46 @@ def test_sincroniza_e_case_insensitive_por_nome(db):
 
     assert resumo.criadas == []
     assert resumo.atualizadas_cnpj == ["ABSOLUTA"]
+
+
+def test_excluir_inativas_apaga_so_as_desativadas(db):
+    ativa = get_or_create_empresa(db, "ATIVA")
+    inativa1 = get_or_create_empresa(db, "INATIVA UM")
+    inativa2 = get_or_create_empresa(db, "INATIVA DOIS")
+    inativa1.ativo = False
+    inativa2.ativo = False
+    db.commit()
+
+    resumo = excluir_empresas_inativas(db)
+
+    assert sorted(resumo.excluidas) == ["INATIVA DOIS", "INATIVA UM"]
+    assert resumo.nao_excluidas_por_vinculo == []
+    assert db.get(EmpresaCliente, ativa.id) is not None
+    assert db.get(EmpresaCliente, inativa1.id) is None
+    assert db.get(EmpresaCliente, inativa2.id) is None
+
+
+def test_excluir_inativas_nao_apaga_vinculada(db):
+    inativa_com_laudo = get_or_create_empresa(db, "INATIVA COM LAUDO")
+    inativa_com_laudo.ativo = False
+    db.add(Laudo(empresa_cliente_id=inativa_com_laudo.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 1), status="SOLICITAÇÃO"))
+    db.commit()
+
+    resumo = excluir_empresas_inativas(db)
+
+    assert resumo.excluidas == []
+    assert resumo.nao_excluidas_por_vinculo == ["INATIVA COM LAUDO"]
+    assert db.get(EmpresaCliente, inativa_com_laudo.id) is not None
+
+
+def test_excluir_inativas_sem_nenhuma_inativa_nao_faz_nada(db):
+    get_or_create_empresa(db, "ATIVA")
+    db.commit()
+
+    resumo = excluir_empresas_inativas(db)
+
+    assert resumo.excluidas == []
+    assert resumo.nao_excluidas_por_vinculo == []
 
 
 def test_lista_oficial_tem_48_empresas_sem_duplicidade():

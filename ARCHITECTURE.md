@@ -1423,3 +1423,28 @@ implementado direto.
   por captura de tela em cada uma.
 - **Reversível:** sim — só CSS/HTML/JS; nenhuma rota, coluna de banco ou lógica de backend mudou.
 
+### 4.21 "Excluir todas as empresas inativas" (2026-09-28)
+
+A Clara pediu pra apagar direto no banco de produção as empresas que já tinha desativado —
+recusei (sem acesso direto ao banco daqui, e mesmo com acesso um `DELETE` bruto pularia a
+proteção contra apagar histórico vinculado que a tela já tem) e ofereci um botão que faz a mesma
+coisa com segurança. Ela topou.
+
+- **`services/empresas.py::excluir_empresas_inativas`** — nova função, `ResumoExclusaoInativas`
+  (`excluidas`/`nao_excluidas_por_vinculo`). Busca toda `EmpresaCliente` com `ativo=False` e chama
+  `excluir_empresa` (já existente, com a proteção contra laudo/audiência/cobrança/processo
+  vinculado) pra cada uma — mesmo padrão de `sincronizar_lista_oficial`, só que o critério de
+  seleção é "está inativa" em vez de "não está na lista oficial".
+- **Rotas:** `POST /app/empresas/excluir-inativas` (web) e `POST /empresas/excluir-inativas`
+  (API), ambas admin-only, registrando `EXCLUIU_EMPRESAS_INATIVAS` na auditoria. A rota web
+  precisa ficar ANTES de `POST /{empresa_id}` no arquivo (mesma regra de ordenação de rotas do
+  Starlette já documentada pra `sincronizar-lista-oficial`).
+- **Tela (`empresas.html`):** novo botão na "Zona de perigo", mesmo padrão visual/de confirmação
+  do "Sincronizar com a lista oficial" (modal com contagem de quantas empresas inativas existem
+  hoje, botão travado até digitar "EXCLUIR"). Fica desabilitado quando não há nenhuma inativa.
+- **Testado:** suíte completa sem regressão (160 testes, 5 novos) + lint limpo + Playwright
+  end-to-end (modal, confirmação por texto, exclusão real, proteção de vínculo, empresa ativa
+  nunca tocada) — ver DECISIONS.md pra decisão completa.
+- **Reversível:** sim — função/rotas novas e isoladas; reaproveita a exclusão individual já
+  existente, não introduz um caminho de exclusão novo/menos seguro.
+

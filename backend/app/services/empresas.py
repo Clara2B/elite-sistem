@@ -175,6 +175,32 @@ def excluir_empresa(db: Session, empresa_id: int) -> None:
 
 
 @dataclass
+class ResumoExclusaoInativas:
+    excluidas: list[str] = field(default_factory=list)
+    nao_excluidas_por_vinculo: list[str] = field(default_factory=list)
+
+
+def excluir_empresas_inativas(db: Session) -> ResumoExclusaoInativas:
+    """Ação administrativa (2026-09-28, a pedido explícito da Clara — ela
+    desativou as empresas que não quer mais usar e pediu pra excluir todas
+    de uma vez): exclui de verdade toda empresa-cliente com `ativo=False`,
+    usando `excluir_empresa` — mesma proteção contra apagar histórico
+    vinculado (laudo/audiência/cobrança/processo): quem tiver, fica de fora
+    da exclusão e entra em `nao_excluidas_por_vinculo`, sem forçar o
+    apagamento do histórico dela. Irreversível para quem for excluída; a
+    tela que chama isso exige confirmação explícita antes."""
+    resumo = ResumoExclusaoInativas()
+    inativas = list(db.scalars(select(EmpresaCliente).where(EmpresaCliente.ativo.is_(False))))
+    for empresa in inativas:
+        try:
+            excluir_empresa(db, empresa.id)
+            resumo.excluidas.append(empresa.nome)
+        except ValueError:
+            resumo.nao_excluidas_por_vinculo.append(empresa.nome)
+    return resumo
+
+
+@dataclass
 class ResumoSincronizacao:
     criadas: list[str] = field(default_factory=list)
     atualizadas_cnpj: list[str] = field(default_factory=list)
