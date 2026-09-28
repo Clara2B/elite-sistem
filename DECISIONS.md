@@ -1176,3 +1176,34 @@ visualmente as 4 telas afetadas (Empresas-clientes, Assistentes, Setores, Usuár
 botões normais de novo, e reconfirmando que a quebra de texto longo na Observação de Processos
 (o motivo original do Bloco 5) continua funcionando.
 **Reversível:** sim — só CSS, isolado a `button`/`.botao`/`.badge` em `style.css`.
+
+## 2026-09-28 — Modo escuro
+
+**Contexto:** pedido direto da Clara ("adicione a opção de modo escuro"). Sem ambiguidade
+estrutural (não mexe em banco, não é parte dos 5 blocos pendentes) — implementei direto, com as
+decisões de design de costume: segue a preferência do sistema operacional por padrão, com um
+botão para escolher manualmente, salvo por navegador (sem precisar de conta/login pra lembrar).
+**Decisões:**
+- **Persistência:** `localStorage`, por navegador — não é um campo por usuário no banco (não
+  precisa, é preferência de exibição, não dado de negócio).
+- **Padrão:** ao entrar pela primeira vez, usa a preferência de tema do sistema operacional
+  (`prefers-color-scheme`) — a pessoa só precisa clicar no botão se quiser um tema diferente do
+  que o SO já usa.
+- **Sem "flash" do tema errado:** um script pequeno no `<head>` (antes do CSS carregar) aplica o
+  tema salvo, se houver, antes da primeira pintura da página — inclusive na tela de login/erro,
+  que não usam o layout principal (`_tema_inline.html`, incluído nos 3 templates HTML completos
+  do sistema: `base.html`, `login.html`, `erro.html`).
+- **Cobertura:** toda a interface — reaproveitei as variáveis CSS que já existiam
+  (`--bg`/`--card`/`--border`/`--text` etc.) e separei um `--heading` novo pra texto de destaque
+  (títulos, cabeçalho de tabela) que precisava mudar de cor no escuro, sem afetar `--navy`
+  (marca fixa da sidebar/hero/botão primário, que não muda de cor nas duas aparências — só o
+  fundo muda ao redor dela). Cores de sucesso/erro/aviso, sombras e o fundo do modal de
+  confirmação também ganharam variantes escuras.
+**Testado:** suíte completa sem regressão (155 testes, 1 novo) + lint limpo + Playwright
+cobrindo: alternância manual, persistência entre navegações e depois de sair/entrar de novo
+(mesmo navegador), telas de Usuários (com o painel de edição), Empresas-clientes (com modal de
+confirmação e toast), dashboard, e a tela de login — em desktop e num viewport de celular
+(390px).
+**Reversível:** sim — só CSS/HTML/JS (`style.css`, `app.js`, `_icones.html`, `base.html`,
+`login.html`, `erro.html`, `_tema_inline.html` novo); nenhuma coluna de banco, nenhuma rota, nada
+no backend mudou.

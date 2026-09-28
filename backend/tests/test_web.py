@@ -715,3 +715,20 @@ def test_setores_bloqueado_para_nao_admin(client, db):
 
     assert client.get("/app/setores").status_code == 403
     assert client.post("/app/setores", data={"nome": "X", "operadora_id": setor.operadora_id}).status_code == 403
+
+
+def test_modo_escuro_tem_botao_e_script_anti_flash(client, db):
+    """Modo escuro (2026-09-28): o botão de alternar tema aparece nas
+    páginas autenticadas, e o script que aplica o tema salvo antes da
+    primeira pintura está presente tanto nelas quanto no login."""
+    login = client.get("/login")
+    assert "elite-sistem-tema" in login.text
+    assert "data-alternar-tema" not in login.text  # sem sidebar, sem usuário logado
+
+    db.add(Usuario(nome="Fulano", email="fulano.tema@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    db.commit()
+    client.post("/login", data={"email": "fulano.tema@teste.local", "senha": "certa"})
+
+    dashboard = client.get("/")
+    assert "data-alternar-tema" in dashboard.text
+    assert "elite-sistem-tema" in dashboard.text

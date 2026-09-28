@@ -1379,3 +1379,47 @@ Observação — decisão minha, já proposta no plano original sem objeção da
   Observação continua alcançável rolando lateralmente dentro dela.
 - **Reversível:** sim — mudança de CSS/template; nenhuma lógica de dados mudou.
 
+### 4.20 Modo escuro (2026-09-28)
+
+Pedido direto da Clara, sem ambiguidade estrutural (só apresentação, nada de banco) —
+implementado direto.
+
+- **Variáveis CSS** (`style.css`) — o sistema já era todo construído em cima de variáveis
+  (`--bg`, `--card`, `--border`, `--text`, `--accent`, `--danger`, `--ok`, etc. em `:root`), o que
+  tornou o modo escuro uma questão de redefinir essas variáveis, não reescrever regras. Precisei
+  separar duas famílias de cor que estavam misturadas atrás de `--navy`: a marca em si
+  (`--navy`/`--navy-deep`/`--navy-light` — sidebar, hero, botão primário) fica **fixa** nas duas
+  aparências; texto de destaque em cima de uma superfície clara (títulos, cabeçalho de tabela,
+  "Editar") passou a usar uma variável nova, `--heading`, que aí sim muda de cor no escuro (senão
+  ficaria texto quase preto em fundo escuro). Outras variáveis novas: `--heading`, `--surface-alt`
+  (fundo levemente destacado — cabeçalho de tabela, linha "total"), `--row-hover`,
+  `--highlight-soft` (linha de setor marcado em Usuários), `--muted-soft` (badge "Inativo"),
+  `--danger-border`/`--ok-border` (bordas dos avisos/toasts), `--overlay` (fundo do backdrop do
+  modal). Sombras (`--shadow-sm/md/lg`) também ganharam uma variante mais escura/opaca — sombra
+  clara não aparece em cima de fundo escuro.
+- **Como o tema é decidido** — três camadas, da mais específica pra mais geral:
+  1. Escolha manual salva (`localStorage`, atributo `data-theme="dark"|"light"` na tag
+     `<html>`) — sempre vence, se existir.
+  2. Sem escolha manual: `@media (prefers-color-scheme: dark)` — segue o sistema operacional
+     automaticamente, sem precisar de JS pra decidir a cor (só CSS).
+  3. Nenhum dos dois: tema claro (o de sempre).
+  `color-scheme: light`/`dark` também é setado, pra controles nativos do navegador (date/time
+  picker, checkbox) já nascerem no tom certo.
+- **Sem "flash" de tema errado ao carregar a página** — um script pequeno e síncrono logo no
+  `<head>` (`templates/_tema_inline.html`, novo) lê o `localStorage` e aplica o `data-theme` antes
+  do CSS ser avaliado, então a página nunca pisca no tema errado por uma fração de segundo.
+  Incluído nos 3 templates HTML completos do sistema (`base.html`, `login.html`, `erro.html`) —
+  login e a página de erro não usam o layout principal, então precisavam do include à parte.
+- **Botão** — no menu lateral, acima de "Sair" (`base.html`), alterna entre os ícones de sol/lua
+  novos (`_icones.html`) e o rótulo "Modo escuro"/"Modo claro" conforme o tema atual.
+  `app.js::iniciarAlternanciaTema` decide o tema efetivo (olhando `data-theme` já aplicado, ou o
+  `prefers-color-scheme` se não houver escolha manual), atualiza o botão no carregamento, e ao
+  clicar troca o atributo + grava no `localStorage` (com try/catch — não quebra em navegação
+  privada, só não persiste entre visitas nesse caso).
+- **Testado:** suíte completa sem regressão (155 testes, 1 novo) + lint limpo + Playwright:
+  alternância manual, persistência ao navegar entre páginas e depois de sair/entrar de novo,
+  Usuários (com o painel de edição do Bloco 1), Empresas-clientes (com modal de confirmação e
+  toast), dashboard e login — em desktop e num viewport de celular (390px). Conferido visualmente
+  por captura de tela em cada uma.
+- **Reversível:** sim — só CSS/HTML/JS; nenhuma rota, coluna de banco ou lógica de backend mudou.
+

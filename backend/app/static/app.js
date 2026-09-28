@@ -170,6 +170,48 @@ function iniciarCopiaDeResumo() {
   });
 }
 
+// Modo escuro (2026-09-28) — o <head> já aplicou o tema salvo antes da
+// primeira pintura (ver templates/_tema_inline.html, evita "flash" de tema
+// errado); aqui só liga o botão de alternar e mantém o rótulo/ícone certos.
+// Sem tema salvo, a página já nasce no tema do sistema operacional via CSS
+// (@media prefers-color-scheme) — só grava em localStorage quando a pessoa
+// realmente clica no botão (escolha manual explícita).
+var CHAVE_TEMA = "elite-sistem-tema";
+
+function temaAtual() {
+  var atributo = document.documentElement.getAttribute("data-theme");
+  if (atributo === "dark" || atributo === "light") return atributo;
+  return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function iniciarAlternanciaTema() {
+  var botao = document.querySelector("[data-alternar-tema]");
+  if (!botao) return;
+  var iconeEscuro = botao.querySelector("[data-icone-tema-escuro]");
+  var iconeClaro = botao.querySelector("[data-icone-tema-claro]");
+  var rotulo = botao.querySelector("[data-rotulo-tema]");
+
+  function atualizarBotao() {
+    var escuro = temaAtual() === "dark";
+    if (iconeEscuro) iconeEscuro.style.display = escuro ? "none" : "";
+    if (iconeClaro) iconeClaro.style.display = escuro ? "" : "none";
+    if (rotulo) rotulo.textContent = escuro ? "Modo claro" : "Modo escuro";
+  }
+
+  atualizarBotao();
+  botao.addEventListener("click", function () {
+    var novo = temaAtual() === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", novo);
+    try {
+      localStorage.setItem(CHAVE_TEMA, novo);
+    } catch (e) {
+      // localStorage indisponível (ex.: navegação privada) — o tema ainda
+      // muda nesta visita, só não fica salvo pra próxima.
+    }
+    atualizarBotao();
+  });
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   iniciarZonasDeUpload();
   iniciarValidacaoDeUpload();
@@ -177,4 +219,5 @@ document.addEventListener("DOMContentLoaded", function () {
   iniciarModaisDeConfirmacao();
   iniciarConfirmacaoPorTexto();
   iniciarCopiaDeResumo();
+  iniciarAlternanciaTema();
 });

@@ -1,0 +1,10 @@
+<script>
+  (function () {
+    try {
+      var salvo = localStorage.getItem("elite-sistem-tema");
+      if (salvo === "dark" || salvo === "light") {
+        document.documentElement.setAttribute("data-theme", salvo);
+      }
+    } catch (e) {}
+  })();
+</script>

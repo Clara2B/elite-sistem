@@ -1,4 +1,7 @@
 :root {
+  /* --navy/--navy-deep/--navy-light são a marca (sidebar, hero, botão
+     primário) — fixas nas duas aparências, não mudam no modo escuro. Texto
+     em cima de superfície clara usa --heading, que aí sim muda. */
   --navy: #152a40;
   --navy-deep: #0f1f30;
   --navy-light: #24405f;
@@ -8,18 +11,85 @@
   --text: #1a2330;
   --text-muted: #64748b;
   --text-faint: #94a3b8;
+  --heading: var(--navy);
   --accent: #2f6fed;
   --accent-soft: #eaf1ff;
   --danger: #c0392b;
   --danger-soft: #fdecea;
+  --danger-border: #f3cfca;
   --ok: #1e8449;
   --ok-soft: #e9f7ef;
+  --ok-border: #c8e9d3;
+  --surface-alt: #f8f9fb;
+  --row-hover: #fafbfc;
+  --highlight-soft: #eef4ff;
+  --muted-soft: #f1f2f4;
+  --overlay: rgba(15, 23, 42, 0.5);
   --radius: 10px;
   --radius-sm: 7px;
   --shadow-sm: 0 1px 2px rgba(15, 31, 48, 0.06);
   --shadow-md: 0 4px 16px rgba(15, 31, 48, 0.08);
   --shadow-lg: 0 12px 32px rgba(15, 31, 48, 0.14);
   --sidebar-w: 248px;
+  color-scheme: light;
+}
+
+/* Modo escuro (2026-09-28) — segue a preferência do sistema por padrão, e o
+   botão "Modo escuro/claro" no menu (data-theme) sobrescreve manualmente,
+   salvo em localStorage. Ver app.js::iniciarAlternanciaTema. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10151f;
+    --card: #1a2332;
+    --border: #2b3547;
+    --text: #dde3ec;
+    --text-muted: #97a3b5;
+    --text-faint: #6b7a8f;
+    --heading: #c9d7ef;
+    --accent: #5c8ef5;
+    --accent-soft: rgba(92, 142, 245, 0.16);
+    --danger: #ff7a6b;
+    --danger-soft: rgba(255, 122, 107, 0.14);
+    --danger-border: rgba(255, 122, 107, 0.35);
+    --ok: #3ecf82;
+    --ok-soft: rgba(62, 207, 130, 0.14);
+    --ok-border: rgba(62, 207, 130, 0.35);
+    --surface-alt: #212c3f;
+    --row-hover: #1e2838;
+    --highlight-soft: rgba(92, 142, 245, 0.2);
+    --muted-soft: #293344;
+    --overlay: rgba(0, 0, 0, 0.6);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.45);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10151f;
+  --card: #1a2332;
+  --border: #2b3547;
+  --text: #dde3ec;
+  --text-muted: #97a3b5;
+  --text-faint: #6b7a8f;
+  --heading: #c9d7ef;
+  --accent: #5c8ef5;
+  --accent-soft: rgba(92, 142, 245, 0.16);
+  --danger: #ff7a6b;
+  --danger-soft: rgba(255, 122, 107, 0.14);
+  --danger-border: rgba(255, 122, 107, 0.35);
+  --ok: #3ecf82;
+  --ok-soft: rgba(62, 207, 130, 0.14);
+  --ok-border: rgba(62, 207, 130, 0.35);
+  --surface-alt: #212c3f;
+  --row-hover: #1e2838;
+  --highlight-soft: rgba(92, 142, 245, 0.2);
+  --muted-soft: #293344;
+  --overlay: rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
 }
 
 * {
@@ -32,6 +102,7 @@ body {
   background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 a {
@@ -146,6 +217,9 @@ a:hover {
   font-size: 0.84rem;
   transition: background 0.14s;
 }
+.sidebar .usuario-area button[data-alternar-tema] {
+  margin-bottom: 8px;
+}
 .sidebar .usuario-area button.sair:hover {
   background: rgba(255, 255, 255, 0.12);
   color: #fff;
@@ -166,13 +240,13 @@ h1 {
   font-size: 1.5rem;
   font-weight: 700;
   margin: 0 0 4px;
-  color: var(--navy);
+  color: var(--heading);
   letter-spacing: -0.01em;
 }
 h2 {
   font-size: 1rem;
   font-weight: 650;
-  color: var(--navy);
+  color: var(--heading);
   margin: 0 0 16px;
 }
 .subtitulo {
@@ -283,7 +357,7 @@ h2 {
 }
 .modulo .titulo {
   font-weight: 650;
-  color: var(--navy);
+  color: var(--heading);
   margin-bottom: 3px;
   font-size: 0.96rem;
 }
@@ -321,7 +395,7 @@ form.formulario {
   border-radius: var(--radius-sm);
   font-size: 0.9rem;
   min-width: 170px;
-  background: #fff;
+  background: var(--card);
   color: var(--text);
   transition: border-color 0.14s, box-shadow 0.14s;
 }
@@ -364,14 +438,14 @@ button:active, .botao:active {
   transform: translateY(1px);
 }
 button.secundario, .botao.secundario {
-  background: #fff;
-  color: var(--navy);
+  background: var(--card);
+  color: var(--heading);
   border: 1px solid var(--border);
   box-shadow: none;
 }
 button.secundario:hover, .botao.secundario:hover {
   background: var(--bg);
-  color: var(--navy);
+  color: var(--heading);
   box-shadow: none;
 }
 button.perigo {
@@ -408,8 +482,8 @@ table {
 }
 thead th {
   text-align: left;
-  color: var(--navy);
-  background: #f8f9fb;
+  color: var(--heading);
+  background: var(--surface-alt);
   padding: 11px 14px;
   font-weight: 650;
   font-size: 0.78rem;
@@ -430,10 +504,10 @@ tbody tr:last-child td {
 }
 tbody tr.total {
   font-weight: 700;
-  background: #f8f9fb;
+  background: var(--surface-alt);
 }
 tbody tr:hover {
-  background: #fafbfc;
+  background: var(--row-hover);
 }
 
 /* fallback simples quando não uso .tabela-wrap */
@@ -451,7 +525,7 @@ details.editar-usuario > summary {
   padding: 10px 14px;
   font-size: 0.82rem;
   font-weight: 600;
-  color: var(--navy);
+  color: var(--heading);
   list-style: none;
   display: flex;
   align-items: center;
@@ -459,7 +533,7 @@ details.editar-usuario > summary {
   transition: background 0.12s ease;
 }
 details.editar-usuario > summary:hover {
-  background: #f8f9fb;
+  background: var(--surface-alt);
 }
 details.editar-usuario > summary::-webkit-details-marker {
   display: none;
@@ -473,27 +547,27 @@ details.editar-usuario[open] > summary .icone {
   transform: rotate(90deg);
 }
 details.editar-usuario[open] > summary {
-  background: #f8f9fb;
+  background: var(--surface-alt);
   border-bottom: 1px solid var(--border);
 }
 details.editar-usuario .painel-edicao {
   padding: 18px 20px 20px;
-  background: linear-gradient(180deg, #f8fafc 0%, #f4f6f9 100%);
-  border-left: 3px solid var(--navy);
+  background: var(--surface-alt);
+  border-left: 3px solid var(--heading);
 }
 details.editar-usuario .painel-secao-titulo {
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--navy);
+  color: var(--heading);
   margin: 22px 0 10px;
 }
 details.editar-usuario .painel-secao-titulo:first-child {
   margin-top: 0;
 }
 details.editar-usuario .tabela-setores {
-  background: #fff;
+  background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   overflow: hidden;
@@ -502,7 +576,7 @@ details.editar-usuario .tabela-setores table {
   font-size: 0.84rem;
 }
 details.editar-usuario .tabela-setores tr:has(input:checked) {
-  background: #eef4ff;
+  background: var(--highlight-soft);
 }
 
 /* aviso contextual dentro de um card (ex.: "tipo sem valor cadastrado") —
@@ -517,7 +591,7 @@ details.editar-usuario .tabela-setores tr:has(input:checked) {
   font-size: 0.85rem;
   background: var(--danger-soft);
   color: var(--danger);
-  border: 1px solid #f3cfca;
+  border: 1px solid var(--danger-border);
 }
 
 .mensagem {
@@ -563,15 +637,15 @@ details.editar-usuario .tabela-setores tr:has(input:checked) {
   box-shadow: none;
 }
 .mensagem.erro {
-  background: #fff;
+  background: var(--card);
   color: var(--danger);
-  border: 1px solid #f3cfca;
+  border: 1px solid var(--danger-border);
   border-left: 4px solid var(--danger);
 }
 .mensagem.sucesso {
-  background: #fff;
+  background: var(--card);
   color: var(--ok);
-  border: 1px solid #c8e9d3;
+  border: 1px solid var(--ok-border);
   border-left: 4px solid var(--ok);
 }
 
@@ -585,7 +659,7 @@ details.editar-usuario .tabela-setores tr:has(input:checked) {
   background: radial-gradient(circle at 30% 20%, var(--navy-light) 0%, var(--navy-deep) 65%);
 }
 .login-card {
-  background: #fff;
+  background: var(--card);
   border-radius: 16px;
   box-shadow: var(--shadow-lg);
   padding: 40px 38px;
@@ -596,7 +670,7 @@ details.editar-usuario .tabela-setores tr:has(input:checked) {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: var(--navy);
+  color: var(--heading);
   font-weight: 700;
   font-size: 1.25rem;
   margin-bottom: 4px;
@@ -640,7 +714,7 @@ details.editar-usuario .tabela-setores tr:has(input:checked) {
   color: var(--ok);
 }
 .badge.inativo {
-  background: #f1f2f4;
+  background: var(--muted-soft);
   color: var(--text-muted);
 }
 .badge.fatal {
@@ -684,7 +758,7 @@ details.editar-usuario .tabela-setores tr:has(input:checked) {
   margin-bottom: 14px;
 }
 .link-voltar:hover {
-  color: var(--navy);
+  color: var(--heading);
   text-decoration: none;
 }
 .link-voltar .icone {
@@ -718,7 +792,7 @@ details.editar-usuario .tabela-setores tr:has(input:checked) {
   padding: 18px 20px;
   border: 1.5px dashed var(--border);
   border-radius: var(--radius);
-  background: #fafbfd;
+  background: var(--surface-alt);
   color: var(--text-muted);
   cursor: pointer;
   font-size: 0.88rem;
@@ -729,7 +803,7 @@ details.editar-usuario .tabela-setores tr:has(input:checked) {
 .upload-label:hover {
   border-color: var(--accent);
   background: var(--accent-soft);
-  color: var(--navy);
+  color: var(--heading);
   text-decoration: none;
 }
 .upload-label .icone-wrap {
@@ -755,7 +829,7 @@ details.editar-usuario .tabela-setores tr:has(input:checked) {
   color: var(--ok);
 }
 .upload-zona.upload-com-arquivo .upload-label .icone-wrap {
-  background: #fff;
+  background: var(--card);
   color: var(--ok);
 }
 
@@ -770,7 +844,7 @@ dialog.modal-confirmacao {
   width: 92vw;
 }
 dialog.modal-confirmacao::backdrop {
-  background: rgba(15, 23, 42, 0.5);
+  background: var(--overlay);
   backdrop-filter: blur(1px);
 }
 dialog.modal-confirmacao .modal-corpo {
@@ -794,7 +868,7 @@ dialog.modal-confirmacao .modal-icone .icone {
 dialog.modal-confirmacao h3 {
   margin: 0 0 8px;
   font-size: 1.05rem;
-  color: var(--navy);
+  color: var(--heading);
 }
 dialog.modal-confirmacao p {
   margin: 0;
@@ -807,7 +881,7 @@ dialog.modal-confirmacao .modal-acoes {
   justify-content: flex-end;
   gap: 10px;
   padding: 16px 26px;
-  background: #f8f9fb;
+  background: var(--surface-alt);
   border-top: 1px solid var(--border);
   border-radius: 0 0 14px 14px;
 }

@@ -2,6 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
+  {% include "_tema_inline.html" %}
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block titulo %}Elite Sistem{% endblock %}</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
@@ -31,6 +32,11 @@
       </nav>
       <div class="usuario-area">
         <div class="nome">{{ usuario.nome }}</div>
+        <button type="button" class="sair" data-alternar-tema>
+          <span data-icone-tema-escuro>{{ icones.icone('lua') }}</span>
+          <span data-icone-tema-claro style="display:none;">{{ icones.icone('sol') }}</span>
+          <span data-rotulo-tema>Modo escuro</span>
+        </button>
         <form method="post" action="/logout">
           <button type="submit" class="sair">{{ icones.icone('sair') }} Sair</button>
         </form>
