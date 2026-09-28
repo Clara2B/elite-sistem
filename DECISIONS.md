@@ -1351,3 +1351,51 @@ enviando (com SMTP mockado nos testes automatizados, já que não há credencial
 
 **Reversível:** sim — tudo aditivo (rota nova, variáveis de ambiente novas e opcionais, nenhuma
 coluna/tabela removida); nenhum comportamento existente de Setores/Empresas mudou.
+
+## 2026-09-28 — Integração com planilhas: análise pedida sem implementação
+
+**Contexto:** a Clara pediu explicitamente uma análise e recomendação — "NÃO implemente nada, não
+altere código, banco de dados nem planilhas" — sobre integrar Laudos/Audiências/Pendências/Gestão
+de Processos com as planilhas que a equipe usa hoje. O pedido veio com um modelo detalhado (Etapas
+1-4 + formato de entrega), mas três campos ficaram com o texto `[PREENCHA...]` do modelo, sem
+preenchimento: onde as planilhas ficam, onde estão as cópias de exemplo, quem as edita.
+
+**O que eu verifiquei antes de escrever qualquer coisa:** procurei por qualquer arquivo `.xlsx`/
+`.xls`/`.csv` ou pasta de exemplos no repositório inteiro — não existe nenhum. Isso significa que a
+Etapa 2 do pedido (analisar a estrutura real das planilhas) não pode ser feita de verdade nesta
+rodada — eu não tenho a planilha real pra olhar. Decidi **não inventar/presumir uma estrutura
+plausível** só pra preencher a seção — isso violaria a própria regra que a Clara deu ("PERGUNTE
+antes de concluir"). Em vez disso, documentei em `docs/integracao-planilhas.md` seção 2.1 essa
+lacuna de forma explícita, e usei como melhor aproximação disponível tudo que o parser já existente
+(`app/excel_reader.py` + os quatro `services/*.py`) já sabe sobre a estrutura esperada — cabeçalhos
+exigidos, aliases conhecidos, chaves de duplicidade, e os problemas de dado real já documentados no
+código (com números reais: 6.278 linhas de Processos descartadas por número de processo inválido,
+484 por falha ao separar "EMPRESA - Cliente", no último import validado, ver `ARCHITECTURE.md`
+3.5). Isso cobre boa parte do que a Etapa 2 pedia, mas do lado do sistema, não da planilha real —
+deixei essa distinção clara no documento.
+
+**Achado relevante:** uma resposta a "onde as planilhas ficam" já existe registrada neste mesmo
+projeto, de 21/09 (`ARCHITECTURE.md` seção 1.9, item 1): Google Sheets, atualizado todo dia pela
+equipe — inclusive já havia um sequenciamento proposto na época (seção 2.5, D4) prevendo upload
+manual primeiro e integração com a API do Google Sheets depois, exatamente o que está sendo pedido
+agora. Decidi **não simplesmente reaproveitar essa resposta antiga sem confirmar** — o campo veio
+em branco nesta rodada, o que pode significar que mudou, ou só que o modelo não foi preenchido dessa
+vez. Perguntei de novo, citando a resposta anterior, em vez de assumir silenciosamente que continua
+valendo.
+
+**Entregue:** `docs/integracao-planilhas.md` — diagnóstico do sistema atual (stack, como os dados
+entram hoje nas 4 áreas, modelo de dados/campos/relacionamentos, autenticação/permissões,
+dependências já instaladas), diagnóstico parcial das planilhas (com a lacuna acima documentada),
+comparação de 5 abordagens de integração (API direta, agendada vs. sob demanda, upload — o que já
+existe, automação do lado da planilha, bidirecional), recomendação (leitura via API, sob demanda,
+começando por uma área piloto, mantendo o upload manual como alternativa), plano em 6 fases,
+ajustes recomendados nas planilhas, riscos/LGPD, e 10 perguntas pendentes (as do modelo da Clara +
+a confirmação da lacuna de exemplo + duas específicas: minha leitura de "digitação duplicada" pra
+confirmar se entendi certo o problema, e como tratar as ~21 abas de Gestão de Processos).
+
+**Nenhum código, dado ou planilha foi alterado** — só o documento de análise foi criado, e uma
+entrada de registro em `ARCHITECTURE.md` (seção 4.24) apontando pra ele, seguindo o mesmo padrão já
+usado pra outras fases de levantamento deste projeto (ex.: Fase 5/Gestão de Processos, seção 3, foi
+documentada como levantamento antes de qualquer implementação).
+
+**Reversível:** não se aplica — nada foi implementado.

@@ -1612,3 +1612,31 @@ usado nas linhas de tabela de Empresas/Setores. O mesmo tratamento foi aplicado 
 - **Reversível:** sim — tudo aditivo (rota nova, tabela/coluna nenhuma mudou, variáveis de
   ambiente novas e opcionais); nenhum comportamento existente de Setores/Empresas mudou.
 
+### 4.24 Integração com planilhas — análise e recomendação (2026-09-28, Fase 8)
+
+A Clara pediu uma análise (explicitamente **sem implementação**) de como integrar Laudos,
+Audiências, Pendências e Gestão de Processos com as planilhas que a equipe usa hoje, pra evitar
+digitação duplicada/divergência — corresponde à Fase 8 (Automações) do `ROADMAP.md`, ainda não
+iniciada.
+
+Análise completa em **`docs/integracao-planilhas.md`**. Resumo: as 4 áreas já leem `.xlsx` hoje
+(upload manual é a única via de entrada em todas — não existe formulário de cadastro paralelo em
+nenhuma delas), com um parser compartilhado (`app/excel_reader.py`) já defendido contra vários
+problemas reais de planilha (cabeçalho que muda de nome entre abas, "DATA" significando coisas
+diferentes conforme a aba, campo composto tipo "EMPRESA - Cliente", número de processo fora do
+padrão — ver evidência real: 6.278 de ~51 mil linhas de Processos descartadas por número inválido,
+484 por falha ao separar empresa/cliente, no último import validado). Recomendação: manter esse
+parser como está e só trocar a origem dos bytes (upload → baixado via API da plataforma onde as
+planilhas estão), começando por sincronização **sob demanda** (botão "Atualizar agora") numa única
+área piloto — sem agendamento automático nem escrita de volta na planilha por enquanto (nenhuma das
+duas peças de infraestrutura existe hoje no projeto).
+
+**Bloqueio real, não contornável:** nenhuma planilha de exemplo foi encontrada no repositório, e os
+campos do pedido original sobre onde elas ficam/quem edita ficaram em branco. Uma resposta anterior
+já registrada (seção 1.9 item 1, 21/09: Google Sheets, atualizado todo dia) pode ou não continuar
+valendo — não presumida, pendente de confirmação. A Etapa 2 da análise (mapeamento de colunas da
+planilha real) ficou parcial por esse motivo — feita só a partir do que o sistema já espera hoje,
+não de um exemplo real. Lista completa de perguntas pendentes na seção 8 do documento.
+- **Reversível:** não se aplica — nenhum código, dado ou planilha foi alterado; só o documento de
+  análise foi criado.
+
