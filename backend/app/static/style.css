@@ -437,24 +437,61 @@ tbody tr:hover {
    sem JS extra. */
 details.editar-usuario > summary {
   cursor: pointer;
-  padding: 8px 14px;
+  padding: 10px 14px;
   font-size: 0.82rem;
   font-weight: 600;
   color: var(--navy);
   list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  transition: background 0.12s ease;
+}
+details.editar-usuario > summary:hover {
+  background: #f8f9fb;
 }
 details.editar-usuario > summary::-webkit-details-marker {
   display: none;
 }
-details.editar-usuario > summary::before {
-  content: "▸ ";
+details.editar-usuario > summary .icone {
+  width: 15px;
+  height: 15px;
+  transition: transform 0.15s ease;
 }
-details.editar-usuario[open] > summary::before {
-  content: "▾ ";
+details.editar-usuario[open] > summary .icone {
+  transform: rotate(90deg);
 }
 details.editar-usuario[open] > summary {
   background: #f8f9fb;
   border-bottom: 1px solid var(--border);
+}
+details.editar-usuario .painel-edicao {
+  padding: 18px 20px 20px;
+  background: linear-gradient(180deg, #f8fafc 0%, #f4f6f9 100%);
+  border-left: 3px solid var(--navy);
+}
+details.editar-usuario .painel-secao-titulo {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--navy);
+  margin: 22px 0 10px;
+}
+details.editar-usuario .painel-secao-titulo:first-child {
+  margin-top: 0;
+}
+details.editar-usuario .tabela-setores {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+details.editar-usuario .tabela-setores table {
+  font-size: 0.84rem;
+}
+details.editar-usuario .tabela-setores tr:has(input:checked) {
+  background: #eef4ff;
 }
 
 /* aviso contextual dentro de um card (ex.: "tipo sem valor cadastrado") —

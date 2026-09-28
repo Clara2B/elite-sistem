@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import PAPEIS_GLOBAIS, hash_senha, require_admin, restaria_sem_admin
 from app.db import get_db
-from app.models import Setor, Usuario, UsuarioSetor
+from app.models import Operadora, Setor, Usuario, UsuarioSetor
 from app.services.auditoria import registrar
 
 router = APIRouter(tags=["usuarios"])
@@ -34,6 +34,16 @@ class EdicaoUsuario(BaseModel):
     setores: list[SetorVinculo] | None = None  # None = não mexe nos vínculos atuais
 
 
+class NovoSetor(BaseModel):
+    nome: str
+    operadora_id: int
+
+
+class EdicaoSetor(BaseModel):
+    nome: str
+    operadora_id: int
+
+
 def _perfil(usuario: Usuario) -> dict:
     return {
         "id": usuario.id,
@@ -54,6 +64,48 @@ def listar_setores(_: Usuario = Depends(require_admin), db: Session = Depends(ge
         {"id": s.id, "nome": s.nome, "operadora": s.operadora.nome, "ativo": s.ativo}
         for s in db.scalars(select(Setor).order_by(Setor.operadora_id, Setor.nome))
     ]
+
+
+@router.post("/setores")
+def criar_setor(payload: NovoSetor, admin: Usuario = Depends(require_admin), db: Session = Depends(get_db)):
+    if db.get(Operadora, payload.operadora_id) is None:
+        raise HTTPException(status_code=400, detail=f"Operadora {payload.operadora_id} não existe.")
+    setor = Setor(nome=payload.nome.strip(), operadora_id=payload.operadora_id)
+    db.add(setor)
+    db.commit()
+    registrar(db, admin, "CRIOU_SETOR", entidade="setor", entidade_id=setor.id)
+    db.refresh(setor)
+    return {"id": setor.id, "nome": setor.nome, "operadora": setor.operadora.nome, "ativo": setor.ativo}
+
+
+@router.patch("/setores/{setor_id}")
+def editar_setor(
+    setor_id: int, payload: EdicaoSetor, admin: Usuario = Depends(require_admin), db: Session = Depends(get_db)
+):
+    setor = db.get(Setor, setor_id)
+    if setor is None:
+        raise HTTPException(status_code=404, detail="Setor não encontrado.")
+    if db.get(Operadora, payload.operadora_id) is None:
+        raise HTTPException(status_code=400, detail=f"Operadora {payload.operadora_id} não existe.")
+    setor.nome = payload.nome.strip()
+    setor.operadora_id = payload.operadora_id
+    db.commit()
+    registrar(db, admin, "EDITOU_SETOR", entidade="setor", entidade_id=setor.id)
+    db.refresh(setor)
+    return {"id": setor.id, "nome": setor.nome, "operadora": setor.operadora.nome, "ativo": setor.ativo}
+
+
+@router.patch("/setores/{setor_id}/ativo")
+def alterar_ativo_setor(
+    setor_id: int, ativo: bool, admin: Usuario = Depends(require_admin), db: Session = Depends(get_db)
+):
+    setor = db.get(Setor, setor_id)
+    if setor is None:
+        raise HTTPException(status_code=404, detail="Setor não encontrado.")
+    setor.ativo = ativo
+    db.commit()
+    registrar(db, admin, "ATIVOU_SETOR" if ativo else "DESATIVOU_SETOR", entidade="setor", entidade_id=setor_id)
+    return {"id": setor.id, "nome": setor.nome, "operadora": setor.operadora.nome, "ativo": setor.ativo}
 
 
 @router.get("/usuarios")

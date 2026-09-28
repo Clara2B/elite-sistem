@@ -4,6 +4,8 @@ que é específico do fluxo de navegador (login por formulário, redirecionament
 página 403)."""
 from datetime import date
 
+from sqlalchemy import select
+
 from app.auth import hash_senha
 from app.models import (
     Audiencia,
@@ -50,10 +52,10 @@ def test_login_certo_seta_cookie_e_leva_ao_dashboard(client, db):
     dashboard = client.get("/")
     assert dashboard.status_code == 200
     assert "Fulano" in dashboard.text
-    assert "Usuários" in dashboard.text  # admin vê o módulo de usuários no menu
+    assert "Configuração" in dashboard.text  # admin vê a área administrativa no menu
 
 
-def test_usuario_sem_papel_global_nao_ve_usuarios_no_menu_e_leva_403(client, db):
+def test_usuario_sem_papel_global_nao_ve_configuracao_no_menu_e_leva_403(client, db):
     setor = db.query(Setor).first()
     usuario = Usuario(nome="Colaboradora", email="colab@teste.local", senha_hash=hash_senha("certa"))
     db.add(usuario)
@@ -64,7 +66,7 @@ def test_usuario_sem_papel_global_nao_ve_usuarios_no_menu_e_leva_403(client, db)
     client.post("/login", data={"email": "colab@teste.local", "senha": "certa"})
 
     dashboard = client.get("/")
-    assert "Usuários" not in dashboard.text
+    assert "Configuração" not in dashboard.text
 
     resposta = client.get("/app/usuarios")
     assert resposta.status_code == 403
@@ -636,3 +638,77 @@ def test_apagar_todos_processos_via_web_bloqueado_para_nao_admin(client, db):
     resposta = client.post("/app/processos/apagar-tudo")
     assert resposta.status_code == 403
     assert db.query(Processo).count() == 1  # nada foi apagado
+
+
+def test_configuracao_lista_as_4_areas_administrativas(client, db):
+    admin = Usuario(nome="Admin", email="admin.config@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR")
+    db.add(admin)
+    db.commit()
+    client.post("/login", data={"email": "admin.config@teste.local", "senha": "certa"})
+
+    resposta = client.get("/app/configuracao")
+    assert resposta.status_code == 200
+    for rotulo in ("Usuários", "Empresas-clientes", "Assistentes", "Setores"):
+        assert rotulo in resposta.text
+
+
+def test_configuracao_bloqueada_para_nao_admin(client, db):
+    setor = db.query(Setor).first()
+    usuario = Usuario(nome="Colaboradora", email="colab.config@teste.local", senha_hash=hash_senha("certa"))
+    db.add(usuario)
+    db.flush()
+    db.add(UsuarioSetor(usuario_id=usuario.id, setor_id=setor.id, papel="COLABORADOR"))
+    db.commit()
+    client.post("/login", data={"email": "colab.config@teste.local", "senha": "certa"})
+
+    assert client.get("/app/configuracao").status_code == 403
+
+
+def test_menu_destaca_configuracao_em_qualquer_tela_administrativa(client, db):
+    admin = Usuario(nome="Admin", email="admin.ativo@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR")
+    db.add(admin)
+    db.commit()
+    client.post("/login", data={"email": "admin.ativo@teste.local", "senha": "certa"})
+
+    for url in ("/app/usuarios", "/app/empresas", "/app/funcionarios", "/app/setores"):
+        resposta = client.get(url)
+        assert resposta.status_code == 200
+        assert 'href="/app/configuracao" class="ativo"' in resposta.text
+        assert "Voltar à Configuração" in resposta.text
+
+
+def test_admin_cadastra_e_edita_setor_pela_tela(client, db):
+    admin = Usuario(nome="Admin", email="admin.setor@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR")
+    db.add(admin)
+    db.commit()
+    client.post("/login", data={"email": "admin.setor@teste.local", "senha": "certa"})
+
+    operadora = db.query(Setor).first().operadora
+    resposta = client.post("/app/setores", data={"nome": "Cobrança", "operadora_id": operadora.id})
+    assert resposta.status_code == 200
+    assert "Cobrança" in resposta.text
+
+    novo = db.scalar(select(Setor).where(Setor.nome == "Cobrança"))
+    assert novo is not None
+
+    resposta = client.post(f"/app/setores/{novo.id}", data={"nome": "Cobrança e Financeiro", "operadora_id": operadora.id})
+    assert resposta.status_code == 200
+    assert "Cobrança e Financeiro" in resposta.text
+
+    resposta = client.post(f"/app/setores/{novo.id}/ativo?ativo=false", follow_redirects=False)
+    assert resposta.status_code == 303
+    db.refresh(novo)
+    assert novo.ativo is False
+
+
+def test_setores_bloqueado_para_nao_admin(client, db):
+    setor = db.query(Setor).first()
+    usuario = Usuario(nome="Colaboradora", email="colab.setor@teste.local", senha_hash=hash_senha("certa"))
+    db.add(usuario)
+    db.flush()
+    db.add(UsuarioSetor(usuario_id=usuario.id, setor_id=setor.id, papel="COLABORADOR"))
+    db.commit()
+    client.post("/login", data={"email": "colab.setor@teste.local", "senha": "certa"})
+
+    assert client.get("/app/setores").status_code == 403
+    assert client.post("/app/setores", data={"nome": "X", "operadora_id": setor.operadora_id}).status_code == 403

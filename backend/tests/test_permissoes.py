@@ -3,7 +3,7 @@ from datetime import date
 from sqlalchemy import select
 
 from app.auth import criar_sessao, hash_senha
-from app.models import Cobranca, Setor, Usuario, UsuarioSetor
+from app.models import Cobranca, Operadora, Setor, Usuario, UsuarioSetor
 from app.services.empresas import get_or_create_empresa
 
 
@@ -176,3 +176,40 @@ def test_edicao_permite_trocar_admin_se_houver_outro(client, admin_token, db):
     )
     assert resp.status_code == 200
     assert resp.json()["papel_global"] is None
+
+
+def test_admin_cria_e_edita_setor(client, admin_token, db):
+    operadora = db.scalar(select(Operadora).where(Operadora.nome == "ELITE"))
+
+    resp = client.post(
+        "/setores",
+        json={"nome": "Cobrança", "operadora_id": operadora.id},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["nome"] == "Cobrança"
+    assert body["operadora"] == "ELITE"
+    assert body["ativo"] is True
+
+    resp = client.patch(
+        f"/setores/{body['id']}",
+        json={"nome": "Cobrança e Financeiro", "operadora_id": operadora.id},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["nome"] == "Cobrança e Financeiro"
+
+    resp = client.patch(
+        f"/setores/{body['id']}/ativo",
+        params={"ativo": False},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["ativo"] is False
+
+
+def test_setores_exige_admin(client, db):
+    token = _usuario_com_setor(db, "ELITE", "colaboradora.setor@teste.local")
+    resp = client.post("/setores", json={"nome": "X", "operadora_id": 1}, headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 403

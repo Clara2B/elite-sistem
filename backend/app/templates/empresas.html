@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 {% block titulo %}Empresas-clientes — Elite Sistem{% endblock %}
+{% block voltar %}
+  {% import "_icones.html" as icones %}
+  <a href="/app/configuracao" class="link-voltar">{{ icones.icone('voltar') }} Voltar à Configuração</a>
+{% endblock %}
 {% block conteudo %}
   {% import "_icones.html" as icones %}
   {% import "_flash.html" as flash %}

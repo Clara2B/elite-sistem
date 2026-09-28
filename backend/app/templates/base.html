@@ -19,7 +19,11 @@
         </a>
         <div class="separador"></div>
         {% for item in menu %}
-          <a href="{{ item.url }}" class="{{ 'ativo' if request.url.path.startswith(item.url) else '' }}">
+          {% set ns = namespace(ativo=request.url.path.startswith(item.url)) %}
+          {% for prefixo in item.tambem_ativo_em or [] %}
+            {% if request.url.path.startswith(prefixo) %}{% set ns.ativo = true %}{% endif %}
+          {% endfor %}
+          <a href="{{ item.url }}" class="{{ 'ativo' if ns.ativo else '' }}">
             {{ icones.icone(item.icone) }}
             <span class="rotulo">{{ item.rotulo }}</span>
           </a>
@@ -35,7 +39,9 @@
     <div class="conteudo-area">
       <main>
         {% if request.url.path != "/" %}
-          <a href="/" class="link-voltar">{{ icones.icone('voltar') }} Voltar ao início</a>
+          {% block voltar %}
+            <a href="/" class="link-voltar">{{ icones.icone('voltar') }} Voltar ao início</a>
+          {% endblock %}
         {% endif %}
         {% block conteudo %}{% endblock %}
       </main>

@@ -1280,7 +1280,49 @@ do plano completo — usando as opções que eu mesma já tinha proposto no plan
   "Editar", trocar nome e papel global, salvar, confirmar toast + dados atualizados na tabela).
 - **Reversível:** sim — rotas/template novos, isolados; nenhuma coluna de banco mudou.
 
-**Pendente:** Blocos 2-5 continuam aguardando as respostas da Clara ao plano (ver mensagem
+**Pendente:** Blocos 3-5 continuam aguardando as respostas da Clara ao plano (ver mensagem
 correspondente no histórico da conversa — contagem de usuários por papel para o Bloco 3 ainda
 precisa vir dela, já que este ambiente não tem acesso ao banco de produção).
+
+**Bloco 2 — área administrativa separada, adiantado junto com pedidos extras (2026-09-28):**
+a Clara pediu, no mesmo fôlego, 3 coisas: (1) permitir alterar/adicionar setores e o papel de um
+usuário dentro de cada setor; (2) deixar a edição de usuário mais bonita; (3) separar
+Usuário/Empresa/Assistentes numa aba "Configuração" — essa última resolve a dúvida em aberto do
+Bloco 2 sobre o que era "Cliente" (era a mesma coisa que ela já tinha chamado de "Assistentes"
+nessa mensagem, não uma área nova).
+
+- **Setores — CRUD novo** (antes só existiam pré-cadastrados via `DEFAULT_SETORES`, sem tela
+  nenhuma): `app/web/routes_setores.py` (`GET/POST /app/setores`, `POST /app/setores/{id}`,
+  `POST /app/setores/{id}/ativo`) + `app/templates/setores.html`, mesmo padrão de edição inline
+  em tabela que "Empresas-clientes"/"Assistentes" já usam. Sem exclusão — só ativar/desativar,
+  igual ao resto do sistema (um setor com usuários vinculados não pode sumir sem quebrar
+  histórico). Espelho em `app/api/usuarios.py` (`POST /setores`, `PATCH /setores/{id}`,
+  `PATCH /setores/{id}/ativo`) pra manter o par api/web dos outros módulos. O vínculo
+  usuário-setor-papel (LIDER/COLABORADOR) em si não mudou — já existia desde o Bloco 1 e
+  continua na tela de Usuários; o que faltava era só criar/editar o Setor em si.
+- **Edição de usuário — visual (`usuarios.html`/`style.css`):** painel de edição redesenhado —
+  ícone de lápis no "Editar", fundo levemente destacado com borda de acento à esquerda (mesma cor
+  do `--navy`), duas seções com título ("Dados do usuário" / "Setores e papéis"), e a linha do
+  setor marcado (`tr:has(input:checked)`) ganha um leve destaque azul — tudo em CSS puro, sem
+  JavaScript novo. Um link "Cadastre em Configuração → Setores" nos dois formulários (editar e
+  criar usuário) avisa que dá pra criar um setor novo sem sair da tela de Usuários.
+- **Área "Configuração"** (`app/web/routes_configuracao.py` + `templates/configuracao.html`):
+  uma tela de entrada só com cards (reaproveitando o mesmo componente `.grid-modulos`/`.modulo`
+  da tela inicial) pras 4 áreas administrativas — Usuários, Empresas-clientes, Assistentes,
+  Setores. As 4 telas **continuam com suas rotas e lógica exatamente como estavam** (nada foi
+  reescrito) — só o menu lateral mudou: em vez de 3 itens separados (Usuários/Empresas-
+  clientes/Assistentes), agora é um item só, "Configuração", que fica destacado (classe `ativo`)
+  em qualquer uma das 4 telas por baixo dela (`item.tambem_ativo_em` em `menu.py`, checado no
+  `base.html` via `namespace()` do Jinja). Cada uma das 4 telas ganhou um link "Voltar à
+  Configuração" no lugar do "Voltar ao início" genérico (`{% block voltar %}` novo em
+  `base.html`, sobrescrito nelas).
+- **Testado:** 7 testes novos (Configuração lista as 4 áreas e é bloqueada pra não-admin; menu
+  destaca "Configuração" nas 4 telas; criar/editar/desativar setor pela tela; setores bloqueado
+  pra não-admin; API de setor com o mesmo padrão) + 2 API — 152 no total, sem regressão. Validado
+  com Playwright real: dashboard mostra só o card "Configuração", tela de Configuração com os 4
+  cards, painel de edição de usuário com o visual novo (captura de tela conferida), setor criado
+  pela tela aparece imediatamente no checklist de setores do formulário de usuário.
+- **Reversível:** sim — rotas/templates novos e isolados; `menu.py`/`base.html` mudaram só a
+  navegação (nenhuma rota antiga foi removida, só deixou de estar solta no menu principal);
+  nenhuma coluna de banco mudou.
 

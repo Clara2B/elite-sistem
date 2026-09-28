@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block titulo %}Configuração — Elite Sistem{% endblock %}
+{% block conteudo %}
+  {% import "_icones.html" as icones %}
+  <h1>Configuração</h1>
+  <p class="subtitulo">Área administrativa — usuários, empresas-clientes, assistentes e setores.</p>
+
+  <div class="grid-modulos">
+    {% for area in areas %}
+      <a class="modulo" href="{{ area.url }}">
+        <div class="icone-wrap">{{ icones.icone(area.icone) }}</div>
+        <div>
+          <div class="titulo">{{ area.rotulo }}</div>
+          <div class="descricao">{{ area.descricao }}</div>
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+{% endblock %}

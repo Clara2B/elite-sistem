@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block titulo %}Setores — Elite Sistem{% endblock %}
+{% block voltar %}
+  {% import "_icones.html" as icones %}
+  <a href="/app/configuracao" class="link-voltar">{{ icones.icone('voltar') }} Voltar à Configuração</a>
+{% endblock %}
+{% block conteudo %}
+  {% import "_flash.html" as flash %}
+  <h1>Setores</h1>
+  <p class="subtitulo">Setores por operadora — usados nos vínculos de usuário, em "Usuários".</p>
+
+  {{ flash.toast('sucesso', mensagem) }}
+  {{ flash.toast('erro', erro) }}
+
+  <div class="card">
+    <div class="card-header"><h2>Cadastrados ({{ setores|length }})</h2></div>
+    {% if setores %}
+      {% for s in setores %}
+        <form id="setor-{{ s.id }}" method="post" action="/app/setores/{{ s.id }}"></form>
+      {% endfor %}
+      <div class="tabela-wrap">
+        <table>
+          <thead><tr><th>Nome</th><th>Operadora</th><th>Status</th><th style="width:1%;"></th></tr></thead>
+          <tbody>
+            {% for s in setores %}
+              <tr>
+                <td>
+                  <input type="text" name="nome" value="{{ s.nome }}" required form="setor-{{ s.id }}"
+                         style="min-width:200px; padding:6px 9px; border:1px solid var(--border); border-radius:7px; font-size:0.86rem;">
+                </td>
+                <td>
+                  <select name="operadora_id" form="setor-{{ s.id }}"
+                          style="padding:6px 9px; border:1px solid var(--border); border-radius:7px; font-size:0.86rem;">
+                    {% for o in operadoras %}
+                      <option value="{{ o.id }}" {{ "selected" if s.operadora_id == o.id else "" }}>{{ o.nome }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td>
+                  {% if s.ativo %}<span class="badge ativo">Ativo</span>{% else %}<span class="badge inativo">Inativo</span>{% endif %}
+                </td>
+                <td>
+                  <div class="acoes-linha">
+                    <button type="submit" form="setor-{{ s.id }}" class="secundario" style="padding:7px 12px; font-size:0.8rem;">Salvar</button>
+                    <form method="post" action="/app/setores/{{ s.id }}/ativo?ativo={{ 'false' if s.ativo else 'true' }}">
+                      <button type="submit" class="{{ 'perigo' if s.ativo else 'secundario' }}" style="padding:7px 12px; font-size:0.8rem;">
+                        {{ "Desativar" if s.ativo else "Ativar" }}
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="vazio">Nenhum setor cadastrado ainda.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Novo setor</h2></div>
+    <form class="formulario" method="post" action="/app/setores">
+      <div class="campo">
+        <label for="nome">Nome</label>
+        <input type="text" id="nome" name="nome" required placeholder="Ex.: Financeiro">
+      </div>
+      <div class="campo">
+        <label for="operadora_id">Operadora</label>
+        <select id="operadora_id" name="operadora_id" required>
+          <option value="">Selecione...</option>
+          {% for o in operadoras %}
+            <option value="{{ o.id }}">{{ o.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit">Cadastrar</button>
+    </form>
+  </div>
+{% endblock %}

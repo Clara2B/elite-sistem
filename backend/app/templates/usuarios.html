@@ -1,7 +1,12 @@
 {% extends "base.html" %}
 {% block titulo %}Usuários — Elite Sistem{% endblock %}
+{% block voltar %}
+  {% import "_icones.html" as icones %}
+  <a href="/app/configuracao" class="link-voltar">{{ icones.icone('voltar') }} Voltar à Configuração</a>
+{% endblock %}
 {% block conteudo %}
   {% import "_flash.html" as flash %}
+  {% import "_icones.html" as icones %}
   <h1>Usuários</h1>
   <p class="subtitulo">Cadastro e acesso da equipe.</p>
 
@@ -41,52 +46,64 @@
           <tr>
             <td colspan="6" style="padding:0; border-bottom: 1px solid var(--border);">
               <details class="editar-usuario">
-                <summary>Editar</summary>
-                <form class="formulario" method="post" action="/app/usuarios/{{ u.id }}" style="padding: 16px 14px;">
-                  <div class="campo">
-                    <label for="nome-{{ u.id }}">Nome</label>
-                    <input type="text" id="nome-{{ u.id }}" name="nome" value="{{ u.nome }}" required>
-                  </div>
-                  <div class="campo">
-                    <label for="email-{{ u.id }}">E-mail</label>
-                    <input type="email" id="email-{{ u.id }}" name="email" value="{{ u.email }}" required>
-                  </div>
-                  <div class="campo">
-                    <label for="senha-{{ u.id }}">Nova senha (opcional)</label>
-                    <input type="password" id="senha-{{ u.id }}" name="senha" placeholder="Deixe em branco para manter a senha atual">
-                  </div>
-                  <div class="campo">
-                    <label for="papel_global-{{ u.id }}">Papel global</label>
-                    <select id="papel_global-{{ u.id }}" name="papel_global">
-                      <option value="" {{ "selected" if not u.papel_global else "" }}>Nenhum (acesso só pelos setores)</option>
-                      {% for p in papeis_globais %}
-                        <option value="{{ p }}" {{ "selected" if u.papel_global == p else "" }}>{{ p }}</option>
-                      {% endfor %}
-                    </select>
-                  </div>
+                <summary>{{ icones.icone('editar') }} Editar</summary>
+                <div class="painel-edicao">
+                  <form method="post" action="/app/usuarios/{{ u.id }}">
+                    <p class="painel-secao-titulo">Dados do usuário</p>
+                    <div class="formulario">
+                      <div class="campo">
+                        <label for="nome-{{ u.id }}">Nome</label>
+                        <input type="text" id="nome-{{ u.id }}" name="nome" value="{{ u.nome }}" required>
+                      </div>
+                      <div class="campo">
+                        <label for="email-{{ u.id }}">E-mail</label>
+                        <input type="email" id="email-{{ u.id }}" name="email" value="{{ u.email }}" required>
+                      </div>
+                      <div class="campo">
+                        <label for="senha-{{ u.id }}">Nova senha (opcional)</label>
+                        <input type="password" id="senha-{{ u.id }}" name="senha" placeholder="Deixe em branco para manter a senha atual">
+                      </div>
+                      <div class="campo">
+                        <label for="papel_global-{{ u.id }}">Papel global</label>
+                        <select id="papel_global-{{ u.id }}" name="papel_global">
+                          <option value="" {{ "selected" if not u.papel_global else "" }}>Nenhum (acesso só pelos setores)</option>
+                          {% for p in papeis_globais %}
+                            <option value="{{ p }}" {{ "selected" if u.papel_global == p else "" }}>{{ p }}</option>
+                          {% endfor %}
+                        </select>
+                      </div>
+                    </div>
 
-                  <table style="margin-top: 6px;">
-                    <thead><tr><th style="width:40px;"></th><th>Setor</th><th>Operadora</th><th>Papel no setor</th></tr></thead>
-                    <tbody>
-                      {% for s in setores %}
-                        {% set papel_atual = vinculos_por_usuario[u.id].get(s.id) %}
-                        <tr>
-                          <td><input type="checkbox" name="setor_{{ s.id }}" {{ "checked" if papel_atual else "" }}></td>
-                          <td>{{ s.nome }}</td>
-                          <td>{{ s.operadora.nome }}</td>
-                          <td>
-                            <select name="papel_{{ s.id }}">
-                              <option value="COLABORADOR" {{ "selected" if papel_atual == "COLABORADOR" else "" }}>Colaborador</option>
-                              <option value="LIDER" {{ "selected" if papel_atual == "LIDER" else "" }}>Líder</option>
-                            </select>
-                          </td>
-                        </tr>
-                      {% endfor %}
-                    </tbody>
-                  </table>
+                    <p class="painel-secao-titulo">Setores e papéis</p>
+                    <div class="tabela-setores">
+                      <table>
+                        <thead><tr><th style="width:40px;"></th><th>Setor</th><th>Operadora</th><th>Papel no setor</th></tr></thead>
+                        <tbody>
+                          {% for s in setores %}
+                            {% set papel_atual = vinculos_por_usuario[u.id].get(s.id) %}
+                            <tr>
+                              <td><input type="checkbox" name="setor_{{ s.id }}" {{ "checked" if papel_atual else "" }}></td>
+                              <td>{{ s.nome }}</td>
+                              <td>{{ s.operadora.nome }}</td>
+                              <td>
+                                <select name="papel_{{ s.id }}">
+                                  <option value="COLABORADOR" {{ "selected" if papel_atual == "COLABORADOR" else "" }}>Colaborador</option>
+                                  <option value="LIDER" {{ "selected" if papel_atual == "LIDER" else "" }}>Líder</option>
+                                </select>
+                              </td>
+                            </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p class="subtitulo" style="margin-top: 8px;">
+                      Precisa de um setor que ainda não existe?
+                      <a href="/app/setores">Cadastre em Configuração → Setores</a>.
+                    </p>
 
-                  <button type="submit" style="margin-top: 16px;">Salvar alterações</button>
-                </form>
+                    <button type="submit" style="margin-top: 18px;">Salvar alterações</button>
+                  </form>
+                </div>
               </details>
             </td>
           </tr>
@@ -141,6 +158,10 @@
           {% endfor %}
         </tbody>
       </table>
+      <p class="subtitulo" style="margin-top: 8px;">
+        Precisa de um setor que ainda não existe?
+        <a href="/app/setores">Cadastre em Configuração → Setores</a>.
+      </p>
 
       <button type="submit" style="margin-top: 16px;">Criar usuário</button>
     </form>

@@ -1096,3 +1096,32 @@ implementado.
 (login, expandir edição, trocar nome/papel, salvar, confirmar toast e dados atualizados).
 **Reversível:** sim — mudança isolada às rotas/template de usuários; nenhuma coluna de banco
 mudou.
+
+## 2026-09-28 — Configuração: Bloco 2 adiantado (setores, edição mais bonita, aba única)
+
+**Contexto:** a Clara pediu 3 coisas juntas, sem ter respondido ainda às perguntas completas do
+Bloco 2 do plano original: (1) poder alterar/adicionar setores e o papel de um usuário dentro de
+cada setor; (2) deixar a edição de usuário mais bonita; (3) separar Usuário/Empresa/Assistentes
+numa aba "Configuração". O pedido (3) resolveu sozinho a dúvida que eu tinha deixado em aberto no
+plano — o que era "Cliente" como terceira área — a resposta é: era "Assistentes", não uma área
+nova.
+**Decisões:**
+- **Setores ganharam CRUD** (antes só existiam pré-cadastrados no banco, sem tela nenhuma) —
+  criar, editar nome/operadora, ativar/desativar (sem excluir, mesma regra do resto do sistema).
+  O vínculo usuário-setor-papel em si (Líder/Colaborador dentro do setor) não mudou — já existia
+  desde a edição de usuário implementada antes; só faltava poder criar/editar o Setor em si.
+- **Edição de usuário redesenhada visualmente:** painel destacado (fundo diferenciado + borda de
+  acento), duas seções com título, ícone no botão "Editar", linha do setor marcado destacada —
+  tudo CSS, sem JS novo.
+- **Área "Configuração":** um item só no menu (no lugar dos 3 separados), levando a uma tela com
+  cards pras 4 áreas administrativas (Usuários, Empresas-clientes, Assistentes, Setores). As 4
+  telas por baixo **não mudaram nada** — mesmas rotas, mesma lógica — só o menu e a navegação
+  mudaram (item "Configuração" fica destacado em qualquer uma das 4, e cada uma ganhou um link
+  "Voltar à Configuração").
+**Validado:** suíte completa sem regressão (152 testes, 7 novos) + lint limpo + Playwright real
+(dashboard só com o card "Configuração", os 4 cards na tela de Configuração, visual novo da
+edição de usuário conferido por captura de tela, setor criado pela tela aparecendo na hora no
+checklist do formulário de usuário).
+**Reversível:** sim — mudança de navegação/visual; nenhuma rota antiga foi removida, nenhuma
+coluna de banco mudou.
+**Ainda pendente:** Blocos 3-5 do plano original continuam esperando as respostas da Clara.

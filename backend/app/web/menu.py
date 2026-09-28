@@ -20,7 +20,12 @@ def itens_menu(db: Session, usuario: Usuario) -> list[dict]:
     if acessiveis:
         itens.append({"url": "/app/pendencias", "rotulo": "Pendências", "icone": "pendencias", "descricao": "Cobranças em aberto por empresa-cliente."})
     if usuario.papel_global in PAPEIS_GLOBAIS:
-        itens.append({"url": "/app/usuarios", "rotulo": "Usuários", "icone": "usuarios", "descricao": "Cadastrar e gerenciar acessos da equipe."})
-        itens.append({"url": "/app/empresas", "rotulo": "Empresas-clientes", "icone": "empresas", "descricao": "Cadastro, CNPJ e ativação das empresas atendidas."})
-        itens.append({"url": "/app/funcionarios", "rotulo": "Assistentes", "icone": "funcionarios", "descricao": "Assistentes de Gestão de Processos — alimenta o relatório."})
+        # Área administrativa separada (2026-09-28, a pedido da Clara) — um item só no
+        # menu, mas continua "ativo" (destacado) em qualquer uma das telas por baixo
+        # dela, que mantiveram suas rotas próprias (`/app/usuarios` etc.) sem mudança.
+        itens.append({
+            "url": "/app/configuracao", "rotulo": "Configuração", "icone": "configuracao",
+            "descricao": "Usuários, empresas-clientes, assistentes e setores.",
+            "tambem_ativo_em": ["/app/usuarios", "/app/empresas", "/app/funcionarios", "/app/setores"],
+        })
     return itens
