@@ -346,6 +346,13 @@ button, .botao {
   gap: 8px;
   box-shadow: var(--shadow-sm);
   transition: background 0.14s, box-shadow 0.14s, transform 0.1s;
+  /* nunca deixa o rótulo do botão quebrar linha nem espremer, mesmo dentro
+     de uma célula de tabela estreita (evita herdar o overflow-wrap de
+     tbody td, abaixo) — bug visto em Empresas/Assistentes/Setores
+     (2026-09-28). */
+  white-space: nowrap;
+  overflow-wrap: normal;
+  flex-shrink: 0;
 }
 button:hover, .botao:hover {
   background: var(--navy-light);
@@ -626,6 +633,7 @@ details.editar-usuario .tabela-setores tr:has(input:checked) {
   border-radius: 999px;
   font-size: 0.74rem;
   font-weight: 650;
+  white-space: nowrap;
 }
 .badge.ativo {
   background: var(--ok-soft);

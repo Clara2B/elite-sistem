@@ -1153,3 +1153,26 @@ templates/processos.html, style.css); nenhuma lógica de filtro/ordenação/dado
 **Ainda pendente:** só o Bloco 3 (papel global) continua esperando as respostas da Clara — é o
 único que envolve migração de dados irreversível e que eu não tenho como avançar sozinha (preciso
 da contagem de usuários por papel do banco de produção, que não tenho acesso daqui).
+
+## 2026-09-28 — Bug: botões esmagados em Empresas/Assistentes/Setores (regressão do Bloco 5)
+
+**Contexto:** a Clara reportou, com captura de tela, que os botões "Salvar"/"Desativar"/lixeira
+nas telas de Empresas-clientes, Assistentes e Setores apareceram esmagados (o texto quebrando
+letra por letra numa coluna estreitíssima).
+**Causa raiz:** a regra `overflow-wrap: anywhere` que eu tinha adicionado em `tbody td` no Bloco
+5 (pra resolver o corte da coluna Observação de Processos) foi aplicada **globalmente** — ou
+seja, em toda tabela do sistema, não só nas de Processos. Essa propriedade é herdada, então o
+texto dos botões dentro de `.acoes-linha` (que fica dentro de um `<td>`) passou a ser considerado
+"quebrável em qualquer lugar" também. Como esses botões ficam num container flex, o navegador
+deixou o espaço mínimo deles encolher até quase nada, e o texto ("Salvar", "Desativar") quebrou
+verticalmente pra caber.
+**Correção:** em vez de reverter o Bloco 5 (a quebra de texto longo na Observação continua
+necessária), protegi especificamente os elementos que não devem quebrar — `button`/`.botao`
+ganharam `white-space: nowrap` + `overflow-wrap: normal` + `flex-shrink: 0` (nunca encolhem nem
+quebram, independente do que o pai herdar), e `.badge` (Ativo/Inativo) ganhou `white-space:
+nowrap` pela mesma razão preventiva.
+**Validado:** suíte completa sem regressão (154 testes) + lint limpo + Playwright confirmando
+visualmente as 4 telas afetadas (Empresas-clientes, Assistentes, Setores, Usuários) com os
+botões normais de novo, e reconfirmando que a quebra de texto longo na Observação de Processos
+(o motivo original do Bloco 5) continua funcionando.
+**Reversível:** sim — só CSS, isolado a `button`/`.botao`/`.badge` em `style.css`.
