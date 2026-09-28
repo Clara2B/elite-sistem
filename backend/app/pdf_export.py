@@ -228,8 +228,10 @@ def _tabela_processos(
 
 def gerar_pdf_processos_geral(relatorio: RelatorioGeral) -> bytes:
     """Tipo "Geral" (2026-09-25) — uma seção por empresa, com as duas
-    tabelas do Bloco 1: Assistente/Nº processo/Evento/Fatal e depois
-    Cliente/Nº processo/Último evento/Última observação."""
+    tabelas do Bloco 1: Nº processo/Evento/Fatal e depois Cliente/Nº
+    processo/Último evento/Última observação. Sem a coluna Assistente
+    (2026-09-28, Bloco 4) — o filtro por assistente continua funcionando,
+    só não aparece mais na tabela."""
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     _fundo(c, FUNDO_LAUDOS, cobrir_rodape=True)
@@ -241,9 +243,9 @@ def gerar_pdf_processos_geral(relatorio: RelatorioGeral) -> bytes:
         y = _cabecalho_secao_empresa(c, y, secao.empresa, secao.total_processos)
         y = _tabela_processos(
             c, y,
-            [("ASSISTENTE", MARGEM + 4, False), ("Nº PROCESSO", MARGEM + 150, False),
-             ("EVENTO", MARGEM + 280, False), ("FATAL", LARGURA - MARGEM - 4, True)],
-            [[l.assistente[:26], l.numero_processo, l.evento[:26], "Sim" if l.fatal else "Não"] for l in secao.linhas],
+            [("Nº PROCESSO", MARGEM + 4, False), ("EVENTO", MARGEM + 180, False),
+             ("FATAL", LARGURA - MARGEM - 4, True)],
+            [[l.numero_processo, l.evento[:44], "Sim" if l.fatal else "Não"] for l in secao.linhas],
         )
         y -= 8
         c.setFont("Helvetica-Bold", 8)
@@ -266,8 +268,10 @@ def gerar_pdf_processos_geral(relatorio: RelatorioGeral) -> bytes:
 
 
 def gerar_pdf_processos_por_empresa(relatorio: RelatorioPorEmpresa) -> bytes:
-    """Tipo "Por empresa" (2026-09-25) — Assistente/Nº processo/Cliente/
-    Último evento/Última observação, só da empresa selecionada."""
+    """Tipo "Por empresa" (2026-09-25) — Nº processo/Cliente/Último evento/
+    Última observação, só da empresa selecionada. Sem a coluna Assistente
+    (2026-09-28, Bloco 4) — o espaço liberado prioriza a Última observação,
+    igual ao Bloco 5 na tela."""
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     _fundo(c, FUNDO_LAUDOS, cobrir_rodape=True)
@@ -278,11 +282,10 @@ def gerar_pdf_processos_por_empresa(relatorio: RelatorioPorEmpresa) -> bytes:
 
     _tabela_processos(
         c, y,
-        [("ASSISTENTE", MARGEM + 4, False), ("Nº PROCESSO", MARGEM + 100, False),
-         ("CLIENTE", MARGEM + 210, False), ("ÚLTIMO EVENTO", MARGEM + 330, False),
-         ("ÚLTIMA OBSERVAÇÃO", MARGEM + 430, False)],
+        [("Nº PROCESSO", MARGEM + 4, False), ("CLIENTE", MARGEM + 110, False),
+         ("ÚLTIMO EVENTO", MARGEM + 250, False), ("ÚLTIMA OBSERVAÇÃO", MARGEM + 370, False)],
         [
-            [l.assistente[:16], l.numero_processo, l.cliente[:20], l.evento[:18], l.observacao[:40]]
+            [l.numero_processo, l.cliente[:26], l.evento[:22], l.observacao[:64]]
             for l in relatorio.linhas
         ],
     )

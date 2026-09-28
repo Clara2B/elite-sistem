@@ -568,18 +568,20 @@ def gerar_relatorio_por_empresa(
 
 
 def formatar_texto_geral(relatorio: RelatorioGeral) -> str:
+    """Sem a coluna Assistente (2026-09-28, Bloco 4 — Clara: "não exibir o
+    nome do assistente no relatório gerado", inclusive nessa versão em texto
+    simples que a API devolve). O filtro por assistente continua funcionando
+    normalmente — só não aparece mais na saída."""
     blocos = []
     for secao in relatorio.secoes:
         linhas_txt = [
             f"EMPRESA: {secao.empresa.upper()}",
             f"Total de processos: {secao.total_processos}",
             "",
-            f"{'ASSISTENTE':<26}{'Nº PROCESSO':<24}{'EVENTO':<26}{'FATAL':<6}",
+            f"{'Nº PROCESSO':<24}{'EVENTO':<26}{'FATAL':<6}",
         ]
         for l in secao.linhas:
-            linhas_txt.append(
-                f"{l.assistente[:25]:<26}{l.numero_processo:<24}{l.evento[:25]:<26}{'Sim' if l.fatal else 'Não':<6}"
-            )
+            linhas_txt.append(f"{l.numero_processo:<24}{l.evento[:25]:<26}{'Sim' if l.fatal else 'Não':<6}")
         linhas_txt.append("")
         linhas_txt.append(f"{'CLIENTE':<32}{'Nº PROCESSO':<24}{'ÚLTIMO EVENTO':<26}{'ÚLTIMA OBSERVAÇÃO'}")
         for l in secao.linhas_resumo:
@@ -589,16 +591,15 @@ def formatar_texto_geral(relatorio: RelatorioGeral) -> str:
 
 
 def formatar_texto_por_empresa(relatorio: RelatorioPorEmpresa) -> str:
+    """Sem a coluna Assistente — mesmo motivo de `formatar_texto_geral`."""
     linhas_txt = [
         f"EMPRESA: {relatorio.empresa.upper()}",
         f"Total de processos: {relatorio.total_processos}",
         "",
-        f"{'ASSISTENTE':<26}{'Nº PROCESSO':<24}{'CLIENTE':<32}{'ÚLTIMO EVENTO':<26}{'ÚLTIMA OBSERVAÇÃO'}",
+        f"{'Nº PROCESSO':<24}{'CLIENTE':<32}{'ÚLTIMO EVENTO':<26}{'ÚLTIMA OBSERVAÇÃO'}",
     ]
     for l in relatorio.linhas:
-        linhas_txt.append(
-            f"{l.assistente[:25]:<26}{l.numero_processo:<24}{l.cliente[:31]:<32}{l.evento[:25]:<26}{l.observacao}"
-        )
+        linhas_txt.append(f"{l.numero_processo:<24}{l.cliente[:31]:<32}{l.evento[:25]:<26}{l.observacao}")
     return "\n".join(linhas_txt)
 
 

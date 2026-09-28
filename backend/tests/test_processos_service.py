@@ -12,6 +12,8 @@ from app.services.processos import (
     _pessoa_valida,
     _separar_assessoria,
     apagar_todos_processos,
+    formatar_texto_geral,
+    formatar_texto_por_empresa,
     gerar_relatorio_geral,
     gerar_relatorio_por_empresa,
     importar_planilha,
@@ -633,3 +635,31 @@ def test_relatorio_geral_nao_carrega_processos_fora_do_periodo(db):
     assert len(relatorio.secoes) == 1
     assert relatorio.secoes[0].linhas[0].assistente == "DANILO"  # "JULIA" (fora do período) nem aparece
     assert len(consultas) <= 3  # processos do período + último evento por processo
+
+
+def test_formatar_texto_geral_sem_coluna_assistente(db):
+    """Bloco 4 (2026-09-28): o texto simples que a API devolve também não
+    mostra mais o assistente — mesma regra da tela e do PDF."""
+    processo = _processo(db, numero="1010101-01.2026.8.11.0110", assistente="DANILO")
+    db.add(EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"))
+    db.commit()
+
+    relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30))
+    texto = formatar_texto_geral(relatorio)
+
+    assert "DANILO" not in texto
+    assert "ASSISTENTE" not in texto
+    assert "1010101-01.2026.8.11.0110" in texto
+
+
+def test_formatar_texto_por_empresa_sem_coluna_assistente(db):
+    processo = _processo(db, numero="2020202-02.2026.8.11.0111", assistente="DANILO")
+    db.add(EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"))
+    db.commit()
+
+    relatorio = gerar_relatorio_por_empresa(db, "ABSOLUTA", date(2026, 9, 1), date(2026, 9, 30))
+    texto = formatar_texto_por_empresa(relatorio)
+
+    assert "DANILO" not in texto
+    assert "ASSISTENTE" not in texto
+    assert "2020202-02.2026.8.11.0111" in texto

@@ -311,8 +311,9 @@ def test_funcionarios_pagina_restrita_a_admin(client, db):
 
 def test_relatorio_processos_geral_mostra_secao_por_empresa(client, db):
     """Bloco 1 (2026-09-25): tipo "Geral" — uma seção por empresa, com as
-    duas partes (Assistente/Nº processo/Evento/Fatal e Cliente/Nº processo/
-    Último evento/Última observação)."""
+    duas partes (Nº processo/Evento/Fatal e Cliente/Nº processo/Último
+    evento/Última observação). Bloco 4 (2026-09-28): sem a coluna
+    Assistente — o filtro continua funcionando, só não aparece mais."""
     db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
     empresa1 = EmpresaCliente(nome="ABSOLUTA")
     empresa2 = EmpresaCliente(nome="ALFA")
@@ -338,15 +339,15 @@ def test_relatorio_processos_geral_mostra_secao_por_empresa(client, db):
     assert resposta.status_code == 200
     assert "ABSOLUTA — 1 processo(s)" in resposta.text
     assert "ALFA — 1 processo(s)" in resposta.text
-    assert "<td>DANILO</td>" in resposta.text
+    assert "DANILO" not in resposta.text  # Bloco 4: assistente não aparece mais no relatório
     assert "<td>Sim</td>" in resposta.text  # fatal da ABSOLUTA
     assert "<td>Não</td>" in resposta.text  # fatal da ALFA
     assert "Fulano" in resposta.text  # Parte 2 (resumo por cliente)
 
 
 def test_relatorio_processos_por_empresa_filtra_uma_so(client, db):
-    """Bloco 1 (2026-09-25): tipo "Por empresa" — 5 colunas, só a empresa
-    selecionada."""
+    """Bloco 1 (2026-09-25): tipo "Por empresa" — só a empresa selecionada.
+    Bloco 4 (2026-09-28): sem a coluna Assistente."""
     db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
     empresa1 = EmpresaCliente(nome="ABSOLUTA")
     empresa2 = EmpresaCliente(nome="ALFA")
@@ -372,6 +373,8 @@ def test_relatorio_processos_por_empresa_filtra_uma_so(client, db):
     assert resposta.status_code == 200
     assert "ABSOLUTA — 1 processo(s)" in resposta.text
     assert "Beltrano" not in resposta.text  # processo da ALFA não aparece
+    assert "DANILO" not in resposta.text  # Bloco 4: assistente não aparece mais no relatório
+    assert '<div class="tabela-wrap">' in resposta.text  # Bloco 5: sem rolagem horizontal da página
 
 
 def test_relatorio_processos_sem_resultado_mostra_mensagem_amigavel(client, db):

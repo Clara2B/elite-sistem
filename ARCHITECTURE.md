@@ -1326,3 +1326,56 @@ nessa mensagem, não uma área nova).
   navegação (nenhuma rota antiga foi removida, só deixou de estar solta no menu principal);
   nenhuma coluna de banco mudou.
 
+**Confirmação da Clara sobre "Cliente":** não existe (nem deve existir) uma área "Cliente"
+separada — era "Assistentes" mesmo, resolvendo a dúvida em aberto. Ela também deu sinal verde
+("pode prosseguir com as alterações") pra continuar o plano.
+
+### Bloco 4 — Assistente fora do relatório de Processos (2026-09-28)
+
+Removida a coluna/menção ao assistente do relatório de Gestão de Processos em TODAS as saídas
+(tela, PDF e o texto simples que a API JSON devolve), mantendo o filtro por assistente
+funcionando normalmente — o campo continua nos dataclasses internos (`LinhaProcessoGeral.
+assistente`/`LinhaProcessoPorEmpresa.assistente`), usado pra filtrar e ordenar; só não é mais
+desenhado em nenhuma saída.
+
+- **`processos.html`:** removida a coluna "Assistente" das duas tabelas que a mostravam (tipo
+  "Por empresa", 5→4 colunas; tabela principal do tipo "Geral", 4→3 colunas). A "Resumo por
+  cliente" já não tinha essa coluna, não mudou.
+- **`pdf_export.py`:** mesma remoção nas duas funções de PDF, com as colunas restantes
+  redistribuindo o espaço liberado (a "Última observação" ganha mais largura, seguindo o mesmo
+  espírito do Bloco 5).
+- **`services/processos.py::formatar_texto_geral`/`formatar_texto_por_empresa`:** essa era a
+  "versão exportada" que a Clara tinha perguntado se existia — é o campo `texto` que a API JSON
+  devolve (sem botão na tela hoje). Também perdeu a coluna Assistente, pela mesma regra.
+- **Testado:** 2 testes web atualizados (confirmam "DANILO" — nome de assistente de teste — não
+  aparece mais no HTML) + 2 testes novos de serviço (`formatar_texto_geral`/`_por_empresa` sem
+  "ASSISTENTE"/o nome) — 154 no total, sem regressão.
+- **Reversível:** sim — mudança de apresentação isolada; nenhuma lógica de filtro/ordenação
+  mudou.
+
+### Bloco 5 — Coluna de Observação sem corte nem rolagem horizontal da página (2026-09-28)
+
+Aplicado a **todas** as tabelas de Gestão de Processos (Prazos próximos, tipo "Por empresa", tipo
+"Geral" — tabela principal e "Resumo por cliente"), por consistência, não só às que têm
+Observação — decisão minha, já proposta no plano original sem objeção da Clara.
+
+- **`app/static/style.css`:** `overflow-wrap: anywhere` adicionado a `tbody td` **globalmente**
+  (afeta todas as tabelas do sistema, não só Processos) — palavra ou link sem espaço quebra
+  dentro da célula em vez de estourar a largura. `.tabela-wrap` (já existia, usado por Laudos)
+  agora envolve todas as tabelas de Processos — contém a rolagem horizontal **dentro da tabela**,
+  nunca deixa a página inteira rolar de lado.
+- **Largura das colunas:** "Última observação" ganhou `width: 40%` (a maior fatia) nas duas
+  tabelas que têm essa coluna, com `min-width` em todas as colunas pra evitar espremer demais em
+  telas muito estreitas — nesse caso, a tabela vira mais larga que a tela e passa a rolar
+  **dentro do `.tabela-wrap`** (confirmado: a página em si nunca ganha rolagem horizontal, testado
+  em 1440px/768px/390px).
+- **Decisão de mostrar inteiro (não resumir com "ver mais"):** seguida a recomendação que eu
+  tinha proposto no plano — mostra o texto completo, quebrando linha, sem JS de expandir/
+  recolher.
+- **Testado:** Playwright em 3 larguras (1440/768/390px) confirmando `scrollWidth ==
+  clientWidth` do `<html>` (nunca há rolagem horizontal da página) mesmo com uma observação de
+  teste propositalmente longa e sem espaços (incluindo um link comprido); em 390px, confirmado
+  que a tabela passa a rolar dentro do próprio `.tabela-wrap` (não da página) e que a coluna
+  Observação continua alcançável rolando lateralmente dentro dela.
+- **Reversível:** sim — mudança de CSS/template; nenhuma lógica de dados mudou.
+

@@ -1125,3 +1125,31 @@ checklist do formulário de usuário).
 **Reversível:** sim — mudança de navegação/visual; nenhuma rota antiga foi removida, nenhuma
 coluna de banco mudou.
 **Ainda pendente:** Blocos 3-5 do plano original continuam esperando as respostas da Clara.
+
+## 2026-09-28 — Configuração/Processos: Blocos 4 e 5 implementados
+
+**Contexto:** a Clara confirmou que não existe (nem deve existir) uma área "Cliente" separada —
+era "Assistentes" mesmo — e deu sinal verde pra continuar o plano ("pode prosseguir com as
+alterações"). Segui com os Blocos 4 e 5, que não tinham dúvida estrutural travando (diferente do
+Bloco 3, que ainda depende de dados/decisões que só ela pode dar — contagem de usuários por
+papel, mapeamento de conversão, o que fazer com o "Líder" que já existe por setor).
+**Bloco 4 — decisão sobre a única dúvida que eu tinha levantado:** a "versão exportada" que
+existia (o campo `texto` da API JSON) também perdeu a coluna Assistente, pela mesma regra da
+tela e do PDF — decisão minha, dentro do espírito claro da instrução original ("não exibir o
+nome do assistente no relatório gerado"), já que não fazia sentido a API devolver o assistente
+enquanto a tela e o PDF não mostram mais.
+**Bloco 5 — decisões sobre as duas dúvidas que eu tinha levantado:**
+- Observação mostrada **inteira, com quebra de linha** (não resumida com "ver mais") — segui a
+  recomendação que eu mesma tinha proposto, sem objeção da Clara.
+- O ajuste (wrap + `.tabela-wrap`) foi aplicado a **todas** as tabelas de Gestão de Processos
+  (Prazos próximos incluído), não só às que têm Observação — por consistência, também já
+  proposto no plano original.
+**Validado:** suíte completa sem regressão (154 testes, 4 novos) + lint limpo + Playwright em 3
+larguras de tela (1440/768/390px) confirmando que a página nunca ganha rolagem horizontal, texto
+longo sem espaços quebra dentro da célula, e em telas muito estreitas a tabela passa a rolar
+dentro do próprio contêiner (não da página) — ver ARCHITECTURE.md pros detalhes técnicos.
+**Reversível:** sim — mudanças de apresentação (services/processos.py, pdf_export.py,
+templates/processos.html, style.css); nenhuma lógica de filtro/ordenação/dados mudou.
+**Ainda pendente:** só o Bloco 3 (papel global) continua esperando as respostas da Clara — é o
+único que envolve migração de dados irreversível e que eu não tenho como avançar sozinha (preciso
+da contagem de usuários por papel do banco de produção, que não tenho acesso daqui).

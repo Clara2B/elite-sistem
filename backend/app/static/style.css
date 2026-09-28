@@ -413,6 +413,10 @@ thead th {
 tbody td {
   padding: 11px 14px;
   border-bottom: 1px solid var(--border);
+  /* texto longo (palavra ou link sem espaço) quebra dentro da célula, em vez
+     de estourar a largura da tabela e forçar rolagem horizontal da página
+     (2026-09-28, Bloco 5 — coluna de Observação de Processos). */
+  overflow-wrap: anywhere;
 }
 tbody tr:last-child td {
   border-bottom: none;
