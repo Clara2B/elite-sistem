@@ -317,3 +317,32 @@ def test_setores_exige_admin(client, db):
     token = _usuario_com_setor(db, "ELITE", "colaboradora.setor@teste.local")
     resp = client.post("/setores", json={"nome": "X", "operadora_id": 1}, headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 403
+
+
+def test_admin_exclui_setor_sem_vinculo(client, admin_token, db):
+    operadora = db.scalar(select(Operadora).where(Operadora.nome == "ELITE"))
+    criado = client.post(
+        "/setores", json={"nome": "Setor Descartável", "operadora_id": operadora.id},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    ).json()
+
+    resp = client.delete(f"/setores/{criado['id']}", headers={"Authorization": f"Bearer {admin_token}"})
+    assert resp.status_code == 200
+    assert db.get(Setor, criado["id"]) is None
+
+
+def test_admin_nao_exclui_setor_com_usuario_vinculado(client, admin_token, db):
+    setor = db.scalar(select(Setor).where(Setor.nome == "Financeiro", Setor.operadora.has(nome="ELITE")))
+    _usuario_no_setor(db, setor.id, "vinculado.setor@teste.local")
+
+    resp = client.delete(f"/setores/{setor.id}", headers={"Authorization": f"Bearer {admin_token}"})
+    assert resp.status_code == 400
+    assert "usuário" in resp.json()["detail"].lower()
+    assert db.get(Setor, setor.id) is not None
+
+
+def test_excluir_setor_exige_admin(client, db):
+    token = _usuario_com_setor(db, "ELITE", "colaboradora.exclusao@teste.local")
+    setor = db.scalar(select(Setor).where(Setor.nome == "Financeiro", Setor.operadora.has(nome="ELITE")))
+    resp = client.delete(f"/setores/{setor.id}", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 403

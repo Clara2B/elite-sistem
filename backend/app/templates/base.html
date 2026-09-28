@@ -53,6 +53,30 @@
       </main>
     </div>
   </div>
+
+  <button type="button" class="botao-suporte" data-abrir-confirmacao="popup-suporte" aria-label="Abrir chamado de suporte">
+    {{ icones.icone('suporte') }}
+  </button>
+
+  <dialog id="popup-suporte" class="modal-confirmacao popup-suporte">
+    <div class="modal-corpo">
+      <h3>Abrir chamado de suporte</h3>
+      <p>Conte o que está acontecendo — enviamos direto pra equipe responsável pelo sistema.</p>
+      <div class="campo" style="margin-top: 16px;">
+        <label for="suporte-assunto">Assunto do chamado</label>
+        <input type="text" id="suporte-assunto" placeholder="Ex.: Erro ao importar planilha de Laudos">
+      </div>
+      <div class="campo" style="margin-top: 14px;">
+        <label for="suporte-descricao">Descrição</label>
+        <textarea id="suporte-descricao" rows="6" placeholder="Descrição..."></textarea>
+      </div>
+    </div>
+    <div class="modal-acoes">
+      <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
+      <button type="button" id="botao-enviar-suporte">Enviar chamado</button>
+    </div>
+  </dialog>
+
   <script src="/static/app.js?v={{ versao_estatico }}" defer></script>
 </body>
 </html>

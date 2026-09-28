@@ -15,6 +15,7 @@ from app.auth import (
 from app.db import get_db
 from app.models import Operadora, Setor, SetorModulo, Usuario, UsuarioSetor
 from app.services.auditoria import registrar
+from app.services.setores import excluir_setor
 
 router = APIRouter(tags=["usuarios"])
 
@@ -143,6 +144,18 @@ def alterar_ativo_setor(
     db.commit()
     registrar(db, admin, "ATIVOU_SETOR" if ativo else "DESATIVOU_SETOR", entidade="setor", entidade_id=setor_id)
     return {"id": setor.id, "nome": setor.nome, "operadora": setor.operadora.nome, "ativo": setor.ativo}
+
+
+@router.delete("/setores/{setor_id}")
+def excluir_setor_rota(setor_id: int, admin: Usuario = Depends(require_admin), db: Session = Depends(get_db)):
+    """Exclusão definitiva — bloqueada se houver usuário vinculado ao setor
+    (ver services/setores.py::excluir_setor)."""
+    try:
+        excluir_setor(db, setor_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    registrar(db, admin, "EXCLUIU_SETOR", entidade="setor", entidade_id=setor_id)
+    return {"ok": True}
 
 
 @router.get("/usuarios")

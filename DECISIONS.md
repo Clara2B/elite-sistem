@@ -1293,3 +1293,61 @@ confirmada no banco depois).
 **Reversível:** sim — os dois são aditivos (parâmetro opcional em `excluir_empresa`, tabela nova
 `SetorModulo` cujo estado padrão preserva o comportamento de antes); nenhuma rota ou tela
 existente muda de comportamento pra quem não usa as opções novas.
+
+## 2026-09-28 — Layout de Setores, "marcar todas as abas", exclusão de setor e pop-up de suporte
+
+**Contexto:** a Clara mandou um screenshot da tela de Setores marcando o card "Novo setor" e
+pediu: (1) melhorar o layout daquela área; (2) uma opção de selecionar todas as abas, "e não só
+estas 3" (ela tinha escolhido operadora ELITE, que só libera 3 dos 5 módulos — LAUDOS, PROCESSOS,
+PENDENCIAS); (3) poder apagar setor. Na mesma mensagem, pediu um pop-up de suporte novo: circular,
+no canto inferior da tela, que abre um pop-up maior com "Assunto do chamado" e "Descrição...", e
+manda isso por e-mail pra claracosta@elitemediacoes.com.br.
+
+**Pergunta 1 (selecionar todas as abas):** a frase "e não só estas 3" tinha duas leituras
+possíveis — um atalho "marcar todas" pras abas que já apareciam (continuando restrito à operadora
+do setor, como ela mesma decidiu na rodada anterior), ou abrir as 5 abas do sistema pra qualquer
+setor, mesmo fora da operadora dele (o que reverteria essa decisão). Perguntei antes de assumir.
+**Resposta da Clara:** "Atalho 'Marcar todas' (Recomendado)" — confirma que a restrição por
+operadora continua valendo; só queria um jeito mais rápido de marcar tudo que já é permitido.
+
+**Pergunta 2 (envio de e-mail do pop-up de suporte):** o sistema não tinha nenhuma configuração
+de e-mail (nem SMTP, nem serviço tipo SendGrid) — perguntei qual caminho ela queria: SMTP comum
+(Gmail/Outlook com senha de app), um serviço transacional (SendGrid/Mailgun/Resend), ou só abrir
+o e-mail pronto no aplicativo de e-mail da pessoa (`mailto:`, sem precisar de credencial nenhuma,
+mas dependente do usuário ter um cliente de e-mail configurado).
+**Resposta da Clara:** "SMTP (Gmail/Outlook com senha de app)".
+
+**Implementado:**
+- Layout: o card "Novo setor" tinha um bug de raiz (não só estético) — o checkbox "Restringir
+  abas" e o bloco de módulos estavam dentro do `<form class="formulario">` (flex-row), a mesma
+  classe de bug já vista no painel de edição de usuário antes nesse projeto. Corrigido tirando os
+  dois pra fora do form (que ganhou `id="novo-setor"`), com os campos apontando pro form via
+  `form="novo-setor"` — mesmo padrão já usado nas linhas de tabela de Empresas/Setores. Grade de
+  módulos trocada de lista vertical pra CSS grid, mais compacta.
+- "Marcar todas"/"Limpar seleção": dois botões de texto que só mexem nas caixas **visíveis no
+  momento** — as escondidas pela filtragem por operadora ficam de fora, então nunca marcam uma
+  aba fora da operadora do setor.
+- Exclusão de setor: `services/setores.py::excluir_setor` (novo), mesma proteção de
+  `excluir_empresa` — bloqueia se o setor tiver usuário vinculado (`UsuarioSetor`), pedindo pra
+  desativar ou desvincular primeiro. Botão de lixeira + modal de confirmação por linha, mesmo
+  padrão visual de Empresas-clientes.
+- Pop-up de suporte: botão circular fixo no canto inferior direito (`base.html`, visível em toda
+  tela autenticada) que abre um `<dialog>` maior com "Assunto do chamado" + "Descrição". Envio via
+  `fetch()` (não form/redirect, pra funcionar de qualquer página) pra `POST /app/suporte/chamado`,
+  que usa `services/suporte.py::enviar_chamado` (SMTP direto via `smtplib`, STARTTLS + login,
+  `Reply-To` = e-mail de quem abriu o chamado). Sem as variáveis de ambiente de SMTP configuradas,
+  o botão continua aparecendo mas o envio recusa com uma mensagem amigável ("avise o
+  administrador") em vez de estourar um erro genérico — verificado visualmente que esse fallback
+  funciona corretamente.
+
+**Pendência:** a Clara ainda precisa passar as credenciais reais de SMTP (host, porta, e-mail e
+senha de app do Gmail/Outlook) como variáveis de ambiente no Render — sem isso, o pop-up de
+suporte fica visível mas o envio não funciona de verdade em produção ainda.
+
+**Testado:** suíte completa sem regressão (188 testes, 12 novos) + lint limpo + Playwright
+cobrindo layout novo em claro/escuro e desktop/mobile, "Marcar todas"/"Limpar seleção", exclusão
+de setor bloqueada por vínculo e permitida sem vínculo, e o pop-up de suporte abrindo/preenchendo/
+enviando (com SMTP mockado nos testes automatizados, já que não há credencial real ainda).
+
+**Reversível:** sim — tudo aditivo (rota nova, variáveis de ambiente novas e opcionais, nenhuma
+coluna/tabela removida); nenhum comportamento existente de Setores/Empresas mudou.

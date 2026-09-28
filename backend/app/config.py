@@ -18,6 +18,18 @@ class Settings(BaseSettings):
     # essas variáveis do Render sem afetar nada.
     admin_bootstrap_email: str | None = None
     admin_bootstrap_senha: str | None = None
+    # Fase 6 (2026-09-28): pop-up de suporte, envia por SMTP direto — sem
+    # essas três variáveis (host/usuário/senha), o botão continua aparecendo
+    # mas o envio recusa com um erro amigável (ver services/suporte.py).
+    # `smtp_remetente` é opcional: se vazio, usa o próprio `smtp_usuario`
+    # como remetente (comum quando o provedor exige que From == usuário
+    # autenticado, como Gmail).
+    smtp_host: str | None = None
+    smtp_porta: int = 587
+    smtp_usuario: str | None = None
+    smtp_senha: str | None = None
+    smtp_remetente: str | None = None
+    smtp_destinatario_suporte: str = "claracosta@elitemediacoes.com.br"
 
 
 settings = Settings()

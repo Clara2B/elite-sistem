@@ -3,9 +3,12 @@ papéis para os setores") — antes só existiam pré-cadastrados via
 DEFAULT_SETORES (app/db.py), sem nenhuma tela de administração; o vínculo
 usuário-setor (com o papel LIDER/COLABORADOR dentro do setor) já existia em
 Usuários e continua lá, sem mudança. Mesmo padrão de Empresas-clientes:
-edição inline na tabela, sem exclusão (só ativar/desativar — um Setor com
-usuários vinculados não pode ser removido sem quebrar o histórico)."""
+edição inline na tabela, com exclusão definitiva protegida contra vínculo
+(ver services/setores.py::excluir_setor) — um Setor com usuário vinculado
+não pode ser excluído, só desativado."""
 from __future__ import annotations
+
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
@@ -16,6 +19,7 @@ from app.auth import MODULOS_OPERADORA, MODULOS_ROTULO, modulos_validos_para_ope
 from app.db import get_db
 from app.models import Operadora, Setor, SetorModulo, Usuario
 from app.services.auditoria import registrar
+from app.services.setores import excluir_setor
 from app.web.auth import admin_logado_web
 from app.web.menu import itens_menu
 from app.web.templates import templates
@@ -70,8 +74,17 @@ def _salvar_modulos_do_setor(db: Session, setor_id: int, modulos: set[str] | Non
 
 
 @router.get("")
-def tela(request: Request, usuario: Usuario = Depends(admin_logado_web), db: Session = Depends(get_db)):
-    return templates.TemplateResponse(request, "setores.html", _contexto_base(db, usuario))
+def tela(
+    request: Request,
+    erro: str | None = None,
+    mensagem: str | None = None,
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    contexto = _contexto_base(db, usuario)
+    contexto["erro"] = erro
+    contexto["mensagem"] = mensagem
+    return templates.TemplateResponse(request, "setores.html", contexto)
 
 
 @router.post("")
@@ -155,3 +168,23 @@ def alterar_ativo(
         db.commit()
         registrar(db, usuario, "ATIVOU_SETOR" if ativo else "DESATIVOU_SETOR", entidade="setor", entidade_id=setor_id)
     return RedirectResponse("/app/setores", status_code=303)
+
+
+@router.post("/{setor_id}/excluir")
+def excluir(
+    setor_id: int,
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Exclusão definitiva — a confirmação (obrigatória) acontece no
+    navegador, num modal, antes desse POST (ver setores.html e
+    static/app.js). Recusada se houver usuário vinculado (ver
+    services/setores.py::excluir_setor)."""
+    setor = db.get(Setor, setor_id)
+    nome = setor.nome if setor else str(setor_id)
+    try:
+        excluir_setor(db, setor_id)
+    except ValueError as e:
+        return RedirectResponse(f"/app/setores?erro={quote(str(e))}", status_code=303)
+    registrar(db, usuario, "EXCLUIU_SETOR", entidade="setor", entidade_id=setor_id)
+    return RedirectResponse(f"/app/setores?mensagem={quote(f'Setor {nome} excluído definitivamente.')}", status_code=303)

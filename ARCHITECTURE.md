@@ -1536,3 +1536,79 @@ restrita às abas da própria operadora dele; reatribuição (não cascata), com
   preservam o comportamento anterior por padrão; nenhuma rota/comportamento existente muda pra
   quem não usa as opções novas.
 
+### 4.23 Layout de Setores, exclusão de setor e pop-up de suporte (2026-09-28)
+
+A Clara mandou um screenshot da tela de Setores (modo escuro) marcando o card "Novo setor" e
+pedindo três coisas: (1) melhorar o layout daquela área, (2) uma opção de "selecionar todas as
+abas" (ela viu só 3 checkboxes, com a operadora ELITE escolhida, e achou pouco), (3) poder apagar
+setor (só existia ativar/desativar). Junto, pediu um pop-up de suporte novo — circular, no canto
+da tela, que abre um pop-up maior com "Assunto do chamado" e "Descrição", e manda isso por e-mail
+pra ela.
+
+Duas perguntas antes de codar (ver DECISIONS.md pras respostas completas): (1) se "selecionar
+todas as abas" era um atalho "marcar todas" (dentro da restrição por operadora que ela mesma
+decidiu antes) ou se era pra abrir as 5 abas pra qualquer setor, inclusive fora da operadora dele;
+(2) como enviar o e-mail de verdade, já que o sistema não tinha nenhuma configuração de SMTP/
+serviço de e-mail. Respostas: atalho "marcar todas" (mantendo a restrição por operadora); SMTP
+com usuário/senha de app (Gmail/Outlook).
+
+**Layout do card "Novo setor" — bug de raiz, não só estética.** O problema real por trás do
+layout ruim: o checkbox "Restringir abas" e o bloco de módulos estavam dentro de
+`<form class="formulario">` (um flex-row) — a mesma classe de bug já visto antes no painel de
+edição de usuário (ver seção 4.19): qualquer bloco full-width dentro de um flex-row vira item da
+fileira e espreme tudo pro lado. Corrigido tirando os dois de dentro do `<form>` (que ganhou um
+`id="novo-setor"`) e referenciando os campos pelo atributo `form="novo-setor"` — mesmo padrão já
+usado nas linhas de tabela de Empresas/Setores. O mesmo tratamento foi aplicado ao painel
+`<details>` de cada linha existente da tabela.
+
+- **"Marcar todas" / "Limpar seleção"** — dois botões de texto acima da grade de módulos
+  (`app.js::iniciarSelecionarTodosModulos`), tanto no formulário "Novo setor" quanto em cada linha
+  da tabela. Só mexem nas caixas **visíveis no momento** (`offsetParent !== null`) — as que a
+  filtragem por operadora já escondeu ficam de fora, então "Marcar todas" nunca marca uma aba fora
+  da operadora do setor (preserva a decisão da Clara de manter a restrição).
+- **Grade de módulos** — trocada de lista vertical (`flex-direction: column`) por
+  `grid-template-columns: repeat(auto-fill, minmax(170px, 1fr))` (`.modulos-setor-grade`), mais
+  compacta e organizada.
+- **Exclusão de setor** — `services/setores.py::excluir_setor` (novo), mesmo padrão de
+  `excluir_empresa`: bloqueia se houver `UsuarioSetor` vinculado (mensagem de erro pedindo pra
+  desativar ou desvincular os usuários primeiro), e apaga as linhas de `SetorModulo` do setor
+  junto (config, não histórico — seguro remover). Botão de lixeira + modal de confirmação em cada
+  linha da tabela, mesmo padrão visual de Empresas-clientes. Rotas: `POST /app/setores/{id}/excluir`
+  (web) e `DELETE /setores/{id}` (API), ambas admin-only.
+
+**Pop-up de suporte**
+
+- **`app/config.py`** — `smtp_host`/`smtp_porta`/`smtp_usuario`/`smtp_senha`/`smtp_remetente`
+  (opcionais, `None` por padrão) e `smtp_destinatario_suporte` (padrão
+  `claracosta@elitemediacoes.com.br`). Sem as três primeiras configuradas, o botão continua
+  aparecendo normalmente, mas o envio recusa com uma mensagem amigável em vez de estourar erro.
+- **`services/suporte.py::enviar_chamado`** — SMTP direto via `smtplib` (STARTTLS + login), sem
+  serviço terceiro. Monta um `EmailMessage` com assunto `[Elite Sistem] {assunto}`, corpo com quem
+  abriu (nome/e-mail) + a descrição, `Reply-To` = e-mail de quem abriu (responder o e-mail já cai
+  direto pra pessoa certa). Erros de SMTP/rede viram `ValueError` com mensagem amigável.
+- **`web/routes_suporte.py`** (novo) — `POST /app/suporte/chamado`, autenticado por cookie
+  (`usuario_logado_web`), sem gate de operadora/módulo (é um recurso do sistema como um todo).
+  Devolve JSON sempre — chamado via `fetch()` do JS, não form/redirect, porque o pop-up precisa
+  funcionar de qualquer página do sistema (vive em `base.html`, não numa tela específica). Isso
+  exigiu um ajuste pequeno em `main.py::_e_rota_html`: por padrão qualquer rota sob `/app/*`
+  devolve a página de erro HTML num erro não tratado, mas essa rota precisa continuar JSON —
+  tratada como exceção nesse helper.
+- **Interface (`templates/base.html`)** — botão circular fixo (`position: fixed`, canto inferior
+  direito, ícone de suporte) que abre um `<dialog class="modal-confirmacao popup-suporte">` maior,
+  reaproveitando o mecanismo genérico de abrir/fechar modal já existente
+  (`data-abrir-confirmacao`/`data-fechar-modal`) — só o envio é JS próprio
+  (`app.js::iniciarPopupSuporte`), com o botão desabilitado + "Enviando..." durante a chamada,
+  toast de sucesso (limpa os campos e fecha) ou erro (mantém o pop-up aberto com o texto digitado,
+  pra não perder o que a pessoa escreveu).
+- **Testado:** suíte completa sem regressão (188 testes, 12 novos: exclusão de setor via API/web +
+  bloqueio por vínculo, `enviar_chamado` com SMTP mockado — sucesso e validação de campos vazios —
+  e recusa amigável sem SMTP configurado) + lint limpo + Playwright: layout novo em claro/escuro e
+  desktop/mobile, "Marcar todas"/"Limpar seleção" funcionando, exclusão de setor bloqueada/
+  permitida, pop-up de suporte abrindo/preenchendo/enviando (com a mensagem de "não configurado"
+  aparecendo corretamente, já que as credenciais reais de SMTP ainda não foram fornecidas).
+- **Pendência:** falta a Clara passar as credenciais reais de SMTP (host, porta, e-mail e senha de
+  app) como variáveis de ambiente no Render — sem isso, o botão de suporte fica visível mas o envio
+  não funciona de verdade em produção ainda.
+- **Reversível:** sim — tudo aditivo (rota nova, tabela/coluna nenhuma mudou, variáveis de
+  ambiente novas e opcionais); nenhum comportamento existente de Setores/Empresas mudou.
+

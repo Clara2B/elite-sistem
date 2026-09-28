@@ -258,6 +258,98 @@ function iniciarModulosPorOperadora() {
   });
 }
 
+// Setores: "Marcar todas" / "Limpar seleção" dentro de um bloco de módulos
+// (`[data-marcar-todos-modulos="id"]`/`[data-limpar-modulos="id"]`) — só
+// mexe nas caixas que estão visíveis no momento (as escondidas pela
+// operadora escolhida, via `iniciarModulosPorOperadora`, ficam de fora).
+function iniciarSelecionarTodosModulos() {
+  function caixasVisiveis(bloco) {
+    return Array.prototype.filter.call(bloco.querySelectorAll("input[type=checkbox]"), function (caixa) {
+      return caixa.offsetParent !== null;
+    });
+  }
+
+  document.querySelectorAll("[data-marcar-todos-modulos]").forEach(function (botao) {
+    var alvo = document.getElementById(botao.getAttribute("data-marcar-todos-modulos"));
+    if (!alvo) return;
+    botao.addEventListener("click", function () {
+      caixasVisiveis(alvo).forEach(function (caixa) {
+        caixa.checked = true;
+      });
+    });
+  });
+
+  document.querySelectorAll("[data-limpar-modulos]").forEach(function (botao) {
+    var alvo = document.getElementById(botao.getAttribute("data-limpar-modulos"));
+    if (!alvo) return;
+    botao.addEventListener("click", function () {
+      caixasVisiveis(alvo).forEach(function (caixa) {
+        caixa.checked = false;
+      });
+    });
+  });
+}
+
+// Pop-up de suporte (2026-09-28) — o botão flutuante abre o <dialog> via o
+// mesmo mecanismo genérico de modal (`data-abrir-confirmacao`, ver
+// `iniciarModaisDeConfirmacao`); aqui só o envio, por fetch (não form/
+// redirect — o pop-up pode ser aberto de qualquer página do sistema).
+function iniciarPopupSuporte() {
+  var botaoEnviar = document.getElementById("botao-enviar-suporte");
+  var modal = document.getElementById("popup-suporte");
+  var campoAssunto = document.getElementById("suporte-assunto");
+  var campoDescricao = document.getElementById("suporte-descricao");
+  if (!botaoEnviar || !modal || !campoAssunto || !campoDescricao) return;
+  var rotuloOriginal = botaoEnviar.textContent;
+
+  function limparCampos() {
+    campoAssunto.value = "";
+    campoDescricao.value = "";
+  }
+
+  botaoEnviar.addEventListener("click", function () {
+    var assunto = campoAssunto.value.trim();
+    var descricao = campoDescricao.value.trim();
+    if (!assunto || !descricao) {
+      mostrarToast("Preencha o assunto e a descrição do chamado.", "erro");
+      return;
+    }
+
+    botaoEnviar.disabled = true;
+    botaoEnviar.textContent = "Enviando...";
+
+    fetch("/app/suporte/chamado", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assunto: assunto, descricao: descricao }),
+    })
+      .then(function (resposta) {
+        return resposta.json()
+          .catch(function () {
+            throw new Error("Não foi possível enviar o chamado — atualize a página e tente de novo.");
+          })
+          .then(function (dados) {
+            if (!resposta.ok) throw new Error(dados.erro || "Não foi possível enviar o chamado.");
+            return dados;
+          });
+      })
+      .then(function () {
+        mostrarToast("Chamado enviado! A gente retorna assim que possível.", "sucesso");
+        limparCampos();
+        modal.close();
+      })
+      .catch(function (erro) {
+        mostrarToast(erro.message, "erro");
+      })
+      .finally(function () {
+        botaoEnviar.disabled = false;
+        botaoEnviar.textContent = rotuloOriginal;
+      });
+  });
+
+  modal.addEventListener("close", limparCampos);
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   iniciarZonasDeUpload();
   iniciarValidacaoDeUpload();
@@ -268,4 +360,6 @@ document.addEventListener("DOMContentLoaded", function () {
   iniciarAlternanciaTema();
   iniciarAlternanciaPorCheckbox();
   iniciarModulosPorOperadora();
+  iniciarSelecionarTodosModulos();
+  iniciarPopupSuporte();
 });

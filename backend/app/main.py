@@ -31,6 +31,7 @@ from app.web.routes_laudos import router as web_laudos_router
 from app.web.routes_pendencias import router as web_pendencias_router
 from app.web.routes_processos import router as web_processos_router
 from app.web.routes_setores import router as web_setores_router
+from app.web.routes_suporte import router as web_suporte_router
 from app.web.routes_usuarios import router as web_usuarios_router
 from app.web.templates import templates
 
@@ -87,6 +88,12 @@ async def _sem_permissao(request: Request, exc: SemPermissao):
 
 
 def _e_rota_html(path: str) -> bool:
+    # /app/suporte é a exceção: é a única rota sob /app que devolve JSON
+    # (chamada via fetch do pop-up de suporte, aberto de qualquer página —
+    # ver web/routes_suporte.py), então um erro inesperado nela precisa
+    # continuar JSON, não virar uma página HTML que o fetch não sabe ler.
+    if path.startswith("/app/suporte"):
+        return False
     return path == "/" or path.startswith(("/app", "/login", "/logout"))
 
 
@@ -142,3 +149,4 @@ app.include_router(web_funcionarios_router)
 app.include_router(web_cartas_router)
 app.include_router(web_setores_router)
 app.include_router(web_configuracao_router)
+app.include_router(web_suporte_router)

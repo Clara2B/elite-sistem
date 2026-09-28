@@ -580,8 +580,11 @@ details.editar-usuario .tabela-setores tr:has(input:checked) {
 }
 
 /* Seleção de abas por setor (2026-09-28) — checkbox "Restringir abas" +
-   lista de módulos, tanto dentro da tabela de Setores (details compacto)
-   quanto no formulário "Novo setor" (bloco simples). */
+   grade de módulos, tanto dentro da tabela de Setores (details compacto)
+   quanto no formulário "Novo setor" (painel abaixo do form, nunca dentro
+   dele — um <div> full-width dentro de <form class="formulario"> vira item
+   de flex-row e espreme tudo pro lado; os campos referenciam o form pelo
+   atributo `form`, ficando fora dele de propósito). */
 .check-modulo {
   display: flex;
   align-items: center;
@@ -591,11 +594,48 @@ details.editar-usuario .tabela-setores tr:has(input:checked) {
   cursor: pointer;
   white-space: nowrap;
 }
-.modulos-setor-corpo {
+.modulos-setor-painel {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.modulos-setor-painel-formulario {
+  margin-top: 18px;
+}
+.modulos-setor-bloco {
+  margin-top: 12px;
+  padding: 14px 16px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.modulos-setor-acoes {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 14px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--border);
+}
+.link-modulos {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.link-modulos:hover {
+  color: var(--heading);
+}
+.modulos-setor-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px 16px;
+}
+.botao-novo-setor {
+  margin-top: 18px;
 }
 details.modulos-setor > summary {
   cursor: pointer;
@@ -610,13 +650,11 @@ details.modulos-setor[open] > summary {
   color: var(--heading);
   font-weight: 600;
 }
-details.modulos-setor .modulos-setor-corpo {
-  padding: 10px 12px;
-  margin-top: 6px;
-  background: var(--surface-alt);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  min-width: 220px;
+details.modulos-setor .modulos-setor-painel {
+  margin-top: 8px;
+  padding-top: 0;
+  border-top: none;
+  min-width: 260px;
 }
 
 /* aviso contextual dentro de um card (ex.: "tipo sem valor cadastrado") —
@@ -924,6 +962,67 @@ dialog.modal-confirmacao .modal-acoes {
   background: var(--surface-alt);
   border-top: 1px solid var(--border);
   border-radius: 0 0 14px 14px;
+}
+
+/* ---------- pop-up de suporte (2026-09-28) ---------- */
+
+.botao-suporte {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: var(--navy);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+  z-index: 40;
+  transition: transform 0.14s ease, background 0.14s ease;
+}
+.botao-suporte:hover {
+  background: var(--navy-deep);
+  transform: translateY(-2px);
+}
+.botao-suporte .icone {
+  width: 24px;
+  height: 24px;
+}
+
+dialog.popup-suporte {
+  max-width: 480px;
+}
+dialog.popup-suporte .modal-corpo {
+  padding: 28px 28px 22px;
+}
+.campo textarea {
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  background: var(--card);
+  color: var(--text);
+  font-family: inherit;
+  resize: vertical;
+  transition: border-color 0.14s, box-shadow 0.14s;
+}
+.campo textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+@media (max-width: 860px) {
+  .botao-suporte {
+    right: 16px;
+    bottom: 16px;
+    width: 50px;
+    height: 50px;
+  }
 }
 
 /* ---------- responsivo ---------- */

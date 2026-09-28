@@ -564,7 +564,9 @@ def test_laudos_resumo_por_assessoria_sem_empresa_cobre_todas(client, db):
     assert "<h2>ABSOLUTA</h2>" in resposta.text
     assert "<h2>HUNTING</h2>" in resposta.text
     assert "data-copiar-resumo" in resposta.text  # botão "Copiar resumo"
-    assert "<textarea" not in resposta.text  # não é mais o campo de texto simples de antes
+    # só a <textarea> global do pop-up de suporte (base.html) — não é mais o
+    # campo de texto simples que o resumo por assessoria usava antes.
+    assert resposta.text.count("<textarea") == 1
 
 
 def test_laudos_resumo_por_assessoria_sempre_cobre_todas_mesmo_com_empresa_filtrada(client, db):
@@ -819,6 +821,40 @@ def test_menu_nao_mostra_processos_para_setor_restrito_a_laudos(client, db):
     assert resposta.status_code == 200
     assert 'href="/app/processos"' not in resposta.text
     assert client.get("/app/processos", follow_redirects=False).status_code == 403
+
+
+def test_admin_exclui_setor_pela_tela(client, db):
+    admin = Usuario(nome="Admin", email="admin.exclusetor@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR")
+    db.add(admin)
+    db.commit()
+    client.post("/login", data={"email": "admin.exclusetor@teste.local", "senha": "certa"})
+
+    operadora = db.scalar(select(Operadora).where(Operadora.nome == "ELITE"))
+    client.post("/app/setores", data={"nome": "Setor Pra Excluir", "operadora_id": str(operadora.id)})
+    novo = db.scalar(select(Setor).where(Setor.nome == "Setor Pra Excluir"))
+    assert novo is not None
+
+    resposta = client.post(f"/app/setores/{novo.id}/excluir", follow_redirects=False)
+    assert resposta.status_code == 303
+    assert resposta.headers["location"].startswith("/app/setores?mensagem=")
+    assert db.get(Setor, novo.id) is None
+
+
+def test_exclusao_de_setor_bloqueada_se_tiver_usuario_vinculado(client, db):
+    admin = Usuario(nome="Admin", email="admin.exclusetor2@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR")
+    db.add(admin)
+    setor = db.query(Setor).first()
+    colaborador = Usuario(nome="Colab", email="colab.exclusetor@teste.local", senha_hash=hash_senha("certa"))
+    db.add(colaborador)
+    db.flush()
+    db.add(UsuarioSetor(usuario_id=colaborador.id, setor_id=setor.id, papel="COLABORADOR"))
+    db.commit()
+    client.post("/login", data={"email": "admin.exclusetor2@teste.local", "senha": "certa"})
+
+    resposta = client.post(f"/app/setores/{setor.id}/excluir", follow_redirects=False)
+    assert resposta.status_code == 303
+    assert resposta.headers["location"].startswith("/app/setores?erro=")
+    assert db.get(Setor, setor.id) is not None
 
 
 def test_modo_escuro_tem_botao_e_script_anti_flash(client, db):

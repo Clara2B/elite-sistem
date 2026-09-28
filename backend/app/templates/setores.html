@@ -5,6 +5,7 @@
   <a href="/app/configuracao" class="link-voltar">{{ icones.icone('voltar') }} Voltar à Configuração</a>
 {% endblock %}
 {% block conteudo %}
+  {% import "_icones.html" as icones %}
   {% import "_flash.html" as flash %}
   <h1>Setores</h1>
   <p class="subtitulo">Setores por operadora — usados nos vínculos de usuário, em "Usuários".</p>
@@ -40,21 +41,28 @@
                 <td>
                   <details class="modulos-setor">
                     <summary>{{ "Abas restritas" if restrito else "Todas as abas" }}</summary>
-                    <div class="modulos-setor-corpo">
+                    <div class="modulos-setor-painel">
                       <label class="check-modulo">
                         <input type="checkbox" name="restringir_modulos" value="true" form="setor-{{ s.id }}"
                                data-alternar-modulos="modulos-editar-{{ s.id }}" {{ "checked" if restrito else "" }}>
                         Restringir abas
                       </label>
-                      <div id="modulos-editar-{{ s.id }}" data-modulos-setor="operadora_id_editar_{{ s.id }}"
+                      <div id="modulos-editar-{{ s.id }}" class="modulos-setor-bloco"
+                           data-modulos-setor="operadora_id_editar_{{ s.id }}"
                            style="{{ '' if restrito else 'display:none;' }}">
-                        {% for modulo, rotulo in modulos_disponiveis.items() %}
-                          <label class="check-modulo" data-modulo-operadora="{{ modulos_operadora[modulo] or '' }}">
-                            <input type="checkbox" name="modulos" value="{{ modulo }}" form="setor-{{ s.id }}"
-                                   {{ "checked" if restrito and modulo in restrito else "" }}>
-                            {{ rotulo }}
-                          </label>
-                        {% endfor %}
+                        <div class="modulos-setor-acoes">
+                          <button type="button" class="link-modulos" data-marcar-todos-modulos="modulos-editar-{{ s.id }}">Marcar todas</button>
+                          <button type="button" class="link-modulos" data-limpar-modulos="modulos-editar-{{ s.id }}">Limpar seleção</button>
+                        </div>
+                        <div class="modulos-setor-grade">
+                          {% for modulo, rotulo in modulos_disponiveis.items() %}
+                            <label class="check-modulo" data-modulo-operadora="{{ modulos_operadora[modulo] or '' }}">
+                              <input type="checkbox" name="modulos" value="{{ modulo }}" form="setor-{{ s.id }}"
+                                     {{ "checked" if restrito and modulo in restrito else "" }}>
+                              {{ rotulo }}
+                            </label>
+                          {% endfor %}
+                        </div>
                       </div>
                     </div>
                   </details>
@@ -70,6 +78,11 @@
                         {{ "Desativar" if s.ativo else "Ativar" }}
                       </button>
                     </form>
+                    <button type="button" class="perigo" style="padding:7px 10px; font-size:0.8rem;"
+                            data-abrir-confirmacao="modal-excluir-setor-{{ s.id }}" data-nome-alvo="{{ s.nome }}"
+                            aria-label="Excluir {{ s.nome }}">
+                      {{ icones.icone('lixeira') }}
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -77,6 +90,25 @@
           </tbody>
         </table>
       </div>
+      {% for s in setores %}
+        <dialog id="modal-excluir-setor-{{ s.id }}" class="modal-confirmacao">
+          <div class="modal-corpo">
+            <div class="modal-icone">{{ icones.icone('alerta') }}</div>
+            <h3>Excluir setor?</h3>
+            <p>
+              Isso vai apagar <strong data-nome-alvo-destino>{{ s.nome }}</strong> definitivamente,
+              sem volta. Se houver usuário vinculado a ele, a exclusão será recusada — nesse caso,
+              desative em vez de excluir, ou remova o vínculo em Usuários primeiro.
+            </p>
+          </div>
+          <div class="modal-acoes">
+            <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
+            <form method="post" action="/app/setores/{{ s.id }}/excluir">
+              <button type="submit" class="perigo">Excluir definitivamente</button>
+            </form>
+          </div>
+        </dialog>
+      {% endfor %}
     {% else %}
       <p class="vazio">Nenhum setor cadastrado ainda.</p>
     {% endif %}
@@ -84,7 +116,7 @@
 
   <div class="card">
     <div class="card-header"><h2>Novo setor</h2></div>
-    <form class="formulario" method="post" action="/app/setores">
+    <form id="novo-setor" class="formulario" method="post" action="/app/setores">
       <div class="campo">
         <label for="nome">Nome</label>
         <input type="text" id="nome" name="nome" required placeholder="Ex.: Financeiro">
@@ -98,23 +130,28 @@
           {% endfor %}
         </select>
       </div>
-      <div class="campo">
-        <label class="check-modulo">
-          <input type="checkbox" name="restringir_modulos" value="true" data-alternar-modulos="modulos-novo-setor">
-          Restringir as abas que esse setor pode acessar
-        </label>
-      </div>
-      <div id="modulos-novo-setor" class="campo" data-modulos-setor="operadora_id" style="display:none;">
-        <label>Abas liberadas</label>
-        <div class="modulos-setor-corpo">
+    </form>
+
+    <div class="modulos-setor-painel modulos-setor-painel-formulario">
+      <label class="check-modulo">
+        <input type="checkbox" name="restringir_modulos" value="true" form="novo-setor" data-alternar-modulos="modulos-novo-setor">
+        Restringir as abas que esse setor pode acessar
+      </label>
+      <div id="modulos-novo-setor" class="modulos-setor-bloco" data-modulos-setor="operadora_id" style="display:none;">
+        <div class="modulos-setor-acoes">
+          <button type="button" class="link-modulos" data-marcar-todos-modulos="modulos-novo-setor">Marcar todas</button>
+          <button type="button" class="link-modulos" data-limpar-modulos="modulos-novo-setor">Limpar seleção</button>
+        </div>
+        <div class="modulos-setor-grade">
           {% for modulo, rotulo in modulos_disponiveis.items() %}
             <label class="check-modulo" data-modulo-operadora="{{ modulos_operadora[modulo] or '' }}">
-              <input type="checkbox" name="modulos" value="{{ modulo }}"> {{ rotulo }}
+              <input type="checkbox" name="modulos" value="{{ modulo }}" form="novo-setor"> {{ rotulo }}
             </label>
           {% endfor %}
         </div>
       </div>
-      <button type="submit">Cadastrar</button>
-    </form>
+    </div>
+
+    <button type="submit" form="novo-setor" class="botao-novo-setor">Cadastrar</button>
   </div>
 {% endblock %}
