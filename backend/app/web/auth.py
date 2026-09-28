@@ -16,7 +16,12 @@ from datetime import datetime
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
-from app.auth import COOKIE_SESSAO, PAPEIS_GLOBAIS, operadoras_acessiveis
+from app.auth import (
+    COOKIE_SESSAO,
+    PAPEIS_GLOBAIS,
+    modulos_acessiveis,
+    operadoras_acessiveis,
+)
 from app.db import get_db
 from app.models import Sessao, Usuario
 
@@ -78,6 +83,20 @@ def require_operadora_web(nome_operadora: str):
         db: Session = Depends(get_db),
     ) -> Usuario:
         if nome_operadora not in operadoras_acessiveis(db, usuario):
+            raise SemPermissao
+        return usuario
+
+    return _checar
+
+
+def require_modulo_web(nome_modulo: str):
+    """Equivalente web de `app.auth.require_modulo`."""
+
+    def _checar(
+        usuario: Usuario = Depends(usuario_logado_web),
+        db: Session = Depends(get_db),
+    ) -> Usuario:
+        if nome_modulo not in modulos_acessiveis(db, usuario):
             raise SemPermissao
         return usuario
 

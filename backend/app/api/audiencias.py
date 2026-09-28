@@ -3,7 +3,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api._shared import salvar_temp
-from app.auth import require_admin, require_operadora
+from app.auth import require_admin, require_modulo
 from app.db import get_db
 from app.models import Usuario
 from app.pdf_export import gerar_pdf_audiencias
@@ -14,7 +14,7 @@ from app.utils import nome_arquivo_pdf
 router = APIRouter(prefix="/audiencias", tags=["audiencias"])
 
 # Audiências é um produto da EXIMIA (ver ARCHITECTURE.md seção 1.3).
-_acesso_eximia = require_operadora("EXIMIA")
+_acesso_eximia = require_modulo("AUDIENCIAS")
 
 
 @router.post("/import")

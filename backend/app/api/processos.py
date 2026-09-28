@@ -5,7 +5,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api._shared import salvar_temp
-from app.auth import require_admin, require_operadora
+from app.auth import require_admin, require_modulo
 from app.db import get_db
 from app.models import Usuario
 from app.pdf_export import gerar_pdf_processos_geral, gerar_pdf_processos_por_empresa
@@ -16,7 +16,7 @@ from app.utils import nome_arquivo_pdf
 router = APIRouter(prefix="/processos", tags=["processos"])
 
 # Gestão de Processos é um setor da ELITE (ver ARCHITECTURE.md seção 1.3/3).
-_acesso_elite = require_operadora("ELITE")
+_acesso_elite = require_modulo("PROCESSOS")
 
 
 @router.post("/import")

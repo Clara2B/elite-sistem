@@ -91,13 +91,16 @@ def alterar_ativo(
 @router.delete("/{empresa_id}")
 def excluir(
     empresa_id: int,
+    empresa_destino_id: int | None = None,
     usuario: Usuario = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """Exclusão definitiva — bloqueada se houver laudo/audiência/cobrança/
-    processo vinculado (ver services/empresas.py::excluir_empresa)."""
+    processo vinculado, a menos que `empresa_destino_id` seja informado,
+    reatribuindo esse histórico antes de excluir (2026-09-28, ver
+    services/empresas.py::excluir_empresa)."""
     try:
-        excluir_empresa(db, empresa_id)
+        excluir_empresa(db, empresa_id, empresa_destino_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     registrar(db, usuario, "EXCLUIU_EMPRESA", entidade="empresa_cliente", entidade_id=empresa_id)

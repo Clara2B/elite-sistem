@@ -32,11 +32,42 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Sessao, Usuario, UsuarioSetor
+from app.models import Sessao, SetorModulo, Usuario, UsuarioSetor
 
 SESSAO_DURACAO_HORAS = 12
 PAPEIS_GLOBAIS = {"ADMIN_SUPERIOR", "ADMIN_TI"}
 COOKIE_SESSAO = "sessao"
+
+# Módulos (abas operacionais) e a operadora dona de cada um — None significa
+# "válido para as duas operadoras" (hoje só Pendências, que mistura cobranças
+# da EXIMIA e da ELITE na mesma tela). Não inclui a área de Configuração
+# (Usuários/Empresas-clientes/Assistentes/Setores): essa continua controlada
+# só por `papel_global`, sem seleção por setor (decisão da Clara, 2026-09-28)
+# — ver ARCHITECTURE.md.
+MODULOS_OPERADORA: dict[str, str | None] = {
+    "LAUDOS": "ELITE",
+    "PROCESSOS": "ELITE",
+    "AUDIENCIAS": "EXIMIA",
+    "CARTAS": "EXIMIA",
+    "PENDENCIAS": None,
+}
+
+# Rótulo pra tela de Setores (checkboxes de módulo) — mesmo texto usado no
+# menu lateral (app/web/menu.py).
+MODULOS_ROTULO: dict[str, str] = {
+    "LAUDOS": "Laudos",
+    "PROCESSOS": "Gestão de Processos",
+    "AUDIENCIAS": "Audiências",
+    "CARTAS": "Cartas",
+    "PENDENCIAS": "Pendências",
+}
+
+
+def modulos_validos_para_operadora(nome_operadora: str) -> set[str]:
+    """Módulos que fazem sentido pra uma operadora — usado tanto por
+    `modulos_acessiveis` (retrocompatibilidade de setor sem configuração)
+    quanto pela tela de Setores (validar o que pode ser marcado)."""
+    return {modulo for modulo, op in MODULOS_OPERADORA.items() if op is None or op == nome_operadora}
 
 _bearer_scheme = HTTPBearer(
     auto_error=False,
@@ -134,6 +165,49 @@ def require_operadora(nome_operadora: str):
                 status_code=403,
                 detail=f"Sem acesso aos dados da {nome_operadora}.",
             )
+        return usuario
+
+    return _checar
+
+
+def modulos_acessiveis(db: Session, usuario: Usuario) -> set[str]:
+    """Módulos (abas operacionais) que o usuário pode enxergar. Admin
+    Superior/T.I. veem todos; qualquer outro usuário vê a união dos módulos
+    liberados pelos setores a que pertence. Um setor SEM nenhuma linha em
+    `SetorModulo` libera todos os módulos válidos pra sua operadora (estado
+    padrão/retrocompatível — nenhum setor existente perde acesso só por essa
+    feature ter sido adicionada); um setor COM linhas em `SetorModulo` fica
+    restrito exatamente a elas (2026-09-28, a pedido da Clara)."""
+    if usuario.papel_global in PAPEIS_GLOBAIS:
+        return set(MODULOS_OPERADORA.keys())
+
+    vinculos = db.scalars(select(UsuarioSetor).where(UsuarioSetor.usuario_id == usuario.id))
+    resultado: set[str] = set()
+    setores_vistos: set[int] = set()
+    for vinculo in vinculos:
+        setor = vinculo.setor
+        if setor.id in setores_vistos:
+            continue
+        setores_vistos.add(setor.id)
+        validos = modulos_validos_para_operadora(setor.operadora.nome)
+        configurados = {
+            sm.modulo for sm in db.scalars(select(SetorModulo).where(SetorModulo.setor_id == setor.id))
+        }
+        resultado |= (configurados & validos) if configurados else validos
+    return resultado
+
+
+def require_modulo(nome_modulo: str):
+    """Dependency factory equivalente a `require_operadora`, mas checando o
+    módulo específico (não a operadora inteira) — usada pelas rotas que
+    agora respeitam a seleção de abas por setor."""
+
+    def _checar(
+        usuario: Usuario = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> Usuario:
+        if nome_modulo not in modulos_acessiveis(db, usuario):
+            raise HTTPException(status_code=403, detail=f"Sem acesso ao módulo {nome_modulo}.")
         return usuario
 
     return _checar

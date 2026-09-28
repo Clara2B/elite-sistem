@@ -13,11 +13,13 @@ from app.models import Usuario
 from app.services import pendencias as pendencias_service
 from app.services.auditoria import registrar
 from app.services.empresas import listar_empresas
-from app.web.auth import admin_logado_web, usuario_logado_web
+from app.web.auth import admin_logado_web, require_modulo_web
 from app.web.menu import itens_menu
 from app.web.templates import templates
 
 router = APIRouter(prefix="/app/pendencias")
+
+_acesso_pendencias = require_modulo_web("PENDENCIAS")
 
 
 def _contexto_base(db: Session, usuario: Usuario) -> dict:
@@ -38,7 +40,7 @@ def tela(
     request: Request,
     empresa: str | None = None,
     mensagem: str | None = None,
-    usuario: Usuario = Depends(usuario_logado_web),
+    usuario: Usuario = Depends(_acesso_pendencias),
     db: Session = Depends(get_db),
 ):
     contexto = _contexto_base(db, usuario)
@@ -64,7 +66,7 @@ def tela(
 async def importar(
     request: Request,
     arquivo: UploadFile,
-    usuario: Usuario = Depends(usuario_logado_web),
+    usuario: Usuario = Depends(_acesso_pendencias),
     db: Session = Depends(get_db),
 ):
     path = salvar_temp(arquivo)

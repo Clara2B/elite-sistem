@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.auth import require_operadora
+from app.auth import require_modulo
 from app.db import get_db
 from app.models import Usuario
 from app.pdf_export import gerar_pdf_carta_banco, gerar_pdf_carta_cliente
@@ -17,7 +17,7 @@ from app.utils import nome_arquivo_pdf
 router = APIRouter(prefix="/cartas", tags=["cartas"])
 
 # Cartas é um produto da EXIMIA (mesma regra de acesso de Audiências).
-_acesso_eximia = require_operadora("EXIMIA")
+_acesso_eximia = require_modulo("CARTAS")
 
 
 @router.get("/convite-cliente.pdf")

@@ -1448,3 +1448,91 @@ coisa com segurança. Ela topou.
 - **Reversível:** sim — função/rotas novas e isoladas; reaproveita a exclusão individual já
   existente, não introduz um caminho de exclusão novo/menos seguro.
 
+### 4.22 Seleção de abas por setor + exclusão de empresa com reatribuição (2026-09-28)
+
+Dois pedidos na mesma mensagem: "quando eu adiciono um setor, ele me permita selecionar quais
+abas do site aquele setor pode acessar" e "preciso que seja possível apagar empresas mesmo que
+estejam vinculadas a outros processos". Ambos mexem em várias partes do sistema e tinham
+ambiguidade estrutural real — fiz duas perguntas focadas antes de codar (ver DECISIONS.md pra
+respostas completas da Clara): (1) se a Configuração (Usuários/Empresas/Assistentes/Setores)
+entraria na seleção de abas ou continuaria só por `papel_global`, e se um setor podia ganhar
+acesso a aba fora da sua própria operadora; (2) que caminho ela queria pra "apagar mesmo com
+vínculo" (cascata vs. reatribuir) e se era só pra processos ou pros quatro tipos de vínculo.
+Respostas: Configuração fica só por `papel_global`, sem mudança; seleção de abas de um setor fica
+restrita às abas da própria operadora dele; reatribuição (não cascata), com pop-up um a um.
+
+**Parte 1 — Módulos por setor**
+
+- **`app/models.py::SetorModulo`** — tabela nova, chave composta `(setor_id, modulo)`. Ausência de
+  qualquer linha pra um `setor_id` é o estado padrão/retrocompatível: "acesso a todas as abas
+  válidas pra operadora do setor" — igual ao comportamento de antes dessa feature. Só passa a
+  restringir quando o setor tem pelo menos uma linha, gravada explicitamente na tela de Setores.
+  Nenhum setor existente perdeu acesso por essa mudança (não precisou de backfill/migração de
+  dados).
+- **`app/auth.py`** — `MODULOS_OPERADORA` (registro módulo → operadora dona, `None` = vale pras
+  duas — hoje só `PENDENCIAS`, que já misturava cobranças EXIMIA/ELITE na mesma tela antes disso);
+  `MODULOS_ROTULO` (rótulo de exibição); `modulos_validos_para_operadora()`; `modulos_acessiveis(db,
+  usuario)` (admin vê tudo; outro usuário vê a união dos módulos liberados pelos setores a que
+  pertence, aplicando a regra de retrocompatibilidade acima por setor); `require_modulo()` — tudo
+  espelhando o padrão já existente de `operadoras_acessiveis`/`require_operadora`.
+  `app/web/auth.py::require_modulo_web` é o par web, igual a `require_operadora_web`.
+- **Rotas migradas de `require_operadora(_web)` pra `require_modulo(_web)`:** Laudos → LAUDOS,
+  Gestão de Processos → PROCESSOS, Audiências → AUDIENCIAS, Cartas → CARTAS. Pendências (que não
+  tinha gate de operadora nenhum — só exigia login, com o filtro por `operadoras_acessiveis`
+  aplicado só no resultado) ganhou o gate `require_modulo(_web)("PENDENCIAS")` na tela/import/
+  mensagens, mantendo intacto o filtro pós-consulta e o `apagar-tudo` (que já era admin-only).
+  `app/web/menu.py::itens_menu` passou a montar a lista de abas a partir de `modulos_acessiveis`
+  em vez de `operadoras_acessiveis` — Configuração continua controlada só por `papel_global`, sem
+  mudança nenhuma nessa parte.
+- **Tela de Setores (`app/web/routes_setores.py`, `templates/setores.html`)** — cada linha da
+  tabela ganhou uma coluna "Abas liberadas" com um `<details>` compacto: um checkbox "Restringir
+  abas" (desmarcado = sem restrição, estado padrão) que revela a lista de módulos quando marcado;
+  os checkboxes de módulo só mostram os válidos pra operadora selecionada naquele momento (JS,
+  `app.js::iniciarModulosPorOperadora`, reaproveitando o padrão `data-mostrar-se-*` já usado no
+  filtro de tipo de relatório de Processos) — nunca deixa marcar uma aba fora da operadora do
+  setor, tanto na tela (JS esconde/desmarca) quanto no backend (`_ler_modulos_do_form` filtra pra
+  `modulos_validos_para_operadora` antes de salvar). O formulário "Novo setor" ganhou o mesmo
+  bloco. Regra de validação: marcar "Restringir abas" sem escolher nenhum módulo é rejeitado
+  (mensagem de erro) — evita criar sem querer um setor "restrito a nada", que seria indistinguível
+  de "sem restrição" no banco (zero linhas em `SetorModulo` nos dois casos).
+  **API** (`app/api/usuarios.py`): `NovoSetor`/`EdicaoSetor` ganharam `modulos: list[str] | None`
+  (`None` = sem restrição; lista filtrada pra operadora, vazia após o filtro = rejeitado com 400).
+- **Testado:** testes de unidade de `modulos_acessiveis` (admin vê tudo; setor sem configuração
+  libera tudo da operadora; setor restrito fica só com o configurado; união de vários setores);
+  403 web (setor restrito a LAUDOS não acessa Processos nem Pendências) e a menu.py refletindo a
+  restrição; API (criar/editar setor com `modulos`, remover restrição com `modulos: null`, módulo
+  de operadora errada rejeitado); tela web (criar setor com restrição pelo formulário, tirar a
+  restrição depois). Verificado visualmente com Playwright: restringir um setor existente pela
+  tabela, criar um setor novo já restrito, os checkboxes de módulo mudando conforme a operadora
+  selecionada.
+
+**Parte 2 — Exclusão de empresa com reatribuição de vínculo**
+
+- **`app/services/empresas.py`** — `contar_vinculos_empresa()` extraída de dentro de
+  `excluir_empresa` (reuso). `excluir_empresa(db, empresa_id, empresa_destino_id=None)` ganhou o
+  parâmetro opcional: sem ele, comportamento idêntico a antes (bloqueia se houver vínculo,
+  `sincronizar_lista_oficial`/`excluir_empresas_inativas` continuam chamando sem esse parâmetro e
+  não mudam); com ele, e havendo vínculo, todo laudo/audiência/cobrança/processo apontando pra
+  `empresa_id` é reatribuído (`UPDATE ... SET empresa_cliente_id = destino`) pra `empresa_destino_id`
+  antes de excluir — nunca apaga o histórico em si, só muda pra qual empresa-cliente ele aponta.
+  Validado: destino precisa existir e ser diferente da origem.
+  **Decisão minha, não perguntada explicitamente:** a Clara pediu isso citando "processos", mas
+  os quatro tipos de vínculo (laudo/audiência/cobrança/processo) têm exatamente a mesma FK
+  NOT NULL pra empresa-cliente e o mesmo problema — generalizei pros quatro em vez de deixar
+  laudo/audiência/cobrança ainda bloqueando a exclusão. Sinalizado a ela depois de entregue.
+- **Rotas:** `POST /app/empresas/{id}/excluir` (web, `Form(empresa_destino_id)`) e
+  `DELETE /empresas/{id}` (API, query param) passam o destino opcional adiante pra
+  `excluir_empresa`.
+- **Tela (`empresas.html`):** o modal de exclusão por linha (já existia) passou a calcular, por
+  empresa, se ela tem vínculo (`vinculos_por_empresa`, novo no contexto) — se tiver, mostra um
+  `<select>` "Mover histórico vinculado para" (as outras empresas, obrigatório) antes do botão de
+  excluir; se não tiver, o modal fica como sempre foi (sem o select). Um único modal por linha
+  cobre os dois casos.
+- **Testado:** serviço (reatribuição dos quatro tipos confirmada linha a linha; bloqueio sem
+  destino inalterado; destino precisa existir/ser diferente); web (exclusão com destino reatribui
+  e apaga a origem). Verificado visualmente com Playwright: modal mostrando a contagem de vínculo
+  e o select, exclusão completada, e o laudo de teste confirmado na empresa de destino depois.
+- **Reversível:** sim — os dois são aditivos (parâmetro opcional, coluna de módulo nova) e
+  preservam o comportamento anterior por padrão; nenhuma rota/comportamento existente muda pra
+  quem não usa as opções novas.
+

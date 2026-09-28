@@ -13,8 +13,10 @@ from app.models import (
     EmpresaCliente,
     EventoProcesso,
     Laudo,
+    Operadora,
     Processo,
     Setor,
+    SetorModulo,
     Usuario,
     UsuarioSetor,
 )
@@ -205,6 +207,30 @@ def test_empresas_exclusao_bloqueada_se_tiver_laudo_vinculado(client, db):
 
     ids = [e["id"] for e in client.get("/empresas").json()]
     assert empresa.id in ids
+
+
+def test_empresas_exclusao_com_destino_reatribui_e_exclui(client, db):
+    db.add(Usuario(nome="Fulano", email="fulano.mover@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    origem = EmpresaCliente(nome="Origem Com Laudo Ltda")
+    destino = EmpresaCliente(nome="Destino Ltda")
+    db.add(origem)
+    db.add(destino)
+    db.flush()
+    laudo = Laudo(empresa_cliente_id=origem.id, tipo_laudo_nome="Perícia", data=date(2026, 1, 10), status="SOLICITACAO")
+    db.add(laudo)
+    db.commit()
+    client.post("/login", data={"email": "fulano.mover@teste.local", "senha": "certa"})
+
+    resposta = client.post(
+        f"/app/empresas/{origem.id}/excluir", data={"empresa_destino_id": str(destino.id)}, follow_redirects=False
+    )
+    assert resposta.status_code == 303
+    assert resposta.headers["location"].startswith("/app/empresas?mensagem=")
+
+    ids = [e["id"] for e in client.get("/empresas").json()]
+    assert origem.id not in ids
+    db.refresh(laudo)
+    assert laudo.empresa_cliente_id == destino.id
 
 
 def test_sincronizar_lista_oficial_via_web_exige_admin(client, db):
@@ -748,6 +774,51 @@ def test_setores_bloqueado_para_nao_admin(client, db):
 
     assert client.get("/app/setores").status_code == 403
     assert client.post("/app/setores", data={"nome": "X", "operadora_id": setor.operadora_id}).status_code == 403
+
+
+def test_admin_restringe_abas_do_setor_pela_tela(client, db):
+    admin = Usuario(nome="Admin", email="admin.modulos@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR")
+    db.add(admin)
+    db.commit()
+    client.post("/login", data={"email": "admin.modulos@teste.local", "senha": "certa"})
+
+    operadora = db.scalar(select(Operadora).where(Operadora.nome == "ELITE"))
+    resposta = client.post(
+        "/app/setores",
+        data={
+            "nome": "Restrito Web",
+            "operadora_id": str(operadora.id),
+            "restringir_modulos": "true",
+            "modulos": ["LAUDOS"],
+        },
+    )
+    assert resposta.status_code == 200
+    novo = db.scalar(select(Setor).where(Setor.nome == "Restrito Web"))
+    assert novo is not None
+    modulos = {m.modulo for m in db.scalars(select(SetorModulo).where(SetorModulo.setor_id == novo.id))}
+    assert modulos == {"LAUDOS"}
+
+    # tira a restrição de novo (checkbox "restringir_modulos" ausente = acesso total)
+    resposta = client.post(f"/app/setores/{novo.id}", data={"nome": "Restrito Web", "operadora_id": str(operadora.id)})
+    assert resposta.status_code == 200
+    modulos = list(db.scalars(select(SetorModulo).where(SetorModulo.setor_id == novo.id)))
+    assert modulos == []
+
+
+def test_menu_nao_mostra_processos_para_setor_restrito_a_laudos(client, db):
+    setor = db.scalar(select(Setor).where(Setor.nome == "Financeiro", Setor.operadora.has(nome="ELITE")))
+    db.add(SetorModulo(setor_id=setor.id, modulo="LAUDOS"))
+    usuario = Usuario(nome="Colab", email="colab.menu@teste.local", senha_hash=hash_senha("certa"))
+    db.add(usuario)
+    db.flush()
+    db.add(UsuarioSetor(usuario_id=usuario.id, setor_id=setor.id, papel="COLABORADOR"))
+    db.commit()
+    client.post("/login", data={"email": "colab.menu@teste.local", "senha": "certa"})
+
+    resposta = client.get("/app/laudos")
+    assert resposta.status_code == 200
+    assert 'href="/app/processos"' not in resposta.text
+    assert client.get("/app/processos", follow_redirects=False).status_code == 403
 
 
 def test_modo_escuro_tem_botao_e_script_anti_flash(client, db):

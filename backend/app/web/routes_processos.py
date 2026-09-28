@@ -15,13 +15,13 @@ from app.services import processos as processos_service
 from app.services.auditoria import registrar
 from app.services.empresas import listar_empresas
 from app.services.funcionarios import listar_funcionarios
-from app.web.auth import admin_logado_web, require_operadora_web
+from app.web.auth import admin_logado_web, require_modulo_web
 from app.web.menu import itens_menu
 from app.web.templates import templates
 
 router = APIRouter(prefix="/app/processos")
 
-_acesso_elite = require_operadora_web("ELITE")
+_acesso_elite = require_modulo_web("PROCESSOS")
 
 
 def _periodo_padrao() -> tuple[date, date]:

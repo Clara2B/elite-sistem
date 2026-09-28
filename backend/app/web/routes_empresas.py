@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,7 @@ from app.services.auditoria import registrar
 from app.services.empresas import (
     alterar_ativo_empresa,
     atualizar_empresa,
+    contar_vinculos_empresa,
     criar_empresa,
     excluir_empresa,
     excluir_empresas_inativas,
@@ -26,10 +27,12 @@ router = APIRouter(prefix="/app/empresas")
 
 
 def _contexto_base(db: Session, usuario: Usuario) -> dict:
+    empresas = listar_empresas(db, apenas_ativas=False)
     return {
         "usuario": usuario,
         "menu": itens_menu(db, usuario),
-        "empresas": listar_empresas(db, apenas_ativas=False),
+        "empresas": empresas,
+        "vinculos_por_empresa": {e.id: sum(contar_vinculos_empresa(db, e.id).values()) for e in empresas},
         "mensagem": None,
         "erro": None,
     }
@@ -186,16 +189,22 @@ def alterar_ativo(
 @router.post("/{empresa_id}/excluir")
 def excluir(
     empresa_id: int,
+    empresa_destino_id: str | None = Form(None),
     usuario: Usuario = Depends(admin_logado_web),
     db: Session = Depends(get_db),
 ):
     """Exclusão definitiva — a confirmação (obrigatória) acontece no
     navegador, num modal, antes desse POST ser disparado (ver empresas.html
-    e static/app.js). O backend também recusa se houver dado vinculado."""
+    e static/app.js). Se a empresa tiver laudo/audiência/cobrança/processo
+    vinculado, `empresa_destino_id` (escolhido no mesmo modal, 2026-09-28, a
+    pedido da Clara) reatribui esse histórico pra outra empresa antes de
+    excluir; sem destino nesse caso, o backend recusa a exclusão como
+    sempre."""
     empresa = db.get(EmpresaCliente, empresa_id)
     nome = empresa.nome if empresa else str(empresa_id)
+    destino_id = int(empresa_destino_id) if empresa_destino_id else None
     try:
-        excluir_empresa(db, empresa_id)
+        excluir_empresa(db, empresa_id, destino_id)
     except ValueError as e:
         return RedirectResponse(f"/app/empresas?erro={quote(str(e))}", status_code=303)
     registrar(db, usuario, "EXCLUIU_EMPRESA", entidade="empresa_cliente", entidade_id=empresa_id)

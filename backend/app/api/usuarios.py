@@ -5,9 +5,15 @@ from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.auth import PAPEIS_GLOBAIS, hash_senha, require_admin, restaria_sem_admin
+from app.auth import (
+    PAPEIS_GLOBAIS,
+    hash_senha,
+    modulos_validos_para_operadora,
+    require_admin,
+    restaria_sem_admin,
+)
 from app.db import get_db
-from app.models import Operadora, Setor, Usuario, UsuarioSetor
+from app.models import Operadora, Setor, SetorModulo, Usuario, UsuarioSetor
 from app.services.auditoria import registrar
 
 router = APIRouter(tags=["usuarios"])
@@ -37,11 +43,13 @@ class EdicaoUsuario(BaseModel):
 class NovoSetor(BaseModel):
     nome: str
     operadora_id: int
+    modulos: list[str] | None = None  # None = sem restrição (acesso a todas as abas da operadora)
 
 
 class EdicaoSetor(BaseModel):
     nome: str
     operadora_id: int
+    modulos: list[str] | None = None  # None = remove qualquer restrição existente
 
 
 def _perfil(usuario: Usuario) -> dict:
@@ -58,10 +66,35 @@ def _perfil(usuario: Usuario) -> dict:
     }
 
 
+def _modulos_do_setor(db: Session, setor_id: int) -> list[str] | None:
+    modulos = [sm.modulo for sm in db.scalars(select(SetorModulo).where(SetorModulo.setor_id == setor_id))]
+    return sorted(modulos) if modulos else None
+
+
+def _salvar_modulos_do_setor(db: Session, setor: Setor, modulos: list[str] | None) -> None:
+    """None = não restringir (remove qualquer linha existente, volta ao
+    padrão "acesso a todas as abas da operadora"). Uma lista precisa ter ao
+    menos um módulo válido pra operadora do setor depois do filtro — do
+    contrário é rejeitada, pra não criar um setor "restrito a nada" por
+    engano (mesma regra da tela web, ver web/routes_setores.py)."""
+    db.execute(delete(SetorModulo).where(SetorModulo.setor_id == setor.id))
+    if modulos is None:
+        return
+    validos = modulos_validos_para_operadora(setor.operadora.nome)
+    escolhidos = {m for m in modulos if m in validos}
+    if not escolhidos:
+        raise HTTPException(
+            status_code=400,
+            detail="Informe ao menos um módulo válido para a operadora do setor, ou omita 'modulos' para não restringir.",
+        )
+    for modulo in escolhidos:
+        db.add(SetorModulo(setor_id=setor.id, modulo=modulo))
+
+
 @router.get("/setores")
 def listar_setores(_: Usuario = Depends(require_admin), db: Session = Depends(get_db)):
     return [
-        {"id": s.id, "nome": s.nome, "operadora": s.operadora.nome, "ativo": s.ativo}
+        {"id": s.id, "nome": s.nome, "operadora": s.operadora.nome, "ativo": s.ativo, "modulos": _modulos_do_setor(db, s.id)}
         for s in db.scalars(select(Setor).order_by(Setor.operadora_id, Setor.nome))
     ]
 
@@ -72,10 +105,12 @@ def criar_setor(payload: NovoSetor, admin: Usuario = Depends(require_admin), db:
         raise HTTPException(status_code=400, detail=f"Operadora {payload.operadora_id} não existe.")
     setor = Setor(nome=payload.nome.strip(), operadora_id=payload.operadora_id)
     db.add(setor)
+    db.flush()
+    _salvar_modulos_do_setor(db, setor, payload.modulos)
     db.commit()
     registrar(db, admin, "CRIOU_SETOR", entidade="setor", entidade_id=setor.id)
     db.refresh(setor)
-    return {"id": setor.id, "nome": setor.nome, "operadora": setor.operadora.nome, "ativo": setor.ativo}
+    return {"id": setor.id, "nome": setor.nome, "operadora": setor.operadora.nome, "ativo": setor.ativo, "modulos": _modulos_do_setor(db, setor.id)}
 
 
 @router.patch("/setores/{setor_id}")
@@ -89,10 +124,12 @@ def editar_setor(
         raise HTTPException(status_code=400, detail=f"Operadora {payload.operadora_id} não existe.")
     setor.nome = payload.nome.strip()
     setor.operadora_id = payload.operadora_id
+    db.flush()
+    _salvar_modulos_do_setor(db, setor, payload.modulos)
     db.commit()
     registrar(db, admin, "EDITOU_SETOR", entidade="setor", entidade_id=setor.id)
     db.refresh(setor)
-    return {"id": setor.id, "nome": setor.nome, "operadora": setor.operadora.nome, "ativo": setor.ativo}
+    return {"id": setor.id, "nome": setor.nome, "operadora": setor.operadora.nome, "ativo": setor.ativo, "modulos": _modulos_do_setor(db, setor.id)}
 
 
 @router.patch("/setores/{setor_id}/ativo")

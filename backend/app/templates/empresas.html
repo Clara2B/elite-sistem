@@ -57,19 +57,37 @@
         </table>
       </div>
       {% for e in empresas %}
+        {% set vinculos = vinculos_por_empresa.get(e.id, 0) %}
         <dialog id="modal-excluir-{{ e.id }}" class="modal-confirmacao">
           <div class="modal-corpo">
             <div class="modal-icone">{{ icones.icone('alerta') }}</div>
             <h3>Excluir empresa-cliente?</h3>
             <p>
-              Isso vai apagar <strong data-nome-alvo-destino>{{ e.nome }}</strong> definitivamente,
-              sem volta. Se houver laudo, audiência, cobrança ou processo vinculado a ela, a exclusão
-              será recusada — nesse caso, desative em vez de excluir.
+              Isso vai apagar <strong data-nome-alvo-destino>{{ e.nome }}</strong> definitivamente, sem volta.
+              {% if vinculos %}
+                Existem {{ vinculos }} registro(s) (laudo, audiência, cobrança ou processo) vinculado(s) a
+                ela — escolha abaixo para qual empresa esse histórico deve ser movido antes da exclusão.
+              {% else %}
+                Não há laudo, audiência, cobrança ou processo vinculado a ela.
+              {% endif %}
             </p>
+            {% if vinculos %}
+              <div class="campo" style="margin-top: 14px;">
+                <label for="destino-{{ e.id }}">Mover histórico vinculado para</label>
+                <select id="destino-{{ e.id }}" name="empresa_destino_id" form="excluir-{{ e.id }}" required>
+                  <option value="">Selecione...</option>
+                  {% for outra in empresas %}
+                    {% if outra.id != e.id %}
+                      <option value="{{ outra.id }}">{{ outra.nome }}</option>
+                    {% endif %}
+                  {% endfor %}
+                </select>
+              </div>
+            {% endif %}
           </div>
           <div class="modal-acoes">
             <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
-            <form method="post" action="/app/empresas/{{ e.id }}/excluir">
+            <form id="excluir-{{ e.id }}" method="post" action="/app/empresas/{{ e.id }}/excluir">
               <button type="submit" class="perigo">Excluir definitivamente</button>
             </form>
           </div>

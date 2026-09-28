@@ -6,11 +6,29 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.models import Audiencia, Cobranca, EmpresaCliente, Laudo, Processo
 from app.utils import normalize
+
+# Entidades com FK NOT NULL pra empresa-cliente — todo laudo/audiência/
+# cobrança/processo tem que pertencer a alguma empresa (ver models.py), por
+# isso "excluir mesmo com vínculo" só é possível reatribuindo esses
+# registros a outra empresa antes de apagar (nunca deixando-os orfãos).
+_ENTIDADES_VINCULADAS = {
+    "laudos": Laudo,
+    "audiências": Audiencia,
+    "cobranças": Cobranca,
+    "processos": Processo,
+}
+
+
+def contar_vinculos_empresa(db: Session, empresa_id: int) -> dict[str, int]:
+    return {
+        nome: db.scalar(select(func.count()).select_from(modelo).where(modelo.empresa_cliente_id == empresa_id))
+        for nome, modelo in _ENTIDADES_VINCULADAS.items()
+    }
 
 # Lista oficial de empresas-clientes (nome curto usado em todo o sistema —
 # não a razão social) + CNPJ, a partir do PDF "INFOS ASSESSORIAS" que a
@@ -146,29 +164,41 @@ def alterar_ativo_empresa(db: Session, empresa_id: int, ativo: bool) -> EmpresaC
     return empresa
 
 
-def excluir_empresa(db: Session, empresa_id: int) -> None:
+def excluir_empresa(db: Session, empresa_id: int, empresa_destino_id: int | None = None) -> None:
     """Exclusão definitiva (a pedido da Clara — a tela pede confirmação
     antes de chamar isso). Bloqueada se a empresa tiver laudo/audiência/
-    cobrança/processo vinculado: apagar apagaria esse histórico junto
-    (violaria "nunca modificar/apagar sem autorização explícita" do
-    prompt mestre para dado que não foi o alvo direto do pedido) — nesses
-    casos, desativar (`alterar_ativo_empresa`) é o caminho seguro."""
+    cobrança/processo vinculado, A MENOS que `empresa_destino_id` seja
+    informado — nesse caso (2026-09-28, a pedido da Clara: "deve ser
+    indicado a troca de empresa antes da remoção") todo esse histórico é
+    reatribuído pra `empresa_destino_id` antes de excluir, em vez de
+    deixá-lo orfão ou apagado junto (continua respeitando "nunca apagar
+    sem autorização explícita" do prompt mestre — o histórico em si nunca é
+    destruído, só passa a apontar pra outra empresa-cliente). Sem
+    `empresa_destino_id`, o comportamento é o de sempre: desativar
+    (`alterar_ativo_empresa`) é o caminho seguro pra quem tem vínculo."""
     empresa = db.get(EmpresaCliente, empresa_id)
     if empresa is None:
         raise ValueError(f"Empresa-cliente {empresa_id} não encontrada.")
 
-    vinculos = {
-        "laudos": db.scalar(select(func.count()).select_from(Laudo).where(Laudo.empresa_cliente_id == empresa_id)),
-        "audiências": db.scalar(select(func.count()).select_from(Audiencia).where(Audiencia.empresa_cliente_id == empresa_id)),
-        "cobranças": db.scalar(select(func.count()).select_from(Cobranca).where(Cobranca.empresa_cliente_id == empresa_id)),
-        "processos": db.scalar(select(func.count()).select_from(Processo).where(Processo.empresa_cliente_id == empresa_id)),
-    }
+    vinculos = contar_vinculos_empresa(db, empresa_id)
     presentes = [f"{qtd} {nome}" for nome, qtd in vinculos.items() if qtd]
-    if presentes:
+
+    if presentes and empresa_destino_id is None:
         raise ValueError(
             f"Não é possível excluir '{empresa.nome}': existe {', '.join(presentes)} vinculado(s) a ela. "
-            "Desative em vez de excluir, se quiser tirá-la das telas de relatório."
+            "Desative em vez de excluir, ou informe uma empresa de destino pra mover o histórico antes de excluir."
         )
+
+    if presentes and empresa_destino_id is not None:
+        if empresa_destino_id == empresa_id:
+            raise ValueError("A empresa de destino precisa ser diferente da empresa que está sendo excluída.")
+        destino = db.get(EmpresaCliente, empresa_destino_id)
+        if destino is None:
+            raise ValueError(f"Empresa-cliente de destino {empresa_destino_id} não encontrada.")
+        for modelo in _ENTIDADES_VINCULADAS.values():
+            db.execute(
+                update(modelo).where(modelo.empresa_cliente_id == empresa_id).values(empresa_cliente_id=empresa_destino_id)
+            )
 
     db.delete(empresa)
     db.commit()

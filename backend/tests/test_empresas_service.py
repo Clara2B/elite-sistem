@@ -1,8 +1,10 @@
 from datetime import date
 
-from app.models import EmpresaCliente, Laudo
+from app.models import Audiencia, Cobranca, EmpresaCliente, Laudo, Processo
 from app.services.empresas import (
     LISTA_OFICIAL_EMPRESAS,
+    contar_vinculos_empresa,
+    excluir_empresa,
     excluir_empresas_inativas,
     get_or_create_empresa,
     sincronizar_lista_oficial,
@@ -106,6 +108,84 @@ def test_excluir_inativas_sem_nenhuma_inativa_nao_faz_nada(db):
 
     assert resumo.excluidas == []
     assert resumo.nao_excluidas_por_vinculo == []
+
+
+def test_excluir_empresa_com_vinculo_sem_destino_continua_bloqueada(db):
+    origem = get_or_create_empresa(db, "ORIGEM SEM DESTINO")
+    db.add(Laudo(empresa_cliente_id=origem.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 1), status="SOLICITAÇÃO"))
+    db.commit()
+
+    try:
+        excluir_empresa(db, origem.id)
+        assert False, "deveria ter recusado"
+    except ValueError as e:
+        assert "não é possível excluir" in str(e).lower()
+    assert db.get(EmpresaCliente, origem.id) is not None
+
+
+def test_excluir_empresa_com_destino_reatribui_os_quatro_tipos_de_vinculo(db):
+    origem = get_or_create_empresa(db, "ORIGEM COM DESTINO")
+    destino = get_or_create_empresa(db, "DESTINO")
+    db.add(Laudo(empresa_cliente_id=origem.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 1), status="SOLICITAÇÃO"))
+    db.add(Audiencia(empresa_cliente_id=origem.id, nome_cliente="Fulano", data_recebimento=date(2026, 1, 1)))
+    db.add(Cobranca(empresa_cliente_id=origem.id, data=date(2026, 1, 1), tipo_cobranca="MENSALIDADE", cobrador="ELITE", valor=100.0))
+    db.add(Processo(numero_processo="0001", empresa_cliente_id=origem.id))
+    db.commit()
+
+    excluir_empresa(db, origem.id, empresa_destino_id=destino.id)
+
+    assert db.get(EmpresaCliente, origem.id) is None
+    laudo = db.query(Laudo).one()
+    audiencia = db.query(Audiencia).one()
+    cobranca = db.query(Cobranca).one()
+    processo = db.query(Processo).one()
+    assert laudo.empresa_cliente_id == destino.id
+    assert audiencia.empresa_cliente_id == destino.id
+    assert cobranca.empresa_cliente_id == destino.id
+    assert processo.empresa_cliente_id == destino.id
+
+
+def test_excluir_empresa_destino_precisa_existir(db):
+    origem = get_or_create_empresa(db, "ORIGEM DESTINO INEXISTENTE")
+    db.add(Laudo(empresa_cliente_id=origem.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 1), status="SOLICITAÇÃO"))
+    db.commit()
+
+    try:
+        excluir_empresa(db, origem.id, empresa_destino_id=999999)
+        assert False, "deveria ter recusado"
+    except ValueError as e:
+        assert "não encontrada" in str(e).lower()
+
+
+def test_excluir_empresa_destino_precisa_ser_diferente_da_origem(db):
+    origem = get_or_create_empresa(db, "ORIGEM IGUAL DESTINO")
+    db.add(Laudo(empresa_cliente_id=origem.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 1), status="SOLICITAÇÃO"))
+    db.commit()
+
+    try:
+        excluir_empresa(db, origem.id, empresa_destino_id=origem.id)
+        assert False, "deveria ter recusado"
+    except ValueError as e:
+        assert "diferente" in str(e).lower()
+
+
+def test_excluir_empresa_sem_vinculo_ignora_destino_nao_informado(db):
+    sem_vinculo = get_or_create_empresa(db, "SEM VINCULO NENHUM")
+    db.commit()
+
+    excluir_empresa(db, sem_vinculo.id)  # nenhum vínculo — não precisa de destino
+
+    assert db.get(EmpresaCliente, sem_vinculo.id) is None
+
+
+def test_contar_vinculos_empresa(db):
+    empresa = get_or_create_empresa(db, "CONTAGEM DE VINCULOS")
+    db.add(Laudo(empresa_cliente_id=empresa.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 1), status="SOLICITAÇÃO"))
+    db.commit()
+
+    vinculos = contar_vinculos_empresa(db, empresa.id)
+    assert vinculos["laudos"] == 1
+    assert vinculos["processos"] == 0
 
 
 def test_lista_oficial_tem_48_empresas_sem_duplicidade():

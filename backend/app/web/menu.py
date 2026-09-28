@@ -4,20 +4,22 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.auth import PAPEIS_GLOBAIS, operadoras_acessiveis
+from app.auth import PAPEIS_GLOBAIS, modulos_acessiveis
 from app.models import Usuario
 
 
 def itens_menu(db: Session, usuario: Usuario) -> list[dict]:
-    acessiveis = operadoras_acessiveis(db, usuario)
+    acessiveis = modulos_acessiveis(db, usuario)
     itens = []
-    if "ELITE" in acessiveis:
+    if "LAUDOS" in acessiveis:
         itens.append({"url": "/app/laudos", "rotulo": "Laudos", "icone": "laudos", "descricao": "Importar planilha e gerar relatório por empresa-cliente."})
+    if "PROCESSOS" in acessiveis:
         itens.append({"url": "/app/processos", "rotulo": "Gestão de Processos", "icone": "processos", "descricao": "Andamentos, prazos fatais e relatórios da equipe."})
-    if "EXIMIA" in acessiveis:
+    if "AUDIENCIAS" in acessiveis:
         itens.append({"url": "/app/audiencias", "rotulo": "Audiências", "icone": "audiencias", "descricao": "Importar planilha e gerar relatório quinzenal."})
+    if "CARTAS" in acessiveis:
         itens.append({"url": "/app/cartas", "rotulo": "Cartas", "icone": "cartas", "descricao": "Cartas-convite em PDF para clientes e bancos."})
-    if acessiveis:
+    if "PENDENCIAS" in acessiveis:
         itens.append({"url": "/app/pendencias", "rotulo": "Pendências", "icone": "pendencias", "descricao": "Cobranças em aberto por empresa-cliente."})
     if usuario.papel_global in PAPEIS_GLOBAIS:
         # Área administrativa separada (2026-09-28, a pedido da Clara) — um item só no

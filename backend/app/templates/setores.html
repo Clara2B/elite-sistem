@@ -20,21 +20,44 @@
       {% endfor %}
       <div class="tabela-wrap">
         <table>
-          <thead><tr><th>Nome</th><th>Operadora</th><th>Status</th><th style="width:1%;"></th></tr></thead>
+          <thead><tr><th>Nome</th><th>Operadora</th><th>Abas liberadas</th><th>Status</th><th style="width:1%;"></th></tr></thead>
           <tbody>
             {% for s in setores %}
+              {% set restrito = modulos_por_setor.get(s.id) %}
               <tr>
                 <td>
                   <input type="text" name="nome" value="{{ s.nome }}" required form="setor-{{ s.id }}"
                          style="min-width:200px; padding:6px 9px; border:1px solid var(--border); border-radius:7px; font-size:0.86rem;">
                 </td>
                 <td>
-                  <select name="operadora_id" form="setor-{{ s.id }}"
+                  <select id="operadora_id_editar_{{ s.id }}" name="operadora_id" form="setor-{{ s.id }}"
                           style="padding:6px 9px; border:1px solid var(--border); border-radius:7px; font-size:0.86rem;">
                     {% for o in operadoras %}
                       <option value="{{ o.id }}" {{ "selected" if s.operadora_id == o.id else "" }}>{{ o.nome }}</option>
                     {% endfor %}
                   </select>
+                </td>
+                <td>
+                  <details class="modulos-setor">
+                    <summary>{{ "Abas restritas" if restrito else "Todas as abas" }}</summary>
+                    <div class="modulos-setor-corpo">
+                      <label class="check-modulo">
+                        <input type="checkbox" name="restringir_modulos" value="true" form="setor-{{ s.id }}"
+                               data-alternar-modulos="modulos-editar-{{ s.id }}" {{ "checked" if restrito else "" }}>
+                        Restringir abas
+                      </label>
+                      <div id="modulos-editar-{{ s.id }}" data-modulos-setor="operadora_id_editar_{{ s.id }}"
+                           style="{{ '' if restrito else 'display:none;' }}">
+                        {% for modulo, rotulo in modulos_disponiveis.items() %}
+                          <label class="check-modulo" data-modulo-operadora="{{ modulos_operadora[modulo] or '' }}">
+                            <input type="checkbox" name="modulos" value="{{ modulo }}" form="setor-{{ s.id }}"
+                                   {{ "checked" if restrito and modulo in restrito else "" }}>
+                            {{ rotulo }}
+                          </label>
+                        {% endfor %}
+                      </div>
+                    </div>
+                  </details>
                 </td>
                 <td>
                   {% if s.ativo %}<span class="badge ativo">Ativo</span>{% else %}<span class="badge inativo">Inativo</span>{% endif %}
@@ -74,6 +97,22 @@
             <option value="{{ o.id }}">{{ o.nome }}</option>
           {% endfor %}
         </select>
+      </div>
+      <div class="campo">
+        <label class="check-modulo">
+          <input type="checkbox" name="restringir_modulos" value="true" data-alternar-modulos="modulos-novo-setor">
+          Restringir as abas que esse setor pode acessar
+        </label>
+      </div>
+      <div id="modulos-novo-setor" class="campo" data-modulos-setor="operadora_id" style="display:none;">
+        <label>Abas liberadas</label>
+        <div class="modulos-setor-corpo">
+          {% for modulo, rotulo in modulos_disponiveis.items() %}
+            <label class="check-modulo" data-modulo-operadora="{{ modulos_operadora[modulo] or '' }}">
+              <input type="checkbox" name="modulos" value="{{ modulo }}"> {{ rotulo }}
+            </label>
+          {% endfor %}
+        </div>
       </div>
       <button type="submit">Cadastrar</button>
     </form>

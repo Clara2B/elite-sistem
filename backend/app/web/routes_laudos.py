@@ -14,13 +14,13 @@ from app.models import Usuario
 from app.services import laudos as laudos_service
 from app.services.auditoria import registrar
 from app.services.empresas import listar_empresas
-from app.web.auth import admin_logado_web, require_operadora_web
+from app.web.auth import admin_logado_web, require_modulo_web
 from app.web.menu import itens_menu
 from app.web.templates import templates
 
 router = APIRouter(prefix="/app/laudos")
 
-_acesso_elite = require_operadora_web("ELITE")
+_acesso_elite = require_modulo_web("LAUDOS")
 
 
 @router.get("")

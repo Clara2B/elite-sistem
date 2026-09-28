@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api._shared import salvar_temp
-from app.auth import get_current_user, operadoras_acessiveis, require_admin
+from app.auth import operadoras_acessiveis, require_admin, require_modulo
 from app.db import get_db
 from app.models import Usuario
 from app.services import pendencias as pendencias_service
@@ -12,15 +12,17 @@ router = APIRouter(prefix="/pendencias", tags=["pendencias"])
 
 # Pendências mistura cobranças da EXIMIA e da ELITE na mesma planilha (o
 # campo `cobrador` é que diferencia, linha a linha — ver ARCHITECTURE.md
-# seção 1.4). Por isso não dá pra travar a rota numa operadora só: o import
-# só exige estar logado, e a geração de mensagens filtra o resultado pelas
-# operadoras que o usuário pode ver.
+# seção 1.4). Por isso não dá pra travar a rota numa operadora só: o módulo
+# PENDENCIAS é válido pras duas (ver app/auth.py::MODULOS_OPERADORA), e a
+# geração de mensagens ainda filtra o resultado pelas operadoras que o
+# usuário pode ver.
+_acesso_pendencias = require_modulo("PENDENCIAS")
 
 
 @router.post("/import")
 def importar(
     arquivo: UploadFile,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(_acesso_pendencias),
     db: Session = Depends(get_db),
 ):
     path = salvar_temp(arquivo)
@@ -47,7 +49,7 @@ def apagar_tudo(
 @router.get("/mensagens")
 def mensagens(
     empresa: str,
-    usuario: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(_acesso_pendencias),
     db: Session = Depends(get_db),
 ):
     try:

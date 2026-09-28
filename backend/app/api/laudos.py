@@ -3,7 +3,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api._shared import salvar_temp
-from app.auth import require_admin, require_operadora
+from app.auth import require_admin, require_modulo
 from app.db import get_db
 from app.models import Usuario
 from app.pdf_export import gerar_pdf_laudos
@@ -14,9 +14,9 @@ from app.utils import nome_arquivo_pdf
 router = APIRouter(prefix="/laudos", tags=["laudos"])
 
 # Laudos é um produto da ELITE (ver ARCHITECTURE.md seção 1.3) — só quem tem
-# acesso à operadora ELITE (Admin Superior/T.I. ou setor vinculado a ela)
-# pode usar essas rotas.
-_acesso_elite = require_operadora("ELITE")
+# acesso ao módulo LAUDOS (Admin Superior/T.I. ou setor com esse módulo
+# liberado, ver app/auth.py::modulos_acessiveis) pode usar essas rotas.
+_acesso_elite = require_modulo("LAUDOS")
 
 
 @router.post("/import")

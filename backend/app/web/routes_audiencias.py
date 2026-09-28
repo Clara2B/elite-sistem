@@ -14,13 +14,13 @@ from app.models import Usuario
 from app.services import audiencias as audiencias_service
 from app.services.auditoria import registrar
 from app.services.empresas import listar_empresas
-from app.web.auth import admin_logado_web, require_operadora_web
+from app.web.auth import admin_logado_web, require_modulo_web
 from app.web.menu import itens_menu
 from app.web.templates import templates
 
 router = APIRouter(prefix="/app/audiencias")
 
-_acesso_eximia = require_operadora_web("EXIMIA")
+_acesso_eximia = require_modulo_web("AUDIENCIAS")
 
 
 def _contexto_base(db: Session, usuario: Usuario) -> dict:

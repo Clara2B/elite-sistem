@@ -167,6 +167,21 @@ class UsuarioSetor(Base):
     setor: Mapped[Setor] = relationship()
 
 
+class SetorModulo(Base):
+    """Módulos (abas) que um Setor pode acessar (2026-09-28, a pedido da
+    Clara) — ausência de qualquer linha para um `setor_id` é o estado
+    padrão/retrocompatível: significa "acesso total às abas válidas para a
+    operadora do setor" (igual ao comportamento de antes desta feature),
+    não "acesso a nada". Só passa a restringir quando o setor tem pelo
+    menos uma linha aqui, gravada explicitamente na tela de Setores — ver
+    app/auth.py::modulos_acessiveis."""
+
+    __tablename__ = "setor_modulos"
+
+    setor_id: Mapped[int] = mapped_column(ForeignKey("setores.id"), primary_key=True)
+    modulo: Mapped[str] = mapped_column(String(20), primary_key=True)
+
+
 class Sessao(Base):
     """Token opaco de login — revogável (basta apagar a linha), consultado
     a cada requisição autenticada. Evita depender de segredo de assinatura

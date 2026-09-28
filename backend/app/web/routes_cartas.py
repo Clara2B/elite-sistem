@@ -12,13 +12,13 @@ from app.pdf_export import gerar_pdf_carta_banco, gerar_pdf_carta_cliente
 from app.services import cartas as cartas_service
 from app.services.auditoria import registrar
 from app.utils import nome_arquivo_pdf
-from app.web.auth import require_operadora_web
+from app.web.auth import require_modulo_web
 from app.web.menu import itens_menu
 from app.web.templates import templates
 
 router = APIRouter(prefix="/app/cartas")
 
-_acesso_eximia = require_operadora_web("EXIMIA")
+_acesso_eximia = require_modulo_web("CARTAS")
 
 
 def _contexto_base(db: Session, usuario: Usuario) -> dict:

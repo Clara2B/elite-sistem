@@ -579,6 +579,46 @@ details.editar-usuario .tabela-setores tr:has(input:checked) {
   background: var(--highlight-soft);
 }
 
+/* Seleção de abas por setor (2026-09-28) — checkbox "Restringir abas" +
+   lista de módulos, tanto dentro da tabela de Setores (details compacto)
+   quanto no formulário "Novo setor" (bloco simples). */
+.check-modulo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.modulos-setor-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+details.modulos-setor > summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  list-style: none;
+}
+details.modulos-setor > summary::-webkit-details-marker {
+  display: none;
+}
+details.modulos-setor[open] > summary {
+  color: var(--heading);
+  font-weight: 600;
+}
+details.modulos-setor .modulos-setor-corpo {
+  padding: 10px 12px;
+  margin-top: 6px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  min-width: 220px;
+}
+
 /* aviso contextual dentro de um card (ex.: "tipo sem valor cadastrado") —
    fica no lugar, ao contrário de .mensagem (toast flutuante no topo). */
 .aviso-inline {

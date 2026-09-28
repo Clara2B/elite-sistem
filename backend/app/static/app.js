@@ -212,6 +212,52 @@ function iniciarAlternanciaTema() {
   });
 }
 
+// Setores (2026-09-28): mostra/esconde o bloco de checkboxes de abas a
+// partir do checkbox "Restringir abas" — `[data-alternar-modulos="id"]`
+// controla a visibilidade do elemento com esse id.
+function iniciarAlternanciaPorCheckbox() {
+  document.querySelectorAll("[data-alternar-modulos]").forEach(function (caixa) {
+    var alvo = document.getElementById(caixa.getAttribute("data-alternar-modulos"));
+    if (!alvo) return;
+
+    function atualizar() {
+      alvo.style.display = caixa.checked ? "" : "none";
+    }
+
+    caixa.addEventListener("change", atualizar);
+    atualizar();
+  });
+}
+
+// Setores: dentro de um bloco `[data-modulos-setor="id-do-select"]`, cada
+// aba `[data-modulo-operadora="NOME"]` só fica visível se o valor bater com
+// a operadora escolhida no <select> indicado (vazio = aba vale pras duas
+// operadoras, ex.: Pendências) — a seleção de abas de um setor nunca pode
+// sair da operadora dele (regra confirmada pela Clara). Some junto a caixa
+// marcada, pra não submeter um módulo escondido/inválido.
+function iniciarModulosPorOperadora() {
+  document.querySelectorAll("[data-modulos-setor]").forEach(function (bloco) {
+    var select = document.getElementById(bloco.getAttribute("data-modulos-setor"));
+    if (!select) return;
+    var itens = bloco.querySelectorAll("[data-modulo-operadora]");
+
+    function atualizar() {
+      var opcaoSelecionada = select.options[select.selectedIndex];
+      var nomeOperadora = opcaoSelecionada ? opcaoSelecionada.text : "";
+      itens.forEach(function (item) {
+        var restrito = item.getAttribute("data-modulo-operadora");
+        var mostrar = !restrito || restrito === nomeOperadora;
+        item.style.display = mostrar ? "" : "none";
+        var caixa = item.querySelector("input");
+        if (caixa && !mostrar) caixa.checked = false;
+      });
+    }
+
+    select.addEventListener("change", atualizar);
+    atualizar();
+  });
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   iniciarZonasDeUpload();
   iniciarValidacaoDeUpload();
@@ -220,4 +266,6 @@ document.addEventListener("DOMContentLoaded", function () {
   iniciarConfirmacaoPorTexto();
   iniciarCopiaDeResumo();
   iniciarAlternanciaTema();
+  iniciarAlternanciaPorCheckbox();
+  iniciarModulosPorOperadora();
 });

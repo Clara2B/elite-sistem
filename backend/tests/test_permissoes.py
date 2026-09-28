@@ -2,8 +2,8 @@ from datetime import date
 
 from sqlalchemy import select
 
-from app.auth import criar_sessao, hash_senha
-from app.models import Cobranca, Operadora, Setor, Usuario, UsuarioSetor
+from app.auth import criar_sessao, hash_senha, modulos_acessiveis
+from app.models import Cobranca, Operadora, Setor, SetorModulo, Usuario, UsuarioSetor
 from app.services.empresas import get_or_create_empresa
 
 
@@ -176,6 +176,110 @@ def test_edicao_permite_trocar_admin_se_houver_outro(client, admin_token, db):
     )
     assert resp.status_code == 200
     assert resp.json()["papel_global"] is None
+
+
+# --- Seleção de abas (módulos) por setor (2026-09-28) ------------------------
+
+
+def _usuario_no_setor(db, setor_id: int, email: str) -> Usuario:
+    usuario = Usuario(nome="Colaborador", email=email, senha_hash=hash_senha("x"))
+    db.add(usuario)
+    db.flush()
+    db.add(UsuarioSetor(usuario_id=usuario.id, setor_id=setor_id, papel="COLABORADOR"))
+    db.commit()
+    return usuario
+
+
+def test_modulos_acessiveis_admin_ve_todos(db, admin_token):
+    admin = db.scalar(select(Usuario).where(Usuario.email == "admin@teste.local"))
+    assert modulos_acessiveis(db, admin) == {"LAUDOS", "PROCESSOS", "AUDIENCIAS", "CARTAS", "PENDENCIAS"}
+
+
+def test_modulos_acessiveis_setor_sem_configuracao_libera_tudo_da_operadora(db):
+    setor = db.scalar(select(Setor).where(Setor.nome == "Financeiro", Setor.operadora.has(nome="ELITE")))
+    usuario = _usuario_no_setor(db, setor.id, "setor.sem-config@teste.local")
+    assert modulos_acessiveis(db, usuario) == {"LAUDOS", "PROCESSOS", "PENDENCIAS"}
+
+
+def test_modulos_acessiveis_setor_restrito_fica_so_com_o_configurado(db):
+    setor = db.scalar(select(Setor).where(Setor.nome == "Financeiro", Setor.operadora.has(nome="ELITE")))
+    db.add(SetorModulo(setor_id=setor.id, modulo="LAUDOS"))
+    db.commit()
+    usuario = _usuario_no_setor(db, setor.id, "setor.restrito@teste.local")
+    assert modulos_acessiveis(db, usuario) == {"LAUDOS"}
+
+
+def test_modulos_acessiveis_uniao_de_varios_setores(db):
+    setor_eximia = db.scalar(select(Setor).where(Setor.nome == "Financeiro", Setor.operadora.has(nome="EXIMIA")))
+    setor_elite = db.scalar(select(Setor).where(Setor.nome == "Financeiro", Setor.operadora.has(nome="ELITE")))
+    db.add(SetorModulo(setor_id=setor_eximia.id, modulo="CARTAS"))
+    db.commit()
+    usuario = _usuario_no_setor(db, setor_eximia.id, "setor.multiplo@teste.local")
+    db.add(UsuarioSetor(usuario_id=usuario.id, setor_id=setor_elite.id, papel="COLABORADOR"))
+    db.commit()
+    # EXIMIA restrito a CARTAS + ELITE sem configuração (tudo da operadora)
+    assert modulos_acessiveis(db, usuario) == {"CARTAS", "LAUDOS", "PROCESSOS", "PENDENCIAS"}
+
+
+def test_setor_restrito_a_laudos_nao_acessa_processos_nem_pendencias(client, db):
+    setor = db.scalar(select(Setor).where(Setor.nome == "Financeiro", Setor.operadora.has(nome="ELITE")))
+    db.add(SetorModulo(setor_id=setor.id, modulo="LAUDOS"))
+    db.commit()
+    usuario = _usuario_no_setor(db, setor.id, "restrito.laudos@teste.local")
+    token = criar_sessao(db, usuario).token
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp_laudos = client.get("/laudos/relatorio", params={"empresa": "X", "ano": 2026, "mes": 1}, headers=headers)
+    assert resp_laudos.status_code in (404, 200)
+
+    resp_processos = client.get(
+        "/processos/relatorio", params={"periodo_ini": "2026-01-01", "periodo_fim": "2026-01-31"}, headers=headers
+    )
+    assert resp_processos.status_code == 403
+
+    resp_pendencias = client.get("/pendencias/mensagens", params={"empresa": "X"}, headers=headers)
+    assert resp_pendencias.status_code == 403
+
+
+def test_admin_cria_setor_ja_restrito_a_modulos(client, admin_token, db):
+    operadora = db.scalar(select(Operadora).where(Operadora.nome == "ELITE"))
+    resp = client.post(
+        "/setores",
+        json={"nome": "Só Laudos", "operadora_id": operadora.id, "modulos": ["LAUDOS"]},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["modulos"] == ["LAUDOS"]
+
+
+def test_admin_edita_setor_remove_restricao_com_modulos_none(client, admin_token, db):
+    operadora = db.scalar(select(Operadora).where(Operadora.nome == "ELITE"))
+    criado = client.post(
+        "/setores",
+        json={"nome": "Restrito", "operadora_id": operadora.id, "modulos": ["LAUDOS"]},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    ).json()
+    assert criado["modulos"] == ["LAUDOS"]
+
+    resp = client.patch(
+        f"/setores/{criado['id']}",
+        json={"nome": "Restrito", "operadora_id": operadora.id, "modulos": None},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["modulos"] is None
+
+
+def test_admin_cria_setor_com_modulo_de_outra_operadora_e_rejeitado(client, admin_token, db):
+    operadora_elite = db.scalar(select(Operadora).where(Operadora.nome == "ELITE"))
+    resp = client.post(
+        "/setores",
+        # AUDIENCIAS é da EXIMIA — depois de filtrado pra operadora ELITE, não sobra nenhum módulo válido.
+        json={"nome": "Setor ELITE com módulo errado", "operadora_id": operadora_elite.id, "modulos": ["AUDIENCIAS"]},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 400
 
 
 def test_admin_cria_e_edita_setor(client, admin_token, db):

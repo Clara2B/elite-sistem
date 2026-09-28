@@ -1231,3 +1231,65 @@ citada na mensagem, empresa ativa nunca tocada).
 **Reversível:** sim — módulo novo e isolado (`excluir_empresas_inativas` em
 `services/empresas.py` + rotas web/API espelhando o padrão de `sincronizar-lista-oficial`); não
 mudou nenhuma rota/função existente.
+
+## 2026-09-28 — Seleção de abas por setor + exclusão de empresa com reatribuição
+
+**Contexto:** a Clara pediu duas coisas na mesma mensagem — (1) poder escolher, ao cadastrar/
+editar um setor, quais abas do site aquele setor pode acessar; (2) poder apagar uma empresa
+mesmo que tenha processos vinculados. As duas mexem em várias partes do sistema e tinham
+ambiguidade estrutural real, então perguntei antes de codar (regra dela, restated várias vezes
+nessa engajamento) em vez de assumir.
+
+**Pergunta 1 (seleção de abas):** (a) a área de Configuração (Usuários/Empresas/Assistentes/
+Setores) devia entrar na seleção por setor, ou continuar controlada só por `papel_global` como
+hoje, com a seleção por setor valendo só pras abas operacionais (Laudos/Processos/Audiências/
+Cartas/Pendências)? (b) um setor podia ganhar acesso a uma aba fora da sua própria operadora, ou
+a seleção tinha que ficar restrita às abas válidas pra operadora do próprio setor?
+**Resposta da Clara:** "1. Só liberadas pelo papel global e deve continuar restrita às abas da
+operadora do próprio setor" — Configuração fica intocada (só `papel_global`), e a seleção de um
+setor não pode sair da operadora dele.
+
+**Pergunta 2 (exclusão com vínculo):** expliquei que laudo/audiência/cobrança/processo têm todos
+FK NOT NULL pra empresa-cliente — "excluir mesmo com vínculo" só é possível reatribuindo esses
+registros a outra empresa antes (não existe um jeito de simplesmente apagar a empresa e deixar o
+histórico órfão), ou cascateando a exclusão do histórico junto (que eu não queria fazer sem
+confirmação explícita, por ser destrutivo). Perguntei qual ela queria, se era só pra "processos"
+(a palavra que ela usou) ou pros quatro tipos, e se era um caso único ou uma política geral.
+**Resposta da Clara:** "2. Deve ser indicado a troca de empresa antes da remoção, pode fazer isso
+como se fosse um pop-up, um por um, quando for apagar uma empresa que tem processos" — confirma
+reatribuição (não cascata), com um pop-up por empresa no momento da exclusão.
+
+**Decisão de implementação (não perguntada de novo, sinalizada depois de pronta):** a Clara citou
+só "processos" na resposta, mas os quatro tipos de vínculo (laudo/audiência/cobrança/processo)
+têm exatamente a mesma restrição técnica (FK NOT NULL) e o mesmo problema — generalizei a
+reatribuição pros quatro em vez de deixar laudo/audiência/cobrança ainda bloqueando a exclusão
+enquanto só processo seria resolvido. Continua sendo uma escolha reversível (é um parâmetro
+opcional; sem ele, nada muda).
+
+**Implementado:**
+- Tabela nova `SetorModulo` (`setor_id` + `modulo`) — ausência de linha pra um setor = acesso a
+  todas as abas da operadora dele (retrocompatível, sem precisar migrar dado nenhum); só setores
+  editados explicitamente na tela ganham restrição.
+- `app/auth.py::modulos_acessiveis`/`require_modulo` (+ par web) — mesmo padrão de
+  `operadoras_acessiveis`/`require_operadora`, só que por módulo/aba em vez de por operadora
+  inteira. Pendências (que não tinha gate de operadora, por misturar EXIMIA/ELITE na mesma tela)
+  ganhou `require_modulo("PENDENCIAS")`, marcado como válido pras duas operadoras.
+- Tela de Setores: checkbox "Restringir abas" + lista de módulos (só os válidos pra operadora
+  escolhida, filtrados tanto no JS quanto no backend) em cada linha da tabela e no formulário de
+  criação. Marcar "Restringir" sem escolher nenhuma aba é rejeitado, pra não criar sem querer um
+  setor indistinguível de "sem restrição" no banco.
+- `excluir_empresa` ganhou `empresa_destino_id` opcional — com vínculo e destino informado,
+  reatribui os quatro tipos de registro antes de excluir; sem destino, continua bloqueando como
+  sempre. O modal de exclusão por empresa (Empresas-clientes) passou a mostrar um seletor "Mover
+  histórico vinculado para" só quando aquela empresa específica tem vínculo.
+
+**Testado:** suíte completa sem regressão (17 testes novos: unidade de `modulos_acessiveis`, 403
+por módulo, persistência de setor com módulos pela API e pela tela, serviço de reatribuição de
+empresa, web de exclusão com destino) + lint limpo + Playwright end-to-end nas duas telas
+(restringir um setor existente, criar setor já restrito, os checkboxes de módulo reagindo à
+operadora escolhida, modal de exclusão de empresa com o seletor de destino, reatribuição
+confirmada no banco depois).
+
+**Reversível:** sim — os dois são aditivos (parâmetro opcional em `excluir_empresa`, tabela nova
+`SetorModulo` cujo estado padrão preserva o comportamento de antes); nenhuma rota ou tela
+existente muda de comportamento pra quem não usa as opções novas.
