@@ -16,7 +16,14 @@ Clara, não por falha técnica — ver ARCHITECTURE.md 3.5).
 
 Sem `RESEND_API_KEY` configurada, o envio recusa com uma mensagem amigável
 em vez de estourar um erro genérico. Usa só a biblioteca padrão do Python
-(`urllib`) — a Resend não exige nenhum SDK, é uma chamada HTTP simples."""
+(`urllib`) — a Resend não exige nenhum SDK, é uma chamada HTTP simples.
+
+`User-Agent` explícito (2026-09-29, achado real com a Clara: `error code:
+1010` — bloqueio do Cloudflare, que protege a API da Resend, "acesso negado
+com base na assinatura do navegador") — sem um `User-Agent` próprio, o
+`urllib` se identifica como `Python-urllib/x.y`, uma assinatura que esse
+tipo de proteção anti-bot reconhece e barra antes mesmo da requisição
+chegar na Resend de verdade."""
 from __future__ import annotations
 
 import json
@@ -49,6 +56,8 @@ def enviar_chamado(usuario: Usuario, assunto: str, descricao: str) -> None:
         headers={
             "Authorization": f"Bearer {settings.resend_api_key}",
             "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "EliteSistem/1.0 (+https://elite-sistem.onrender.com)",
         },
         method="POST",
     )

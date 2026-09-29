@@ -1748,3 +1748,25 @@ menor, mas alto risco de ser a mesma causa raiz e não resolver) — ela escolhe
 - **Reversível:** sim — é uma troca de mecanismo de envio isolada; nenhuma rota, permissão ou
   comportamento visível pra quem usa o pop-up mudou.
 
+### 4.28 Pop-up de suporte: `User-Agent` explícito, bloqueio do Cloudflare (2026-09-29)
+
+Mesmo dia, terceiro erro diferente na mesma funcionalidade — a Clara testou de novo depois do
+deploy da Resend e recebeu `error code: 1010`. Esse código **não é da Resend** — é um código de
+erro padrão da **Cloudflare** (que protege a API da Resend): "acesso negado com base na assinatura
+do navegador", um bloqueio anti-bot que acontece antes da requisição sequer chegar no backend da
+Resend. Diagnosticado sem precisar pedir mais nada à Clara — o texto "error code: 1010" já é
+autoexplicativo pra quem reconhece o padrão de erro da Cloudflare (tentei confirmar batendo direto
+na API real a partir deste ambiente, mas o próprio proxy de rede daqui bloqueia a chamada por outro
+motivo, sem relação com a Resend — segui só com o diagnóstico teórico, bem documentado).
+
+- **Causa provável:** `urllib.request` sem um `User-Agent` próprio se identifica como
+  `Python-urllib/3.x` — uma assinatura genérica que ferramentas anti-bot (Cloudflare incluso)
+  reconhecem e bloqueiam por padrão, independente de credencial/chave estarem certas.
+- **`app/services/suporte.py`** — adicionados `User-Agent: EliteSistem/1.0 (+https://elite-
+  sistem.onrender.com)` e `Accept: application/json` aos cabeçalhos da requisição.
+- **Testado:** teste ajustado pra confirmar que o cabeçalho `User-Agent` enviado não é mais a
+  assinatura padrão do `urllib`. 189 testes, lint limpo. Não foi possível validar contra a API real
+  da Resend a partir deste ambiente (rede sandboxed) — a Clara precisa confirmar em produção depois
+  do próximo deploy.
+- **Reversível:** sim — só um cabeçalho HTTP a mais na requisição existente; nada mais mudou.
+

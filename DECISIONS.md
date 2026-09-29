@@ -1573,3 +1573,34 @@ removidas, mas não fazem mais nada).
 
 **Reversível:** sim — troca isolada de mecanismo de envio; nenhuma rota, permissão ou comportamento
 visível pra quem usa o pop-up mudou.
+
+## 2026-09-29 — Pop-up de suporte: bloqueio do Cloudflare por assinatura de bot
+
+**Contexto:** a Clara testou de novo depois do deploy da migração pra Resend (entrada anterior) e
+recebeu um erro novo: `error code: 1010`. Terceiro erro diferente no mesmo dia, na mesma
+funcionalidade — sinal de que cada camada resolvida revela a próxima (rede → SMTP bloqueado →
+agora um detalhe da própria chamada HTTP).
+
+**Diagnóstico:** reconheci o formato "error code: 1010" como um código padrão da Cloudflare
+("acesso negado com base na assinatura do navegador" — bloqueio anti-bot), não um erro da Resend em
+si — a API da Resend fica atrás de Cloudflare, e esse bloqueio acontece antes da requisição chegar
+no backend deles. Não precisei pedir mais informação à Clara pra esse — o texto já era
+autoexplicativo. Tentei confirmar batendo na API real a partir deste ambiente, mas o proxy de rede
+sandboxed daqui bloqueia a chamada por um motivo totalmente diferente (nada a ver com Resend/
+Cloudflare) — segui só com o diagnóstico teórico, que é bem documentado e específico o bastante pra
+eu ter confiança nele.
+
+**Causa provável:** `urllib.request` sem um `User-Agent` configurado se identifica como
+`Python-urllib/3.x`, uma assinatura genérica que proteções anti-bot reconhecem e bloqueiam por
+padrão — independente da chave de API estar certa ou não.
+
+**Implementado:** `app/services/suporte.py` ganhou um `User-Agent` próprio
+(`EliteSistem/1.0 (+https://elite-sistem.onrender.com)`) e `Accept: application/json` nos
+cabeçalhos da chamada.
+
+**Testado:** teste ajustado pra confirmar que o `User-Agent` enviado não é mais a assinatura padrão
+do `urllib`. 189 testes, lint limpo. **Não validado contra a API real** — o ambiente sandboxed não
+consegue alcançar a Resend pra confirmar de ponta a ponta; a Clara precisa testar de novo depois do
+próximo deploy e me avisar se esse foi o bloqueio de verdade ou se ainda falta algo.
+
+**Reversível:** sim — só um cabeçalho HTTP a mais; nada mais mudou.

@@ -81,7 +81,13 @@ def test_enviar_chamado_com_resend_mockado_envia(monkeypatch, db, _com_resend_co
     assert corpo["to"] == ["claracosta@elitemediacoes.com.br"]
     assert corpo["reply_to"] == "fulana@teste.local"
     assert "Não consigo importar a planilha de Laudos." in corpo["text"]
-    assert _requisicoes_enviadas[0]["headers"]["Authorization"] == "Bearer re_chave_de_teste"
+    headers = _requisicoes_enviadas[0]["headers"]
+    assert headers["Authorization"] == "Bearer re_chave_de_teste"
+    # User-Agent explícito (2026-09-29) — sem ele, o Cloudflare que protege
+    # a API da Resend bloqueava a assinatura padrão do urllib com
+    # "error code: 1010" (achado real com a Clara).
+    assert "Python-urllib" not in headers.get("User-agent", "")
+    assert headers.get("User-agent")
 
 
 def test_enviar_chamado_resend_recusa_http_vira_erro_amigavel(monkeypatch, db, _com_resend_configurado):
