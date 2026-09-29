@@ -1532,3 +1532,44 @@ caminho). Suíte completa sem regressão (189 testes, 1 novo) + lint limpo.
 **Reversível:** sim — troca só a classe usada internamente pra abrir a conexão SMTP; nenhuma
 variável de ambiente, rota ou comportamento visível mudou. A Clara não precisa reconfigurar nada no
 Render — é só testar de novo depois do deploy.
+
+## 2026-09-29 — Pop-up de suporte: migrado de SMTP pra API HTTP da Resend
+
+**Contexto:** a correção de IPv4 (entrada anterior) não resolveu — a Clara testou de novo e o erro
+mudou de `[Errno 101] Network is unreachable` pra `timed out`. Fui atrás do texto exato do erro
+antes de mexer em qualquer coisa de novo (dessa vez precisei pedir três formas diferentes até
+conseguir — console do navegador não mostra o corpo da resposta, só o status; a aba certa é
+Network → clicar na requisição → Response/Preview, não Sources).
+
+**Diagnóstico:** "timed out" é um sintoma diferente de "Network is unreachable" — a conexão fica
+esperando resposta até estourar o limite, em vez de falhar na hora. É o padrão de um firewall de
+saída **derrubando o pacote em silêncio**, não recusando — comum em plataformas de hospedagem que
+bloqueiam SMTP de saída (mesmo na porta 587) pra evitar virar relay de spam. Não era mais um bug de
+código corrigível ajustando o `smtplib` — o problema é a conexão TCP nunca completar.
+
+**Por que perguntei antes de migrar, em vez de só trocar:** migrar de SMTP pra uma API HTTP (Resend)
+significa a Clara criar uma conta nova e gerar uma credencial nova — não é uma correção pequena, é
+uma troca de abordagem. Perguntei se ela queria migrar direto (minha recomendação, com um argumento
+concreto: este mesmo projeto já usou a Resend com sucesso nesse mesmo Render antes, no alerta de
+prazo de Gestão de Processos — removido por decisão de produto dela, não por falha técnica) ou
+tentar mais uma porta de SMTP primeiro (mudança menor, mas alto risco de ser a mesma causa raiz e
+não resolver, já que "timed out" sugere bloqueio de porta, não erro de configuração específico de
+uma porta). Ela escolheu migrar pra Resend.
+
+**Implementado:** `app/services/suporte.py` reescrito sem `smtplib`/`_SMTPForcandoIPv4` (removidos
+por completo — nunca deixo um caminho morto quando sei que não vai ser usado de novo), usando
+`urllib.request` (biblioteca padrão, sem dependência nova) pra um `POST` HTTPS simples na API da
+Resend — mesma porta 443 de qualquer chamada normal do navegador, contornando de vez a classe de
+problema de firewall/porta de SMTP. `app/config.py`: variáveis `smtp_*` substituídas por
+`resend_api_key`/`resend_remetente` (padrão: endereço de teste da própria Resend, funciona sem
+verificar domínio)/`destinatario_suporte`.
+
+**Testado:** suíte reescrita mockando `urllib.request.urlopen` (mesma cobertura de antes) — 189
+testes, lint limpo. Verificado com Playwright que o fallback "não configurado" continua amigável.
+
+**Pendência da Clara:** criar conta grátis na Resend, gerar uma chave de API, e trocar as variáveis
+`SMTP_*` no Render por `RESEND_API_KEY` (as `SMTP_*` antigas ficam inofensivas se não forem
+removidas, mas não fazem mais nada).
+
+**Reversível:** sim — troca isolada de mecanismo de envio; nenhuma rota, permissão ou comportamento
+visível pra quem usa o pop-up mudou.

@@ -1710,3 +1710,41 @@ tentar autenticar.
 - **Reversível:** sim — troca só a classe usada internamente pra abrir a conexão SMTP; nenhuma
   variável de ambiente, rota ou comportamento visível mudou.
 
+### 4.27 Pop-up de suporte: SMTP trocado pela API HTTP da Resend (2026-09-29)
+
+A correção de IPv4 (seção 4.26) não resolveu — o erro mudou de `[Errno 101] Network is unreachable`
+pra `timed out` (a Clara testou de novo depois do deploy e mandou o texto exato). Diferença
+importante: "rede inalcançável" falha na hora; "timed out" é uma conexão que fica esperando resposta
+até estourar o limite de 15s — sintoma clássico de firewall de saída **derrubando o pacote em
+silêncio**, não recusando — comum em plataformas de hospedagem que bloqueiam SMTP de saída pra
+evitar virar relay de spam, mesmo na porta 587. Não era mais nada corrigível só ajustando o
+`smtplib` — o problema é a conexão TCP em si nunca completar, não uma etapa depois dela.
+
+**Evidência a favor de migrar pra HTTP, não insistir em mais uma variante de SMTP:** este mesmo
+projeto já enviou e-mail com sucesso nesse mesmo Render antes — não por SMTP, por uma API HTTP
+(Resend), no alerta de prazo de Gestão de Processos (removido depois por decisão de produto da
+Clara, não por falha técnica — ver seção 3.5). Perguntei à Clara se queria migrar pra uma API HTTP
+(recomendado, ganho garantido de confiabilidade) ou tentar mais uma porta de SMTP antes (mudança
+menor, mas alto risco de ser a mesma causa raiz e não resolver) — ela escolheu migrar.
+
+- **`app/services/suporte.py`** reescrito do zero — sem `smtplib`/`_SMTPForcandoIPv4` (removidos por
+  completo, não deixados como caminho morto). Usa `urllib.request` (biblioteca padrão do Python, sem
+  dependência nova) pra um `POST` simples em `https://api.resend.com/emails` com `Authorization:
+  Bearer <chave>` — é só uma chamada HTTPS normal, a mesma porta 443 que qualquer requisição do
+  navegador já usa, contornando de vez a classe de problema de firewall/porta de SMTP.
+- **`app/config.py`** — `smtp_*` (host/porta/usuário/senha/remetente/destinatário) substituídos por
+  `resend_api_key` (opcional — sem ela, mesmo fallback amigável de antes), `resend_remetente`
+  (padrão: o endereço de teste `onboarding@resend.dev` da própria Resend, que funciona sem precisar
+  verificar domínio próprio — pode trocar depois de verificar elitemediacoes.com.br no painel deles)
+  e `destinatario_suporte` (sem o prefixo `smtp_`, já que não é mais específico de SMTP).
+- **Testado:** suíte reescrita pra mockar `urllib.request.urlopen` em vez de `smtplib`/SMTP (mesma
+  cobertura de antes: sem chave configurada, envio com sucesso, recusa HTTP da Resend virando erro
+  amigável, rota web completa) — 189 testes, lint limpo. Verificado visualmente com Playwright que
+  o fallback "não configurado" continua funcionando (sem `RESEND_API_KEY` neste ambiente).
+- **Pendência da Clara:** trocar a variável de ambiente no Render — remover as `SMTP_*` antigas
+  (inofensivas se ficarem, mas não fazem mais nada) e adicionar `RESEND_API_KEY` (conta grátis em
+  resend.com, gera a chave no painel deles — não precisa de senha de app nem verificação em duas
+  etapas, é só copiar a chave de API).
+- **Reversível:** sim — é uma troca de mecanismo de envio isolada; nenhuma rota, permissão ou
+  comportamento visível pra quem usa o pop-up mudou.
+

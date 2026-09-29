@@ -1,55 +1,59 @@
-"""Pop-up de suporte (2026-09-28) — chamado via fetch (JSON), não form."""
-import socket
-from typing import ClassVar
+"""Pop-up de suporte (2026-09-28) — chamado via fetch (JSON), não form.
+
+Envia por e-mail via a API HTTP da Resend (2026-09-29, trocado de SMTP
+direto depois de confirmar em produção que o Render bloqueia/derruba a
+conexão de saída por SMTP — ver services/suporte.py e DECISIONS.md)."""
+import io
+import json
+import urllib.error
+import urllib.request
 
 import pytest
 
 from app.auth import hash_senha
 from app.config import settings
 from app.models import Usuario
-from app.services import suporte
 from app.services.suporte import enviar_chamado
 
 
 @pytest.fixture()
-def _sem_smtp_configurado(monkeypatch):
-    monkeypatch.setattr(settings, "smtp_host", None)
-    monkeypatch.setattr(settings, "smtp_usuario", None)
-    monkeypatch.setattr(settings, "smtp_senha", None)
+def _sem_resend_configurado(monkeypatch):
+    monkeypatch.setattr(settings, "resend_api_key", None)
 
 
 @pytest.fixture()
-def _com_smtp_configurado(monkeypatch):
-    monkeypatch.setattr(settings, "smtp_host", "smtp.teste.local")
-    monkeypatch.setattr(settings, "smtp_porta", 587)
-    monkeypatch.setattr(settings, "smtp_usuario", "sistema@elitemediacoes.com.br")
-    monkeypatch.setattr(settings, "smtp_senha", "senha-de-app")
-    monkeypatch.setattr(settings, "smtp_remetente", None)
-    monkeypatch.setattr(settings, "smtp_destinatario_suporte", "claracosta@elitemediacoes.com.br")
+def _com_resend_configurado(monkeypatch):
+    monkeypatch.setattr(settings, "resend_api_key", "re_chave_de_teste")
+    monkeypatch.setattr(settings, "resend_remetente", "Elite Sistem <onboarding@resend.dev>")
+    monkeypatch.setattr(settings, "destinatario_suporte", "claracosta@elitemediacoes.com.br")
 
 
-class _SmtpFalso:
-    enviados: ClassVar[list] = []
+_requisicoes_enviadas: list[dict] = []
 
-    def __init__(self, host, porta, timeout=None):
-        self.host = host
-        self.porta = porta
 
+class _RespostaFalsa:
     def __enter__(self):
         return self
 
     def __exit__(self, *args):
         return False
 
-    def starttls(self):
-        pass
+    def read(self):
+        return b'{"id": "email-de-teste"}'
 
-    def login(self, usuario, senha):
-        self.usuario = usuario
-        self.senha = senha
 
-    def send_message(self, mensagem):
-        _SmtpFalso.enviados.append(mensagem)
+def _urlopen_falso(requisicao, timeout=None):
+    _requisicoes_enviadas.append(
+        {"corpo": json.loads(requisicao.data.decode("utf-8")), "headers": dict(requisicao.header_items())}
+    )
+    return _RespostaFalsa()
+
+
+def _urlopen_falha_http(requisicao, timeout=None):
+    raise urllib.error.HTTPError(
+        url="https://api.resend.com/emails", code=422, msg="Unprocessable Entity",
+        hdrs=None, fp=io.BytesIO(b'{"message": "domain not verified"}'),
+    )
 
 
 def _usuario_logado(db, client, email="chamado@teste.local"):
@@ -58,86 +62,60 @@ def _usuario_logado(db, client, email="chamado@teste.local"):
     client.post("/login", data={"email": email, "senha": "certa"})
 
 
-def test_smtp_forcando_ipv4_so_pede_enderecos_af_inet(monkeypatch):
-    """2026-09-29: em produção (Render), `smtplib.SMTP` comum às vezes
-    resolvia smtp.gmail.com pro endereço IPv6 primeiro, e o container não
-    tem rota de saída por IPv6 — `OSError: [Errno 101] Network is
-    unreachable` antes de autenticar (achado real com a Clara). Esse teste
-    confirma que `_get_socket` só pede endereços IPv4 (`socket.AF_INET`) e
-    conecta no endereço devolvido, sem depender de rede de verdade."""
-    chamadas = {}
-
-    def _getaddrinfo_falso(host, port, family, socktype):
-        chamadas["family"] = family
-        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
-
-    class _SocketFalso:
-        def __init__(self, *args):
-            self.conectado_em = None
-
-        def settimeout(self, valor):
-            pass
-
-        def connect(self, endereco):
-            self.conectado_em = endereco
-
-        def close(self):
-            pass
-
-    monkeypatch.setattr(socket, "getaddrinfo", _getaddrinfo_falso)
-    monkeypatch.setattr(socket, "socket", lambda *a: _SocketFalso())
-
-    instancia = suporte._SMTPForcandoIPv4.__new__(suporte._SMTPForcandoIPv4)
-    sock = instancia._get_socket("smtp.gmail.com", 587, 15)
-
-    assert chamadas["family"] == socket.AF_INET
-    assert sock.conectado_em == ("93.184.216.34", 587)
-
-
-def test_enviar_chamado_sem_smtp_configurado_recusa(db, _sem_smtp_configurado):
+def test_enviar_chamado_sem_api_key_recusa(db, _sem_resend_configurado):
     usuario = Usuario(nome="Fulana", email="fulana@teste.local", senha_hash=hash_senha("x"))
     with pytest.raises(ValueError, match="não está configurado"):
         enviar_chamado(usuario, "Assunto", "Descrição")
 
 
-def test_enviar_chamado_com_smtp_mockado_envia(monkeypatch, db, _com_smtp_configurado):
-    _SmtpFalso.enviados = []
-    monkeypatch.setattr(suporte, "_SMTPForcandoIPv4", _SmtpFalso)
+def test_enviar_chamado_com_resend_mockado_envia(monkeypatch, db, _com_resend_configurado):
+    _requisicoes_enviadas.clear()
+    monkeypatch.setattr(urllib.request, "urlopen", _urlopen_falso)
     usuario = Usuario(nome="Fulana", email="fulana@teste.local", senha_hash=hash_senha("x"))
 
     enviar_chamado(usuario, "Erro ao importar", "Não consigo importar a planilha de Laudos.")
 
-    assert len(_SmtpFalso.enviados) == 1
-    mensagem = _SmtpFalso.enviados[0]
-    assert mensagem["Subject"] == "[Elite Sistem] Erro ao importar"
-    assert mensagem["To"] == "claracosta@elitemediacoes.com.br"
-    assert mensagem["Reply-To"] == "fulana@teste.local"
+    assert len(_requisicoes_enviadas) == 1
+    corpo = _requisicoes_enviadas[0]["corpo"]
+    assert corpo["subject"] == "[Elite Sistem] Erro ao importar"
+    assert corpo["to"] == ["claracosta@elitemediacoes.com.br"]
+    assert corpo["reply_to"] == "fulana@teste.local"
+    assert "Não consigo importar a planilha de Laudos." in corpo["text"]
+    assert _requisicoes_enviadas[0]["headers"]["Authorization"] == "Bearer re_chave_de_teste"
 
 
-def test_rota_chamado_sem_login_nao_envia(client, db, _sem_smtp_configurado):
+def test_enviar_chamado_resend_recusa_http_vira_erro_amigavel(monkeypatch, db, _com_resend_configurado):
+    monkeypatch.setattr(urllib.request, "urlopen", _urlopen_falha_http)
+    usuario = Usuario(nome="Fulana", email="fulana@teste.local", senha_hash=hash_senha("x"))
+
+    with pytest.raises(ValueError, match="domain not verified"):
+        enviar_chamado(usuario, "Assunto", "Descrição")
+
+
+def test_rota_chamado_sem_login_nao_envia(client, db, _sem_resend_configurado):
     resposta = client.post(
         "/app/suporte/chamado", json={"assunto": "X", "descricao": "Y"}, follow_redirects=False
     )
     assert resposta.status_code != 200
 
 
-def test_rota_chamado_valida_campos_vazios(client, db, _com_smtp_configurado):
+def test_rota_chamado_valida_campos_vazios(client, db, _com_resend_configurado):
     _usuario_logado(db, client)
     resposta = client.post("/app/suporte/chamado", json={"assunto": "  ", "descricao": "  "})
     assert resposta.status_code == 400
     assert "assunto" in resposta.json()["erro"].lower()
 
 
-def test_rota_chamado_sem_smtp_configurado_retorna_erro_amigavel(client, db, _sem_smtp_configurado):
+def test_rota_chamado_sem_api_key_retorna_erro_amigavel(client, db, _sem_resend_configurado):
     _usuario_logado(db, client)
     resposta = client.post("/app/suporte/chamado", json={"assunto": "Dúvida", "descricao": "Como funciona X?"})
     assert resposta.status_code == 400
     assert "administrador" in resposta.json()["erro"].lower()
 
 
-def test_rota_chamado_com_smtp_mockado_envia_e_retorna_ok(monkeypatch, client, db, _com_smtp_configurado):
-    _SmtpFalso.enviados = []
-    monkeypatch.setattr(suporte, "_SMTPForcandoIPv4", _SmtpFalso)
+def test_rota_chamado_com_resend_mockado_envia_e_retorna_ok(monkeypatch, client, db, _com_resend_configurado):
+    _requisicoes_enviadas.clear()
+    monkeypatch.setattr(urllib.request, "urlopen", _urlopen_falso)
     _usuario_logado(db, client, email="chamado.sucesso@teste.local")
 
     resposta = client.post(
@@ -146,4 +124,4 @@ def test_rota_chamado_com_smtp_mockado_envia_e_retorna_ok(monkeypatch, client, d
     )
     assert resposta.status_code == 200
     assert resposta.json() == {"ok": True}
-    assert len(_SmtpFalso.enviados) == 1
+    assert len(_requisicoes_enviadas) == 1
