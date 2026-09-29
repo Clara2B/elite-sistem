@@ -99,6 +99,45 @@ class ConviteBanco:
     plataforma: str
 
 
+def formatar_texto_carta_cliente(convite: ConviteCliente) -> str:
+    """Mesmo conteúdo da Carta Convite Cliente em PDF (ver
+    pdf_export.py::gerar_pdf_carta_cliente), em texto puro pra copiar e
+    colar (2026-09-29, a pedido da Clara) — cada parágrafo do PDF vira um
+    bloco separado por linha em branco, na mesma ordem."""
+    paragrafos = [
+        "Pré-Processual",
+        "Métodos Consensuais de Solução de Conflitos",
+        "Convite para Audiência Extrajudicial Administrativa – Ação Revisional",
+        f"AUTOR: {convite.autor}\nREU: {convite.reu},",
+        (
+            "Pela presente, solicitamos o seu comparecimento a participar de "
+            "AUDIÊNCIA EXTRAJUDICIAL ADMINISTRATIVA, a ser realizada com a "
+            "finalidade de tentativa de composição amigável"
+        ),
+        (
+            "A audiência de Tentativa de Conciliação está sugerida para o dia "
+            f'{convite.dia.strftime("%d/%m/%Y")}, às {convite.hora}, '
+            "a ser realizada na modalidade Virtual, podendo haver ajustes, mediante prévio contato."
+        ),
+        "NÃO ESQUECER DO DOCUMENTO COM FOTO",
+        (
+            "É OBRIGATÓRIO A PRESENÇA DO TITULAR DO CONTRATO, NÃO SERÁ PERMITIDO A "
+            "ENTRADA DE TERCEIROS EM AUDIÊNCIA SEM A PROCURAÇÃO PÚBLICA"
+        ),
+        "A ENTRADA DE TERCEIROS SEM A PROCURAÇÃO A AUDIÊNCIA SERÁ CANCELADA",
+        f"(Segue link abaixo, pela plataforma {convite.plataforma.upper()})\n{convite.link}",
+        (
+            "Colocamo-nos à disposição por meio dos contatos:\n"
+            "E-mail: conciliacao@camaraeximia.com\n"
+            "Telefone: 55 11 93234-6989"
+        ),
+        "Certos da atenção e colaboração, renovamos votos de elevada estima e consideração.",
+        "Atenciosamente,",
+        "Eximia Câmara de Mediação Conciliação e Arbitragem.",
+    ]
+    return "\n\n".join(paragrafos)
+
+
 def montar_convite_banco(
     banco_nome: str, banco_cnpj: str, nome: str, cpf: str, contrato: str,
     data: date, hora: str, link: str,
@@ -117,3 +156,54 @@ def montar_convite_banco(
         link=link.strip(),
         plataforma=plataforma,
     )
+
+
+def formatar_texto_carta_banco(convite: ConviteBanco) -> str:
+    """Mesmo conteúdo da Carta Convite Banco em PDF (ver
+    pdf_export.py::gerar_pdf_carta_banco), em texto puro pra copiar e
+    colar (2026-09-29, a pedido da Clara)."""
+    paragrafos = [
+        "Convite para Audiência Extrajudicial Administrativa – Ação Revisional",
+        "Ao",
+        f"{convite.banco_nome} – CNPJ: {convite.banco_cnpj},",
+        "Prezados Senhores,",
+        (
+            f"Por meio da presente, o(a) Sr.(a) {convite.nome}, inscrito(a) no "
+            f"CPF: {convite.cpf}, titular da unidade de n° {convite.contrato}, "
+            "vem, respeitosamente, CONVIDAR essa instituição financeira para participar de "
+            "AUDIÊNCIA EXTRAJUDICIAL ADMINISTRATIVA, a ser realizada com a finalidade "
+            "de tentativa de composição amigável."
+        ),
+        (
+            "Esclarece-se que, encontra-se em nosso escritório o contrato de financiamento do "
+            "Reclamante, acima citado, cujo objetivo consiste na revisão de cláusulas "
+            "contratuais reputadas abusivas, notadamente quanto a juros, encargos, "
+            "capitalização, tarifas etc."
+        ),
+        (
+            "Não obstante, antes da judicialização da demanda, a parte Reclamante demonstra "
+            "pleno interesse na solução consensual, em consonância com os princípios da "
+            "boa-fé objetiva, da cooperação e da autocomposição, motivo pelo qual propõe a "
+            "realização da referida audiência extrajudicial."
+        ),
+        (
+            f'A audiência está sugerida para o dia {convite.data.strftime("%d/%m/%Y")}, às '
+            f"{convite.hora}, a ser realizada na modalidade Virtual, podendo haver ajustes, "
+            "mediante prévio contato."
+        ),
+        convite.link,
+        (
+            "A Audiência de Tentativa de Conciliação será realizada de forma virtual, através "
+            f"do aplicativo {convite.plataforma.upper()}."
+        ),
+        (
+            "Solicita-se, desde já, que essa Instituição indique representante com poderes "
+            "para negociar e transigir, a fim de possibilitar a efetiva resolução do "
+            "conflito."
+        ),
+        "Colocamo-nos à disposição por meio do e-mail: conciliacao@camaraeximia.com.",
+        "Certos da atenção e colaboração, renovamos votos de elevada estima e consideração.",
+        "Atenciosamente,",
+        "EXÍMIA CÂMARA DE CONCILIAÇÃO, MEDIAÇÃO E ARBITRAGEM",
+    ]
+    return "\n\n".join(paragrafos)

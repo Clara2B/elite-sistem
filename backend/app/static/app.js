@@ -350,6 +350,42 @@ function iniciarPopupSuporte() {
   modal.addEventListener("close", limparCampos);
 }
 
+// Botão "Copiar texto" (Cartas, 2026-09-29, a pedido da Clara: "preciso que
+// exatamente o mesmo conteúdo que vem escrito no PDF... venha escrito em
+// formato de texto pra copiar e colar"). Diferente do "Copiar resumo" de
+// Laudos, o texto não está pronto na página ao carregar — depende dos
+// campos do formulário (autor/réu/CPF/link etc.), então busca no servidor
+// via fetch (mesma validação usada pra gerar o PDF: link de audiência,
+// dígitos do CPF) e só então copia pro clipboard.
+function iniciarCopiaDeTextoCartas() {
+  document.querySelectorAll("[data-copiar-texto-url]").forEach(function (botao) {
+    var form = botao.closest("form");
+    if (!form) return;
+    botao.addEventListener("click", function () {
+      if (!form.reportValidity()) return;
+      var rotuloOriginal = botao.textContent;
+      botao.disabled = true;
+      botao.textContent = "Copiando...";
+      fetch(botao.getAttribute("data-copiar-texto-url"), { method: "POST", body: new FormData(form) })
+        .then(function (resposta) {
+          return resposta.json().then(function (dados) {
+            if (!resposta.ok) throw new Error(dados.erro || "Não foi possível gerar o texto.");
+            return dados;
+          });
+        })
+        .then(function (dados) { return navigator.clipboard.writeText(dados.texto); })
+        .then(function () { mostrarToast("Texto copiado.", "sucesso"); })
+        .catch(function (erro) {
+          mostrarToast(erro.message || "Não foi possível copiar — tente de novo.", "erro");
+        })
+        .finally(function () {
+          botao.disabled = false;
+          botao.textContent = rotuloOriginal;
+        });
+    });
+  });
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   iniciarZonasDeUpload();
   iniciarValidacaoDeUpload();
@@ -357,6 +393,7 @@ document.addEventListener("DOMContentLoaded", function () {
   iniciarModaisDeConfirmacao();
   iniciarConfirmacaoPorTexto();
   iniciarCopiaDeResumo();
+  iniciarCopiaDeTextoCartas();
   iniciarAlternanciaTema();
   iniciarAlternanciaPorCheckbox();
   iniciarModulosPorOperadora();

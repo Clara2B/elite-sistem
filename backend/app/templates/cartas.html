@@ -32,6 +32,9 @@
                value="{{ valores_cliente.link or '' }}" required>
       </div>
       <button type="submit">Gerar PDF</button>
+      <button type="button" class="secundario" data-copiar-texto-url="/app/cartas/convite-cliente/texto">
+        Copiar texto
+      </button>
     </form>
   </div>
 
@@ -74,6 +77,9 @@
                value="{{ valores_banco.link or '' }}" required>
       </div>
       <button type="submit">Gerar PDF</button>
+      <button type="button" class="secundario" data-copiar-texto-url="/app/cartas/convite-banco/texto">
+        Copiar texto
+      </button>
     </form>
   </div>
 {% endblock %}

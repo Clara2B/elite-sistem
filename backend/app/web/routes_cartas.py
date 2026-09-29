@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -64,6 +64,26 @@ def gerar_convite_cliente(
     )
 
 
+@router.post("/convite-cliente/texto")
+def gerar_convite_cliente_texto(
+    autor: str = Form(...),
+    reu: str = Form(...),
+    dia: date = Form(...),
+    hora: str = Form(...),
+    link: str = Form(...),
+    usuario: Usuario = Depends(_acesso_eximia),
+    db: Session = Depends(get_db),
+):
+    """Mesma validação de `/convite-cliente`, mas devolve o texto pronto pra
+    copiar (2026-09-29, a pedido da Clara) em vez do PDF — usado pelo botão
+    "Copiar texto" em cartas.html, via fetch (igual ao pop-up de suporte)."""
+    try:
+        convite = cartas_service.montar_convite_cliente(autor, reu, dia, hora, link)
+    except ValueError as e:
+        return JSONResponse({"erro": str(e)}, status_code=400)
+    return {"texto": cartas_service.formatar_texto_carta_cliente(convite)}
+
+
 @router.post("/convite-banco")
 def gerar_convite_banco(
     request: Request,
@@ -98,3 +118,27 @@ def gerar_convite_banco(
         content=pdf_bytes, media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},
     )
+
+
+@router.post("/convite-banco/texto")
+def gerar_convite_banco_texto(
+    banco_nome: str = Form(...),
+    banco_cnpj: str = Form(...),
+    nome: str = Form(...),
+    cpf: str = Form(...),
+    contrato: str = Form(...),
+    data: date = Form(...),
+    hora: str = Form(...),
+    link: str = Form(...),
+    usuario: Usuario = Depends(_acesso_eximia),
+    db: Session = Depends(get_db),
+):
+    """Mesma validação de `/convite-banco`, mas devolve o texto pronto pra
+    copiar (2026-09-29, a pedido da Clara) em vez do PDF."""
+    try:
+        convite = cartas_service.montar_convite_banco(
+            banco_nome, banco_cnpj, nome, cpf, contrato, data, hora, link,
+        )
+    except ValueError as e:
+        return JSONResponse({"erro": str(e)}, status_code=400)
+    return {"texto": cartas_service.formatar_texto_carta_banco(convite)}

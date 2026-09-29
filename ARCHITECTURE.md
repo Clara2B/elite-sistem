@@ -1770,3 +1770,41 @@ motivo, sem relação com a Resend — segui só com o diagnóstico teórico, be
   do próximo deploy.
 - **Reversível:** sim — só um cabeçalho HTTP a mais na requisição existente; nada mais mudou.
 
+### 4.29 Cartas: botão "Copiar texto" (2026-09-29)
+
+A Clara pediu: "na parte de Cartas, preciso que exatamente o mesmo conteúdo que vem escrito no PDF
+(e com a mesma formatação) venha escrito em formato de texto para copiar e colar" — as duas cartas
+(Convite Cliente e Convite Banco) só existiam como download de PDF; sem visualização/texto na tela.
+
+- **`app/services/cartas.py`** ganhou `formatar_texto_carta_cliente(convite)` e
+  `formatar_texto_carta_banco(convite)` — mesma convenção já usada em Laudos/Audiências/Processos/
+  Pendências (`formatar_texto*` ao lado do gerador de PDF, construído a partir do mesmo dataclass de
+  resultado, não derivado do PDF em si). O texto reproduz cada parágrafo do PDF
+  (`pdf_export.py::gerar_pdf_carta_cliente`/`gerar_pdf_carta_banco`) na mesma ordem, separados por
+  linha em branco (mesma quebra visual que o PDF já tem entre parágrafos); a marcação do PDF
+  (`<b>`, `<font color>`, `<a href>`, `<u>`, usada pelo `Paragraph` do reportlab) não existe em texto
+  puro — as tags foram simplesmente omitidas, mantendo só o conteúdo textual (negrito/cor/link viram
+  texto normal).
+- **`app/web/routes_cartas.py`** ganhou `POST /app/cartas/convite-cliente/texto` e
+  `POST /app/cartas/convite-banco/texto` — mesma validação dos endpoints de PDF (`montar_convite_*`,
+  então o mesmo erro de link inválido/CPF inválido aparece nos dois), mas devolvem JSON
+  (`{"texto": ...}` ou `{"erro": ...}`, status 400 no erro) em vez do PDF. Chamados via fetch, igual
+  ao pop-up de suporte — por isso `app/main.py::_e_rota_html` ganhou a mesma exceção já feita pra
+  `/app/suporte` (erro inesperado nessas duas rotas continua JSON, não vira `erro.html`).
+- **Por que uma rota nova em vez de reaproveitar o padrão "Copiar resumo" de Laudos tal como está:**
+  em Laudos o texto já está pronto no HTML quando a página carrega (a tela é um GET com os filtros
+  na querystring, redesenhada no servidor). Em Cartas, o `POST` de gerar PDF devolve o arquivo
+  diretamente (download, sem re-render da página) — não haveria onde embutir o texto de antemão. O
+  botão "Copiar texto" busca o texto sob demanda (fetch) e copia direto pro clipboard
+  (`navigator.clipboard.writeText`), sem alterar em nada o botão "Gerar PDF" existente.
+- **UI:** `templates/cartas.html` — botão "Copiar texto" (`class="secundario"`) ao lado de "Gerar
+  PDF" nos dois formulários. `app.js::iniciarCopiaDeTextoCartas()` — valida o formulário
+  (`reportValidity()`) antes de buscar, mesmo toast de sucesso/erro do resto do sistema.
+- **Testado:** `tests/test_cartas.py` (novo — Cartas não tinha nenhum teste até então) cobre as duas
+  funções de formatação (conteúdo esperado, sem sobra de marcação do PDF) e as duas rotas (sem
+  login, validação de link/CPF, sucesso). 196 testes, lint limpo. Verificado com Playwright: texto
+  copiado bate exatamente com o conteúdo do PDF, toast de sucesso e de erro (link inválido)
+  funcionando.
+- **Reversível:** sim — duas rotas e um botão novos, aditivos; nada do fluxo de geração de PDF
+  existente mudou.
+

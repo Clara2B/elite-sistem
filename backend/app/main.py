@@ -94,6 +94,12 @@ def _e_rota_html(path: str) -> bool:
     # continuar JSON, não virar uma página HTML que o fetch não sabe ler.
     if path.startswith("/app/suporte"):
         return False
+    # /app/cartas/.../texto (2026-09-29) é a mesma exceção: os botões
+    # "Copiar texto" de cartas.html chamam via fetch, então um erro
+    # inesperado precisa continuar JSON — só as rotas de PDF em si (que
+    # fazem um submit de form normal) usam a tela HTML de erro.
+    if path.startswith("/app/cartas") and path.endswith("/texto"):
+        return False
     return path == "/" or path.startswith(("/app", "/login", "/logout"))
 
 

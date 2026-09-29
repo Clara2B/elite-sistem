@@ -1604,3 +1604,31 @@ consegue alcançar a Resend pra confirmar de ponta a ponta; a Clara precisa test
 próximo deploy e me avisar se esse foi o bloqueio de verdade ou se ainda falta algo.
 
 **Reversível:** sim — só um cabeçalho HTTP a mais; nada mais mudou.
+
+## 2026-09-29 — Cartas: botão "Copiar texto" (nova rota em vez de reaproveitar "Copiar resumo" tal como está)
+
+**Pedido da Clara:** "na parte de Cartas, preciso que exatamente o mesmo conteúdo que vem escrito no
+PDF (e com a mesma formatação) venha escrito em formato de texto para copiar e colar".
+
+**Decisão de design (sem ambiguidade de negócio, então implementei direto):** o padrão "Copiar
+resumo" de Laudos depende do texto já estar pronto no HTML quando a página carrega — a tela de
+Laudos é um GET com os filtros na querystring, redesenhada no servidor a cada busca. Cartas não
+funciona assim: o `POST` de "Gerar PDF" devolve o arquivo direto pra download, sem re-renderizar a
+página com dados novos — não haveria onde embutir o texto de antemão do jeito que Laudos faz.
+Optei por uma rota nova por carta (`/app/cartas/convite-cliente/texto` e `.../convite-banco/texto`)
+que devolve o texto em JSON sob demanda (mesma validação de link/CPF do PDF), chamada via fetch no
+clique do botão "Copiar texto" — mesmo padrão de UX final (toast "Texto copiado.", igual ao de
+Laudos), só a mecânica por trás é diferente por causa de como Cartas já funcionava.
+
+**Conteúdo do texto:** reproduz cada parágrafo do PDF na mesma ordem, com a marcação de formatação
+do PDF (negrito, cor, link clicável, sublinhado) simplesmente omitida — texto puro não carrega
+negrito/cor/sublinhado. Não perguntei à Clara sobre esse detalhe porque é uma limitação inerente de
+"formato de texto" (ela mesma pediu as duas coisas juntas: "mesmo conteúdo" e "formato de texto" —
+o texto por definição não carrega a formatação visual do PDF, só a mesma ordem/estrutura de
+parágrafos e o mesmo conteúdo). Se ela achar que falta alguma coisa depois de testar, ajusto.
+
+**Testado:** `tests/test_cartas.py` novo (Cartas não tinha teste nenhum até então) — formatação e
+as duas rotas novas. 196 testes, lint limpo. Verificado com Playwright: texto copiado bate
+exatamente com o texto do PDF (conferido campo a campo), toast de sucesso/erro funcionando.
+
+**Reversível:** sim — duas rotas e um botão novos, aditivos; nada do fluxo de PDF existente mudou.
