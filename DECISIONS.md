@@ -1502,3 +1502,33 @@ grande).
 
 **Reversível:** sim — só CSS/template/rotas passando um dado extra; nenhuma coluna de banco,
 permissão ou lógica de negócio mudou.
+
+## 2026-09-29 — Pop-up de suporte falhava com "Errno 101" ao enviar por Gmail
+
+**Contexto:** a Clara configurou as variáveis de SMTP no Render (Gmail, senha de app) e testou o
+pop-up de suporte — o envio falhou com `[Errno 101] Network is unreachable`. Ela não tinha acesso
+aos logs internos do Render pra mais detalhe, só o texto do erro que já aparecia na tela (o próprio
+sistema mostra a mensagem de exceção capturada).
+
+**Diagnóstico, sem acesso ao ambiente de produção:** pedi o texto exato do erro antes de mexer em
+qualquer coisa (poderia ser autenticação, DNS, firewall, várias causas diferentes por trás de um
+"erro genérico"). Confirmado "Errno 101" = `ENETUNREACH` do sistema operacional (não um código do
+Gmail) — sintoma característico e bem documentado de containers/ambientes em nuvem que resolvem um
+hostname (`smtp.gmail.com`) para um endereço IPv6 primeiro, mas não têm rota de saída IPv6
+configurada. Não era nada que a Clara tivesse configurado errado — o código (`smtplib.SMTP` puro)
+deixava o sistema operacional escolher entre IPv4/IPv6 livremente.
+
+**Correção:** `app/services/suporte.py` ganhou `_SMTPForcandoIPv4`, uma subclasse de `smtplib.SMTP`
+que resolve e conecta só em endereços IPv4, evitando a tentativa de IPv6 que falhava. Cuidado
+específico: manter `self._host` como o nome (`smtp.gmail.com`), não o IP resolvido — a verificação
+de certificado TLS em `starttls()` depende disso pra não quebrar.
+
+**Testado:** teste novo isolado confirma que a resolução só pede endereços `AF_INET` (sem rede de
+verdade — mocka `socket.getaddrinfo`/`socket.socket`); os testes existentes que mockavam
+`smtplib.SMTP` foram ajustados pra mockar a nova classe (a subclasse não herda dinamicamente do que
+o teste substitui no módulo `smtplib`, então o mock antigo tinha parado de funcionar pra esse
+caminho). Suíte completa sem regressão (189 testes, 1 novo) + lint limpo.
+
+**Reversível:** sim — troca só a classe usada internamente pra abrir a conexão SMTP; nenhuma
+variável de ambiente, rota ou comportamento visível mudou. A Clara não precisa reconfigurar nada no
+Render — é só testar de novo depois do deploy.

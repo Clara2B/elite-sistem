@@ -6,10 +6,38 @@ recusa com uma mensagem amigável em vez de estourar um erro genérico."""
 from __future__ import annotations
 
 import smtplib
+import socket
 from email.message import EmailMessage
 
 from app.config import settings
 from app.models import Usuario
+
+
+class _SMTPForcandoIPv4(smtplib.SMTP):
+    """`smtplib.SMTP` comum deixa a escolha entre IPv4/IPv6 a cargo do SO
+    (via `socket.create_connection`, que resolve com `AF_UNSPEC`) — em
+    produção (Render, 2026-09-29, achado real com a Clara: `OSError:
+    [Errno 101] Network is unreachable` tentando falar com o Gmail), a
+    resolução de `smtp.gmail.com` às vezes devolve o endereço IPv6
+    primeiro, e o container não tem rota de saída por IPv6 configurada — a
+    conexão cai antes mesmo de tentar autenticar. Forçando a busca só por
+    IPv4 aqui evita isso. `self._host` continua sendo o nome (não o IP
+    resolvido) — a verificação de certificado TLS em `starttls()` (que usa
+    `server_hostname=self._host`) continua correta."""
+
+    def _get_socket(self, host, port, timeout):
+        ultimo_erro: OSError | None = None
+        for familia, tipo, proto, _, endereco in socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM):
+            sock = socket.socket(familia, tipo, proto)
+            try:
+                if timeout is not None:
+                    sock.settimeout(timeout)
+                sock.connect(endereco)
+                return sock
+            except OSError as e:
+                sock.close()
+                ultimo_erro = e
+        raise ultimo_erro or OSError(f"Não foi possível resolver um endereço IPv4 para {host}.")
 
 
 def enviar_chamado(usuario: Usuario, assunto: str, descricao: str) -> None:
@@ -30,7 +58,7 @@ def enviar_chamado(usuario: Usuario, assunto: str, descricao: str) -> None:
     )
 
     try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_porta, timeout=15) as servidor:
+        with _SMTPForcandoIPv4(settings.smtp_host, settings.smtp_porta, timeout=15) as servidor:
             servidor.starttls()
             servidor.login(settings.smtp_usuario, settings.smtp_senha)
             servidor.send_message(mensagem)

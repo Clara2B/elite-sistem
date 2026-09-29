@@ -1685,3 +1685,28 @@ uma decisão dela de um dia antes (Configuração só por `papel_global`, nunca 
 - **Reversível:** sim — só CSS/HTML/rotas passando um dado extra pro template; nenhuma coluna de
   banco, permissão ou lógica de negócio mudou.
 
+### 4.26 Pop-up de suporte: "[Errno 101] Network is unreachable" ao enviar por Gmail (2026-09-29)
+
+A Clara configurou as variáveis de SMTP no Render (Gmail) e testou o pop-up de suporte — o envio
+falhava com `[Errno 101] Network is unreachable`. Diagnosticado sem acesso aos logs do Render (só
+com o texto do erro que ela colou): é um problema técnico conhecido de plataformas em nuvem, não
+erro de configuração dela — `smtplib.SMTP` comum deixa o sistema operacional escolher IPv4 ou IPv6
+ao resolver `smtp.gmail.com`; no ambiente do Render, a resolução às vezes devolve o endereço IPv6
+primeiro, mas o container não tem rota de saída por IPv6 configurada, e a conexão cai antes mesmo de
+tentar autenticar.
+
+- **`app/services/suporte.py::_SMTPForcandoIPv4`** — subclasse de `smtplib.SMTP` que sobrescreve
+  `_get_socket` pra resolver e conectar **só** em endereços IPv4 (`socket.getaddrinfo(..., socket.
+  AF_INET, ...)`), em vez de deixar `socket.create_connection` escolher com `AF_UNSPEC`.
+  `self._host` continua sendo o nome (`smtp.gmail.com`), não o IP resolvido — importante porque
+  `starttls()` usa `server_hostname=self._host` pra verificar o certificado TLS; se o host virasse
+  um IP, a verificação de certificado quebraria.
+- **Testado:** teste novo isolado (`test_smtp_forcando_ipv4_so_pede_enderecos_af_inet`) confirma que
+  `_get_socket` só pede/usa endereços `AF_INET`, sem depender de rede de verdade (mocka `socket.
+  getaddrinfo`/`socket.socket`); os dois testes que já mockavam o envio (`enviar_chamado` e a rota)
+  foram ajustados pra mockar `_SMTPForcandoIPv4` em vez de `smtplib.SMTP` diretamente (a classe nova
+  não herda dinamicamente do que está no módulo `smtplib` — o mock antigo parou de interceptar a
+  chamada real). Suíte completa sem regressão (189 testes, 1 novo) + lint limpo.
+- **Reversível:** sim — troca só a classe usada internamente pra abrir a conexão SMTP; nenhuma
+  variável de ambiente, rota ou comportamento visível mudou.
+
