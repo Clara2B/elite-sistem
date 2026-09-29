@@ -16,6 +16,7 @@ from app.services.funcionarios import (
     excluir_funcionario,
     listar_funcionarios,
 )
+from app.web.areas_configuracao import AREAS_CONFIGURACAO
 from app.web.auth import admin_logado_web
 from app.web.menu import itens_menu
 from app.web.templates import templates
@@ -27,6 +28,7 @@ def _contexto_base(db: Session, usuario: Usuario) -> dict:
     return {
         "usuario": usuario,
         "menu": itens_menu(db, usuario),
+        "areas_configuracao": AREAS_CONFIGURACAO,
         "funcionarios": listar_funcionarios(db, apenas_ativos=False),
         "mensagem": None,
         "erro": None,

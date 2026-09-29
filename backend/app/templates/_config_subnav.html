@@ -1,0 +1,11 @@
+{% import "_icones.html" as icones %}
+{% macro subnav(areas, caminho_atual) %}
+  <nav class="config-subnav">
+    {% for area in areas %}
+      <a href="{{ area.url }}" class="config-subnav-item{{ ' ativo' if caminho_atual.startswith(area.url) else '' }}">
+        {{ icones.icone(area.icone) }}
+        <span>{{ area.rotulo }}</span>
+      </a>
+    {% endfor %}
+  </nav>
+{% endmacro %}

@@ -367,6 +367,34 @@ h2 {
   line-height: 1.4;
 }
 
+/* Cards da tela inicial (2026-09-29, a pedido da Clara) — 3 colunas fixas
+   (3 e 3, não a grade responsiva de largura variável usada em Configuração)
+   e maiores que o padrão de `.modulo`. */
+.grid-modulos-inicio {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+.modulo-grande {
+  padding: 26px 24px;
+  gap: 16px;
+}
+.modulo-grande .icone-wrap {
+  width: 50px;
+  height: 50px;
+  border-radius: var(--radius);
+}
+.modulo-grande .icone-wrap .icone {
+  width: 25px;
+  height: 25px;
+}
+.modulo-grande .titulo {
+  font-size: 1.08rem;
+  margin-bottom: 5px;
+}
+.modulo-grande .descricao {
+  font-size: 0.87rem;
+}
+
 /* ---------- formulários ---------- */
 
 form.formulario {
@@ -844,6 +872,46 @@ details.modulos-setor .modulos-setor-painel {
   height: 15px;
 }
 
+/* Sub-navegação entre as 4 áreas de Configuração (2026-09-29, a pedido da
+   Clara — poder trocar de área sem precisar voltar pra Configuração toda
+   vez). Fica logo abaixo do "Voltar à Configuração", em toda tela
+   administrativa. */
+.config-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+.config-subnav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+.config-subnav-item:hover {
+  border-color: var(--accent);
+  color: var(--heading);
+  text-decoration: none;
+}
+.config-subnav-item .icone {
+  width: 15px;
+  height: 15px;
+}
+.config-subnav-item.ativo {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+.config-subnav-item.ativo:hover {
+  color: #fff;
+}
+
 /* separador simples entre "Início" e o resto do menu */
 .sidebar nav.menu .separador {
   height: 1px;
@@ -964,40 +1032,78 @@ dialog.modal-confirmacao .modal-acoes {
   border-radius: 0 0 14px 14px;
 }
 
-/* ---------- pop-up de suporte (2026-09-28) ---------- */
+/* ---------- pop-up de suporte (2026-09-28, redesenhado 2026-09-29) ---------- */
 
 .botao-suporte {
   position: fixed;
   right: 24px;
   bottom: 24px;
-  width: 56px;
-  height: 56px;
+  width: 58px;
+  height: 58px;
   border-radius: 50%;
   border: none;
-  background: var(--navy);
+  background: linear-gradient(135deg, var(--navy-light) 0%, var(--navy) 55%, var(--navy-deep) 100%);
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-lg), 0 0 0 5px var(--accent-soft);
   z-index: 40;
-  transition: transform 0.14s ease, background 0.14s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 .botao-suporte:hover {
-  background: var(--navy-deep);
-  transform: translateY(-2px);
+  transform: translateY(-3px) scale(1.06);
+  box-shadow: var(--shadow-lg), 0 0 0 7px var(--accent-soft);
+}
+.botao-suporte:active {
+  transform: translateY(-1px) scale(1.01);
 }
 .botao-suporte .icone {
-  width: 24px;
-  height: 24px;
+  width: 25px;
+  height: 25px;
 }
 
 dialog.popup-suporte {
-  max-width: 480px;
+  max-width: 500px;
+  border-radius: 18px;
+  overflow: hidden;
 }
-dialog.popup-suporte .modal-corpo {
-  padding: 28px 28px 22px;
+.popup-suporte-cabecalho {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 26px 28px 22px;
+  background: linear-gradient(135deg, var(--navy-light) 0%, var(--navy) 55%, var(--navy-deep) 100%);
+}
+.popup-suporte-icone {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.popup-suporte-icone .icone {
+  width: 22px;
+  height: 22px;
+  color: #fff;
+}
+dialog.popup-suporte .popup-suporte-cabecalho h3 {
+  margin: 0 0 5px;
+  font-size: 1.12rem;
+  color: #fff;
+}
+dialog.popup-suporte .popup-suporte-cabecalho p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.45;
+}
+dialog.popup-suporte .popup-suporte-corpo {
+  padding: 24px 28px 6px;
 }
 .campo textarea {
   padding: 9px 11px;
@@ -1014,6 +1120,20 @@ dialog.popup-suporte .modal-corpo {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.botao-enviar-suporte {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent);
+}
+.botao-enviar-suporte:hover {
+  background: var(--accent);
+  filter: brightness(1.1);
+}
+.botao-enviar-suporte .icone {
+  width: 16px;
+  height: 16px;
 }
 
 @media (max-width: 860px) {
@@ -1067,5 +1187,14 @@ dialog.popup-suporte .modal-corpo {
   .campo input, .campo select {
     min-width: 0;
     width: 100%;
+  }
+  .grid-modulos-inicio {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1100px) and (min-width: 861px) {
+  .grid-modulos-inicio {
+    grid-template-columns: repeat(2, 1fr);
   }
 }

@@ -59,21 +59,26 @@
   </button>
 
   <dialog id="popup-suporte" class="modal-confirmacao popup-suporte">
-    <div class="modal-corpo">
-      <h3>Abrir chamado de suporte</h3>
-      <p>Conte o que está acontecendo — enviamos direto pra equipe responsável pelo sistema.</p>
-      <div class="campo" style="margin-top: 16px;">
+    <div class="popup-suporte-cabecalho">
+      <div class="popup-suporte-icone">{{ icones.icone('suporte') }}</div>
+      <div>
+        <h3>Abrir chamado de suporte</h3>
+        <p>Conte o que está acontecendo — enviamos direto pra equipe responsável pelo sistema.</p>
+      </div>
+    </div>
+    <div class="modal-corpo popup-suporte-corpo">
+      <div class="campo">
         <label for="suporte-assunto">Assunto do chamado</label>
         <input type="text" id="suporte-assunto" placeholder="Ex.: Erro ao importar planilha de Laudos">
       </div>
-      <div class="campo" style="margin-top: 14px;">
+      <div class="campo" style="margin-top: 16px;">
         <label for="suporte-descricao">Descrição</label>
         <textarea id="suporte-descricao" rows="6" placeholder="Descrição..."></textarea>
       </div>
     </div>
     <div class="modal-acoes">
       <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
-      <button type="button" id="botao-enviar-suporte">Enviar chamado</button>
+      <button type="button" id="botao-enviar-suporte" class="botao-enviar-suporte">{{ icones.icone('cartas') }} Enviar chamado</button>
     </div>
   </dialog>
 

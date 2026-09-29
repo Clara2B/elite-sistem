@@ -9,9 +9,9 @@
   </div>
 
   <p class="secao-titulo">Módulos</p>
-  <div class="grid-modulos">
+  <div class="grid-modulos grid-modulos-inicio">
     {% for item in menu %}
-      <a class="modulo" href="{{ item.url }}">
+      <a class="modulo modulo-grande" href="{{ item.url }}">
         <div class="icone-wrap">{{ icones.icone(item.icone) }}</div>
         <div>
           <div class="titulo">{{ item.rotulo }}</div>

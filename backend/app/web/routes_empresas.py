@@ -19,6 +19,7 @@ from app.services.empresas import (
     listar_empresas,
     sincronizar_lista_oficial,
 )
+from app.web.areas_configuracao import AREAS_CONFIGURACAO
 from app.web.auth import admin_logado_web
 from app.web.menu import itens_menu
 from app.web.templates import templates
@@ -31,6 +32,7 @@ def _contexto_base(db: Session, usuario: Usuario) -> dict:
     return {
         "usuario": usuario,
         "menu": itens_menu(db, usuario),
+        "areas_configuracao": AREAS_CONFIGURACAO,
         "empresas": empresas,
         "vinculos_por_empresa": {e.id: sum(contar_vinculos_empresa(db, e.id).values()) for e in empresas},
         "mensagem": None,

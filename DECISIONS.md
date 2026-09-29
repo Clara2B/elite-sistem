@@ -1445,3 +1445,60 @@ repositório, ou compartilhar o link — com recomendação contra a terceira op
 entrada em `ARCHITECTURE.md` (seção 4.24) complementada com este resumo.
 
 **Reversível:** não se aplica — nada foi implementado.
+
+## 2026-09-29 — Configuração selecionável por setor: recusei reverter sem confirmar
+
+**Contexto:** a Clara mandou um screenshot do menu lateral completo (incluindo "Configuração") e
+pediu que a lista de abas selecionáveis por setor tivesse "literalmente todas as opções" da foto.
+Isso incluiria Configuração — que eu tinha deixado de fora de propósito, por decisão explícita dela
+do dia anterior ("só liberadas pelo papel global... deve continuar restrita às abas da operadora do
+próprio setor" não se aplicava a Configuração, que ficou fora da seleção por setor inteiramente).
+
+**Por que perguntei antes de mudar:** incluir Configuração como selecionável por setor deixaria um
+colaborador comum (não-admin) de um setor com essa aba liberada capaz de criar/editar outros
+usuários do sistema — não é só mais uma tela operacional, é acesso administrativo. Reverter uma
+decisão de segurança que ela mesma tinha tomado, sem confirmar que era isso que ela queria (ela pode
+só ter esquecido dessa decisão, ou pensado que a foto do menu = a lista completa disponível), seria
+o tipo de assunção que a regra dela pede pra eu nunca fazer.
+
+**Resposta da Clara:** "Não, manter como está (Recomendado)" — confirmou que Configuração continua
+de fora, só por `papel_global`. **Nenhuma mudança de código foi feita.** Expliquei a ela, em vez
+disso, que as 5 abas operacionais da foto já eram todas selecionáveis, e que a razão de às vezes
+aparecerem menos de 5 é o filtro por operadora do setor (regra que ela também já tinha confirmado
+manter).
+
+**Reversível:** não se aplica — nada foi implementado.
+
+## 2026-09-29 — Sub-navegação em Configuração, cards 3x3, pop-up de suporte redesenhado
+
+**Contexto:** três pedidos visuais na mesma mensagem, sem ambiguidade estrutural (puramente
+apresentação, nenhum dado/permissão envolvido) — implementados direto, sem pergunta prévia:
+(1) ao entrar numa das 4 áreas de Configuração, mostrar as outras 3 "em cima" (sem precisar voltar);
+(2) os 6 cards da tela inicial organizados 3-e-3, maiores; (3) deixar o pop-up de suporte (pequeno e
+grande) mais bonito.
+
+**Decisão de implementação (1):** criei `app/web/areas_configuracao.py` centralizando a lista das 4
+áreas (antes só existia dentro de `routes_configuracao.py`, sem acesso das outras 4 rotas) e um
+macro Jinja reaproveitado (`_config_subnav.html`) — evita repetir a lista/markup 5 vezes. A sub-nav
+fica logo abaixo do "Voltar à Configuração" já existente (não o substitui).
+
+**Decisão de implementação (2):** dei ao grid da tela inicial classes próprias
+(`grid-modulos-inicio`/`modulo-grande`), em vez de mudar `.grid-modulos`/`.modulo` diretamente —
+essas classes genéricas também são usadas pelos 4 cards de Configuração, que a Clara não pediu pra
+mudar; mudar a classe genérica teria alterado as duas telas por engano.
+
+**Decisão de implementação (3):** aproveitei o mesmo tom de gradiente do botão da marca (`--navy-
+light`→`--navy`→`--navy-deep`) no cabeçalho do pop-up grande, com um ícone circular e texto branco,
+e dei ao botão "Enviar chamado" a cor de destaque (`--accent`, azul) — distinto do "Cancelar" e dos
+outros botões do sistema (que são todos navy), reforçando visualmente que é a ação principal.
+Achado no caminho: a regra genérica `dialog.modal-confirmacao h3` tinha mais especificidade CSS que
+o seletor de classe que eu tinha escrito pro texto branco do cabeçalho — corrigido prefixando com
+`dialog.popup-suporte` pra vencer a regra genérica (sem isso, o texto ficaria escuro sobre o fundo
+escuro do gradiente, quase ilegível).
+
+**Testado:** suíte completa sem regressão (188 testes) + lint limpo + Playwright em claro/escuro/
+mobile (sub-navegação nas 4 telas, grade 3x3 colapsando pra 1 coluna no mobile, pop-up pequeno e
+grande).
+
+**Reversível:** sim — só CSS/template/rotas passando um dado extra; nenhuma coluna de banco,
+permissão ou lógica de negócio mudou.

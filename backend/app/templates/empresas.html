@@ -2,7 +2,9 @@
 {% block titulo %}Empresas-clientes — Elite Sistem{% endblock %}
 {% block voltar %}
   {% import "_icones.html" as icones %}
+  {% from "_config_subnav.html" import subnav %}
   <a href="/app/configuracao" class="link-voltar">{{ icones.icone('voltar') }} Voltar à Configuração</a>
+  {{ subnav(areas_configuracao, request.url.path) }}
 {% endblock %}
 {% block conteudo %}
   {% import "_icones.html" as icones %}

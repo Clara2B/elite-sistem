@@ -20,6 +20,7 @@ from app.db import get_db
 from app.models import Operadora, Setor, SetorModulo, Usuario
 from app.services.auditoria import registrar
 from app.services.setores import excluir_setor
+from app.web.areas_configuracao import AREAS_CONFIGURACAO
 from app.web.auth import admin_logado_web
 from app.web.menu import itens_menu
 from app.web.templates import templates
@@ -42,6 +43,7 @@ def _contexto_base(db: Session, usuario: Usuario) -> dict:
     return {
         "usuario": usuario,
         "menu": itens_menu(db, usuario),
+        "areas_configuracao": AREAS_CONFIGURACAO,
         "setores": db.scalars(select(Setor).order_by(Setor.operadora_id, Setor.nome)).all(),
         "operadoras": db.scalars(select(Operadora).order_by(Operadora.nome)).all(),
         "modulos_disponiveis": MODULOS_ROTULO,

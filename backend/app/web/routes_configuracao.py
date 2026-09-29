@@ -10,23 +10,17 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import Usuario
+from app.web.areas_configuracao import AREAS_CONFIGURACAO
 from app.web.auth import admin_logado_web
 from app.web.menu import itens_menu
 from app.web.templates import templates
 
 router = APIRouter(prefix="/app/configuracao")
 
-_AREAS = [
-    {"url": "/app/usuarios", "rotulo": "Usuários", "icone": "usuarios", "descricao": "Cadastrar, editar e gerenciar acessos da equipe."},
-    {"url": "/app/empresas", "rotulo": "Empresas-clientes", "icone": "empresas", "descricao": "Cadastro, CNPJ e ativação das empresas atendidas."},
-    {"url": "/app/funcionarios", "rotulo": "Assistentes", "icone": "funcionarios", "descricao": "Assistentes de Gestão de Processos — alimenta o relatório."},
-    {"url": "/app/setores", "rotulo": "Setores", "icone": "setores", "descricao": "Setores por operadora — usados nos vínculos de usuário."},
-]
-
 
 @router.get("")
 def tela(request: Request, usuario: Usuario = Depends(admin_logado_web), db: Session = Depends(get_db)):
     return templates.TemplateResponse(
         request, "configuracao.html",
-        {"usuario": usuario, "menu": itens_menu(db, usuario), "areas": _AREAS},
+        {"usuario": usuario, "menu": itens_menu(db, usuario), "areas": AREAS_CONFIGURACAO},
     )

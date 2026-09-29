@@ -1650,3 +1650,38 @@ ainda não pode começar. Documento atualizado com todos os detalhes.
 - **Reversível:** não se aplica — nenhum código, dado ou planilha foi alterado; só o documento de
   análise foi criado.
 
+### 4.25 Sub-navegação em Configuração, cards 3x3 na tela inicial e redesenho do pop-up de suporte (2026-09-29)
+
+Três pedidos visuais da Clara na mesma mensagem. Antes deles, ela também perguntou por que a aba
+"Cartas" (EXIMIA) não aparecia na lista de módulos de um setor — não era bug: é a mesma filtragem
+por operadora que ela já tinha pedido pra manter (um setor da EXIMIA mostra Audiências/Cartas/
+Pendências; um da ELITE mostra Laudos/Gestão de Processos/Pendências) — expliquei e ela confirmou
+que fazia sentido, sem nenhuma mudança de código. Ela também pediu, antes dessas três, que a área de
+Configuração ficasse selecionável por setor igual as outras abas — perguntei, já que isso reverteria
+uma decisão dela de um dia antes (Configuração só por `papel_global`, nunca por setor, por ser uma
+área que inclui criar/editar outros usuários) — ela confirmou manter como estava, nada mudou aí.
+
+- **Sub-navegação entre as 4 áreas de Configuração** — cada uma delas (Usuários/Empresas-clientes/
+  Assistentes/Setores) ganhou uma fileira de abas/pills no topo (logo abaixo de "Voltar à
+  Configuração"), com as 4 áreas sempre visíveis e a atual destacada — antes só dava pra trocar de
+  área voltando pra tela de Configuração primeiro. `app/web/areas_configuracao.py` (novo) centraliza
+  a lista das 4 áreas (antes só existia dentro de `routes_configuracao.py`), reaproveitada pelas 5
+  rotas (a própria Configuração + as 4 sub-telas); `templates/_config_subnav.html` (novo) é um macro
+  Jinja reaproveitado nos 4 templates.
+- **Cards da tela inicial em 3x3, maiores** — `dashboard.html` ganhou as classes `grid-modulos-
+  inicio`/`modulo-grande` (novas, não reaproveitam a grade responsiva de largura variável que
+  Configuração usa — de propósito, pra não afetar aquela tela) — 3 colunas fixas, ícone/título/
+  texto maiores. Responsivo: 2 colunas entre 861-1100px, 1 coluna abaixo de 860px (mobile).
+- **Pop-up de suporte redesenhado** — botão circular com gradiente (`--navy-light` → `--navy` →
+  `--navy-deep`) e um anel sutil (`--accent-soft`) que cresce no hover; o pop-up maior ganhou um
+  cabeçalho com fundo em gradiente + ícone circular (mesmo padrão visual do botão), texto branco, e
+  o botão "Enviar chamado" passou a usar `--accent` (azul) com ícone, se diferenciando visualmente
+  do "Cancelar". Achado durante a implementação: a regra genérica `dialog.modal-confirmacao h3/p`
+  tem mais especificidade CSS que um seletor de uma classe só — o texto branco do cabeçalho não
+  aplicava até eu prefixar o seletor com `dialog.popup-suporte` pra vencer a regra genérica.
+- **Testado:** suíte completa sem regressão (188 testes, nenhum novo — mudança puramente visual/
+  estrutural de template, sem lógica nova) + lint limpo + Playwright: sub-navegação nas 4 telas,
+  grade 3x3 em claro/escuro/mobile (1 coluna), pop-up de suporte pequeno e grande em claro/escuro.
+- **Reversível:** sim — só CSS/HTML/rotas passando um dado extra pro template; nenhuma coluna de
+  banco, permissão ou lógica de negócio mudou.
+

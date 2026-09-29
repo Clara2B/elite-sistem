@@ -9,6 +9,7 @@ from app.auth import PAPEIS_GLOBAIS, hash_senha, restaria_sem_admin
 from app.db import get_db
 from app.models import Setor, Usuario, UsuarioSetor
 from app.services.auditoria import registrar
+from app.web.areas_configuracao import AREAS_CONFIGURACAO
 from app.web.auth import admin_logado_web
 from app.web.menu import itens_menu
 from app.web.templates import templates
@@ -21,6 +22,7 @@ def _contexto_base(db: Session, usuario: Usuario) -> dict:
     return {
         "usuario": usuario,
         "menu": itens_menu(db, usuario),
+        "areas_configuracao": AREAS_CONFIGURACAO,
         "usuarios": usuarios,
         # {usuario_id: {setor_id: papel}} — pré-computado pra marcar os checkboxes/selects
         # certos no formulário de edição de cada linha, sem lógica pesada no template.
