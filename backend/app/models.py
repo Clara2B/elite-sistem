@@ -204,7 +204,11 @@ class LogAuditoria(Base):
     usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
     acao: Mapped[str] = mapped_column(String(60))
     entidade: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    entidade_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # Text, não VARCHAR(40): Cartas passa nome de autor/réu/titular em texto
+    # livre (não raro nomes empresariais compridos) como entidade_id — mesmo
+    # motivo do Processo.advogada/assistente (StringDataRightTruncation em
+    # produção, 2026-09-30, a Clara reportou a tela de erro ao gerar o PDF).
+    entidade_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     detalhes: Mapped[str | None] = mapped_column(Text, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

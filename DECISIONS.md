@@ -1654,3 +1654,32 @@ limpo. Verificado com Playwright: CNPJ válido funciona (copia o texto certo, r�
 com dígito verificador errado mostra "CNPJ inválido" (mensagem específica, não a genérica de CPF).
 
 **Reversível:** sim — extensão aditiva; CPF continua funcionando exatamente como antes.
+
+## 2026-09-30 — Cartas: erro genérico ao gerar PDF (`entidade_id` VARCHAR(40) truncando em produção)
+
+**Relato da Clara:** print da tela "Algo deu errado" ao clicar em "Gerar PDF" nas Cartas — sem mais
+detalhes (a tela de erro genérica não mostra o motivo real de propósito, pra não vazar detalhe
+técnico pro usuário final).
+
+**Diagnóstico sem precisar pedir mais nada a ela:** reconheci o padrão porque já vi esse exato bug
+neste projeto antes, em outras tabelas — `registrar()` grava `convite.autor`/`convite.nome`
+(texto livre, já em maiúsculas, sem limite de tamanho no formulário) na coluna `entidade_id` de
+`logs_auditoria`, que era `VARCHAR(40)`. Nome completo ou razão social passa de 40 caracteres fácil.
+Postgres (produção) aplica esse limite de verdade e recusa o insert (`StringDataRightTruncation`) —
+SQLite (testes) não aplica limite de `VARCHAR` nenhum, por isso os 204 testes anteriores não
+pegaram. Essa exceção não é `ValueError`, então não cai no tratamento de erro de validação das
+rotas de Cartas — vira erro não tratado, tela genérica.
+
+**Correção:** `entidade_id` virou `Text` (sem limite) — mesmo ajuste já aplicado antes em
+`Processo.advogada`/`assistente` e `Audiencia.nome_cliente` (mesma causa raiz, tabela diferente).
+`app/db.py::init_db()` ganhou o `ALTER TABLE` correspondente pra alargar a coluna já existente em
+produção (esse projeto não usa Alembic) — roda sozinho no próximo deploy, sem passo manual da
+Clara.
+
+**Testado:** novo teste em `tests/test_cartas.py` gera uma carta com autor de 73 caracteres e
+confirma que o log de auditoria guarda o valor inteiro (não reproduz o crash de Postgres em si —
+SQLite não aplica limite de `VARCHAR` — mas protege contra a coluna voltar a ser `String(N)` por
+engano). 205 testes, lint limpo.
+
+**Reversível:** sim — só alarga uma coluna existente; nenhum dado perdido, nenhum comportamento
+visível muda além do bug corrigido.

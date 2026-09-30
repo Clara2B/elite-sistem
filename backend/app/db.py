@@ -212,6 +212,7 @@ def init_db() -> None:
     _garantir_texto_ilimitado(
         engine, "audiencias", "nome_cliente", "cpf", "data_agendamento", "conciliadora", "advogada"
     )
+    _garantir_texto_ilimitado(engine, "logs_auditoria", "entidade_id")
     _garantir_indice_prazos_fatais(engine)
     session_factory = get_session_factory()
     with session_factory() as db:

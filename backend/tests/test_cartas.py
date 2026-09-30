@@ -7,9 +7,10 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+from sqlalchemy import select
 
 from app.auth import hash_senha
-from app.models import Usuario
+from app.models import LogAuditoria, Usuario
 from app.pdf_export import gerar_pdf_carta_banco
 from app.services.cartas import (
     ConviteBanco,
@@ -207,3 +208,32 @@ def test_rota_texto_convite_banco_aceita_cnpj_no_campo_cpf(client, db):
     assert resposta.status_code == 200
     texto = resposta.json()["texto"]
     assert "EMPRESA TITULAR LTDA, inscrito(a) no CNPJ: 11.222.333/0001-81" in texto
+
+
+# --- Regressão: nome longo não pode quebrar a geração do PDF ----------------
+# 2026-09-30 — a Clara reportou a tela genérica de erro ao clicar "Gerar
+# PDF". Causa real: `registrar()` grava o nome/autor em `entidade_id`
+# (LogAuditoria), coluna que era VARCHAR(40) — em produção (Postgres) isso
+# derruba a requisição inteira (`StringDataRightTruncation`) quando o nome
+# passa de 40 caracteres, algo comum em nome empresarial/nome completo. O
+# SQLite dos testes não aplica limite de VARCHAR de verdade, então esse
+# teste não reproduz o crash em si, mas protege a coluna (`Text`, não
+# `String(40)` — ver app/models.py) de guardar o valor pela metade.
+
+
+def test_gerar_convite_cliente_com_nome_longo_nao_trunca_no_log_auditoria(client, db):
+    _logar_admin(db, client, "admin.cartas6@teste.local")
+    autor_longo = "Construtora e Incorporadora Atlântica Empreendimentos Imobiliários Ltda"
+    resposta = client.post(
+        "/app/cartas/convite-cliente",
+        data={
+            "autor": autor_longo, "reu": "Banco Tal", "dia": "2026-10-15",
+            "hora": "14:05", "link": "meet.google.com/abc-defg-hij",
+        },
+    )
+    assert resposta.status_code == 200
+    assert resposta.headers["content-type"] == "application/pdf"
+    log = db.scalar(
+        select(LogAuditoria).where(LogAuditoria.acao == "GEROU_CARTA_CONVITE_CLIENTE").order_by(LogAuditoria.id.desc())
+    )
+    assert log.entidade_id == autor_longo.upper()

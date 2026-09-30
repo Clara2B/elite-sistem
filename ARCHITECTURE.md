@@ -1839,3 +1839,39 @@ titular da unidade, na Carta Convite Banco, às vezes é pessoa jurídica, não 
 - **Reversível:** sim — extensão aditiva da validação existente; quem já usa CPF normalmente não
   percebe diferença nenhuma.
 
+### 4.31 Cartas: tela genérica de erro ao gerar PDF — `entidade_id` VARCHAR(40) (2026-09-30)
+
+A Clara reportou (print da tela "Algo deu errado") que clicar em "Gerar PDF" nas Cartas estava
+quebrando. Diagnóstico sem precisar pedir mais detalhes a ela — reconheci o padrão de imediato,
+porque **este projeto já teve esse exato bug antes**, em outras tabelas (ver
+`_garantir_texto_ilimitado` em `app/db.py`, e o comentário de `main.py::_erro_nao_tratado` que cita
+`StringDataRightTruncation` como exemplo motivador do handler genérico de erro):
+
+- `registrar(..., entidade_id=convite.autor)` (Carta Cliente) e `entidade_id=convite.nome` (Carta
+  Banco) gravam o nome/autor **em texto livre, já em maiúsculas**, na coluna `entidade_id` de
+  `logs_auditoria` — que era `String(40)`. Nomes completos ou razões sociais passam de 40
+  caracteres com facilidade (ex.: "Construtora e Incorporadora Atlântica Empreendimentos
+  Imobiliários Ltda").
+- **Postgres (produção) aplica o limite de `VARCHAR(40)` de verdade** e recusa o `INSERT` com
+  `StringDataRightTruncation` — exceção que não é `ValueError`, então não cai no `except ValueError`
+  das rotas de Cartas (que só protege a validação de negócio, tipo CPF/link inválido); vira um erro
+  não tratado, e a Clara vê a tela genérica "Algo deu errado". **SQLite (testes) não aplica limite
+  de `VARCHAR` nenhum** — por isso os 204 testes anteriores passaram sem pegar esse bug; ele só
+  aparece com dados reais em produção.
+- **Correção:** `app/models.py::LogAuditoria.entidade_id` virou `Text` (sem limite), igual ao mesmo
+  ajuste já feito antes em `Processo.advogada`/`assistente`/`Audiencia.nome_cliente` etc. — mesma
+  causa raiz, tabela diferente. `app/db.py::init_db()` ganhou
+  `_garantir_texto_ilimitado(engine, "logs_auditoria", "entidade_id")`, que faz o `ALTER TABLE ...
+  ALTER COLUMN entidade_id TYPE TEXT` na tabela já existente em produção no próximo deploy (esse
+  projeto não usa Alembic — `create_all` só cria tabela nova, não altera coluna de tabela que já
+  existe).
+- **Testado:** `tests/test_cartas.py::test_gerar_convite_cliente_com_nome_longo_nao_trunca_no_log_auditoria`
+  — gera a Carta Cliente com um autor de 73 caracteres e confirma que o log de auditoria guarda o
+  valor inteiro (esse teste não reproduz o crash de Postgres em si, já que SQLite não aplica limite
+  de `VARCHAR`, mas protege a coluna do modelo contra voltar a ser `String(N)` por engano). 205
+  testes, lint limpo.
+- **Pendência:** nenhuma da parte da Clara — é só o próximo deploy pegar essa mudança; o `ALTER
+  TABLE` roda sozinho na inicialização, não precisa de nenhum passo manual no Render/Supabase.
+- **Reversível:** sim — só alarga uma coluna existente (de `VARCHAR(40)` pra `TEXT`); nenhum dado é
+  perdido, nenhum comportamento visível muda além do bug corrigido.
+
