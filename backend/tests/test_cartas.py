@@ -6,13 +6,17 @@ from __future__ import annotations
 
 from datetime import date
 
+import pytest
+
 from app.auth import hash_senha
 from app.models import Usuario
+from app.pdf_export import gerar_pdf_carta_banco
 from app.services.cartas import (
     ConviteBanco,
     ConviteCliente,
     formatar_texto_carta_banco,
     formatar_texto_carta_cliente,
+    identificar_documento,
 )
 
 
@@ -48,7 +52,8 @@ def test_formatar_texto_carta_cliente_contem_os_dados_do_convite():
 def test_formatar_texto_carta_banco_contem_os_dados_do_convite():
     convite = ConviteBanco(
         banco_nome="BANCO TAL S.A.", banco_cnpj="00.000.000/0001-00", nome="FULANA DE TAL",
-        cpf="529.982.247-25", contrato="12345", data=date(2026, 11, 3), hora="09H30",
+        documento="529.982.247-25", tipo_documento="CPF", contrato="12345",
+        data=date(2026, 11, 3), hora="09H30",
         link="teams.microsoft.com/l/meetup-join/xyz", plataforma="Teams",
     )
     texto = formatar_texto_carta_banco(convite)
@@ -63,6 +68,60 @@ def test_formatar_texto_carta_banco_contem_os_dados_do_convite():
     assert texto.rstrip().endswith("EXÍMIA CÂMARA DE CONCILIAÇÃO, MEDIAÇÃO E ARBITRAGEM")
     for marcador in ("<b>", "</b>", "<font", "</font>", "<a ", "</a>", "<u>", "</u>", "<br/>"):
         assert marcador not in texto
+
+
+def test_formatar_texto_carta_banco_com_titular_pessoa_juridica_mostra_cnpj():
+    """2026-09-30, a pedido da Clara: o titular da unidade pode ser CNPJ, e
+    a carta precisa identificar e escrever "CNPJ" no lugar de "CPF"."""
+    convite = ConviteBanco(
+        banco_nome="BANCO TAL S.A.", banco_cnpj="00.000.000/0001-00", nome="EMPRESA TITULAR LTDA",
+        documento="11.222.333/0001-81", tipo_documento="CNPJ", contrato="12345",
+        data=date(2026, 11, 3), hora="09H30",
+        link="teams.microsoft.com/l/meetup-join/xyz", plataforma="Teams",
+    )
+    texto = formatar_texto_carta_banco(convite)
+
+    assert "EMPRESA TITULAR LTDA, inscrito(a) no CNPJ: 11.222.333/0001-81" in texto
+    assert "inscrito(a) no CPF" not in texto
+
+
+def test_gerar_pdf_carta_banco_com_titular_pessoa_juridica_nao_quebra():
+    """A mesma mudança (CPF -> CPF/CNPJ) também precisa gerar o PDF sem
+    erro, não só o texto pra copiar."""
+    convite = ConviteBanco(
+        banco_nome="BANCO TAL S.A.", banco_cnpj="00.000.000/0001-00", nome="EMPRESA TITULAR LTDA",
+        documento="11.222.333/0001-81", tipo_documento="CNPJ", contrato="12345",
+        data=date(2026, 11, 3), hora="09H30",
+        link="teams.microsoft.com/l/meetup-join/xyz", plataforma="Teams",
+    )
+    pdf_bytes = gerar_pdf_carta_banco(convite)
+    assert pdf_bytes.startswith(b"%PDF")
+
+
+# --- identificar_documento (CPF ou CNPJ) -------------------------------------
+
+
+def test_identificar_documento_reconhece_cpf():
+    assert identificar_documento("529.982.247-25") == ("CPF", "529.982.247-25")
+
+
+def test_identificar_documento_reconhece_cnpj():
+    assert identificar_documento("11222333000181") == ("CNPJ", "11.222.333/0001-81")
+
+
+def test_identificar_documento_recusa_cpf_com_digito_verificador_errado():
+    with pytest.raises(ValueError, match="CPF inválido"):
+        identificar_documento("111.111.111-11")
+
+
+def test_identificar_documento_recusa_cnpj_com_digito_verificador_errado():
+    with pytest.raises(ValueError, match="CNPJ inválido"):
+        identificar_documento("11.222.333/0001-00")
+
+
+def test_identificar_documento_recusa_quantidade_de_digitos_invalida():
+    with pytest.raises(ValueError, match="CPF/CNPJ inválido"):
+        identificar_documento("123")
 
 
 # --- Rota /app/cartas/convite-cliente/texto ---------------------------------
@@ -132,3 +191,19 @@ def test_rota_texto_convite_banco_retorna_o_mesmo_texto_do_servico(client, db):
     assert resposta.status_code == 200
     texto = resposta.json()["texto"]
     assert "FULANA DE TAL, inscrito(a) no CPF: 529.982.247-25" in texto
+
+
+def test_rota_texto_convite_banco_aceita_cnpj_no_campo_cpf(client, db):
+    """2026-09-30, a pedido da Clara: o campo aceita CPF ou CNPJ."""
+    _logar_admin(db, client, "admin.cartas5@teste.local")
+    resposta = client.post(
+        "/app/cartas/convite-banco/texto",
+        data={
+            "banco_nome": "Banco Tal", "banco_cnpj": "00.000.000/0001-00", "nome": "Empresa Titular Ltda",
+            "cpf": "11.222.333/0001-81", "contrato": "12345", "data": "2026-11-03",
+            "hora": "09:30", "link": "teams.microsoft.com/l/meetup-join/xyz",
+        },
+    )
+    assert resposta.status_code == 200
+    texto = resposta.json()["texto"]
+    assert "EMPRESA TITULAR LTDA, inscrito(a) no CNPJ: 11.222.333/0001-81" in texto

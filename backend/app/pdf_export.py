@@ -452,7 +452,8 @@ def gerar_pdf_carta_banco(convite: ConviteBanco) -> bytes:
         Paragraph("Prezados Senhores,", estilos["titulo"]),
         Paragraph(
             f"Por meio da presente, o(a) Sr.(a) <b>{convite.nome},</b> inscrito(a) no "
-            f"<b>CPF: {convite.cpf},</b> titular da unidade de n° <b>{convite.contrato},</b> "
+            f"<b>{convite.tipo_documento}: {convite.documento},</b> titular da unidade de n° "
+            f"<b>{convite.contrato},</b> "
             "vem, respeitosamente, CONVIDAR essa instituição financeira para participar de "
             "<b>AUDIÊNCIA EXTRAJUDICIAL ADMINISTRATIVA</b>, a ser realizada com a finalidade "
             "de tentativa de composição amigável.",

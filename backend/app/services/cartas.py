@@ -9,7 +9,7 @@ from datetime import date
 
 _RE_MEET = re.compile(r"^(https?://)?meet\.google\.com/", re.IGNORECASE)
 _RE_TEAMS = re.compile(r"^(https?://)?teams\.microsoft\.com/", re.IGNORECASE)
-_RE_CPF_DIGITOS = re.compile(r"\D")
+_RE_SOMENTE_DIGITOS = re.compile(r"\D")
 
 
 def detectar_plataforma(link: str) -> str:
@@ -43,7 +43,7 @@ def href_absoluto(link: str) -> str:
 def cpf_valido(cpf: str) -> bool:
     """Valida os dígitos verificadores do CPF (Clara, 2026-09-25: CPF
     inválido bloqueia a geração da Carta Banco, com aviso do motivo)."""
-    digitos = _RE_CPF_DIGITOS.sub("", cpf or "")
+    digitos = _RE_SOMENTE_DIGITOS.sub("", cpf or "")
     if len(digitos) != 11 or digitos == digitos[0] * 11:
         return False
 
@@ -60,8 +60,56 @@ def cpf_valido(cpf: str) -> bool:
 def formatar_cpf(cpf: str) -> str:
     """Normaliza pro formato "000.000.000-00" no PDF, não importa como foi
     digitado — só é chamada depois de `cpf_valido` confirmar 11 dígitos."""
-    d = _RE_CPF_DIGITOS.sub("", cpf)
+    d = _RE_SOMENTE_DIGITOS.sub("", cpf)
     return f"{d[0:3]}.{d[3:6]}.{d[6:9]}-{d[9:11]}"
+
+
+def cnpj_valido(cnpj: str) -> bool:
+    """Valida os dígitos verificadores do CNPJ (2026-09-30, a pedido da
+    Clara: o campo "CPF" da Carta Banco precisa aceitar também CNPJ, pro
+    titular da unidade poder ser pessoa jurídica)."""
+    digitos = _RE_SOMENTE_DIGITOS.sub("", cnpj or "")
+    if len(digitos) != 14 or digitos == digitos[0] * 14:
+        return False
+
+    def _digito_verificador(parcial: str, pesos: list[int]) -> str:
+        soma = sum(int(d) * peso for d, peso in zip(parcial, pesos, strict=True))
+        resto = soma % 11
+        return str(0 if resto < 2 else 11 - resto)
+
+    pesos1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    pesos2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    d1 = _digito_verificador(digitos[:12], pesos1)
+    d2 = _digito_verificador(digitos[:12] + d1, pesos2)
+    return digitos[-2:] == d1 + d2
+
+
+def formatar_cnpj(cnpj: str) -> str:
+    """Normaliza pro formato "00.000.000/0000-00" — só é chamada depois de
+    `cnpj_valido` confirmar 14 dígitos."""
+    d = _RE_SOMENTE_DIGITOS.sub("", cnpj)
+    return f"{d[0:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:14]}"
+
+
+def identificar_documento(valor: str) -> tuple[str, str]:
+    """Identifica se `valor` é um CPF (11 dígitos) ou CNPJ (14 dígitos) e
+    devolve (rótulo, formatado) — ex.: ("CPF", "529.982.247-25") ou
+    ("CNPJ", "11.222.333/0001-81"). ValueError com mensagem clara se não for
+    nenhum dos dois, ou se os dígitos verificadores não baterem (2026-09-30,
+    a pedido da Clara)."""
+    digitos = _RE_SOMENTE_DIGITOS.sub("", valor or "")
+    if len(digitos) == 11:
+        if not cpf_valido(valor):
+            raise ValueError(f'CPF inválido: "{valor.strip()}" — confira os dígitos e tente novamente.')
+        return "CPF", formatar_cpf(valor)
+    if len(digitos) == 14:
+        if not cnpj_valido(valor):
+            raise ValueError(f'CNPJ inválido: "{valor.strip()}" — confira os dígitos e tente novamente.')
+        return "CNPJ", formatar_cnpj(valor)
+    raise ValueError(
+        f'CPF/CNPJ inválido: "{valor.strip()}" — informe um CPF (11 dígitos) ou um CNPJ '
+        "(14 dígitos) válido."
+    )
 
 
 @dataclass
@@ -91,7 +139,8 @@ class ConviteBanco:
     banco_nome: str
     banco_cnpj: str
     nome: str
-    cpf: str
+    documento: str
+    tipo_documento: str
     contrato: str
     data: date
     hora: str
@@ -142,14 +191,14 @@ def montar_convite_banco(
     banco_nome: str, banco_cnpj: str, nome: str, cpf: str, contrato: str,
     data: date, hora: str, link: str,
 ) -> ConviteBanco:
-    if not cpf_valido(cpf):
-        raise ValueError(f'CPF inválido: "{cpf.strip()}" — confira os dígitos e tente novamente.')
+    tipo_documento, documento = identificar_documento(cpf)
     plataforma = detectar_plataforma(link)
     return ConviteBanco(
         banco_nome=banco_nome.strip().upper(),
         banco_cnpj=banco_cnpj.strip(),
         nome=nome.strip().upper(),
-        cpf=formatar_cpf(cpf),
+        documento=documento,
+        tipo_documento=tipo_documento,
         contrato=contrato.strip(),
         data=data,
         hora=formatar_hora(hora),
@@ -169,7 +218,7 @@ def formatar_texto_carta_banco(convite: ConviteBanco) -> str:
         "Prezados Senhores,",
         (
             f"Por meio da presente, o(a) Sr.(a) {convite.nome}, inscrito(a) no "
-            f"CPF: {convite.cpf}, titular da unidade de n° {convite.contrato}, "
+            f"{convite.tipo_documento}: {convite.documento}, titular da unidade de n° {convite.contrato}, "
             "vem, respeitosamente, CONVIDAR essa instituição financeira para participar de "
             "AUDIÊNCIA EXTRAJUDICIAL ADMINISTRATIVA, a ser realizada com a finalidade "
             "de tentativa de composição amigável."

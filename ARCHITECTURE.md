@@ -1808,3 +1808,34 @@ A Clara pediu: "na parte de Cartas, preciso que exatamente o mesmo conteúdo que
 - **Reversível:** sim — duas rotas e um botão novos, aditivos; nada do fluxo de geração de PDF
   existente mudou.
 
+### 4.30 Carta Banco: campo "CPF" aceita CNPJ (identificação automática, 2026-09-30)
+
+A Clara pediu: "o campo CPF do cliente seja possível inserir CNPJ e, para o texto da carta, ela
+precisa identificar se é CPF ou CNPJ e colocar de forma correta no texto do pdf e para colar" — o
+titular da unidade, na Carta Convite Banco, às vezes é pessoa jurídica, não só pessoa física.
+
+- **`app/services/cartas.py`** ganhou `cnpj_valido()`/`formatar_cnpj()` (mesmo algoritmo de dígito
+  verificador do CPF, pesos diferentes — padrão oficial da Receita) e `identificar_documento(valor)`,
+  que decide pelo tamanho dos dígitos (11 -> CPF, 14 -> CNPJ), valida com a função certa e devolve
+  `(rótulo, formatado)`; erro claro nos três casos (CPF com dígito errado, CNPJ com dígito errado,
+  nem 11 nem 14 dígitos). O regex de limpeza (`_RE_CPF_DIGITOS`) foi renomeado pra
+  `_RE_SOMENTE_DIGITOS`, já que agora serve os dois.
+- **`ConviteBanco`** — o campo `cpf` virou `documento` (valor formatado) + `tipo_documento`
+  (`"CPF"` ou `"CNPJ"`); `montar_convite_banco` chama `identificar_documento` em vez de `cpf_valido`
+  direto. `pdf_export.py::gerar_pdf_carta_banco` e
+  `services/cartas.py::formatar_texto_carta_banco` usam `{convite.tipo_documento}:
+  {convite.documento}` em vez do "CPF:" fixo — o PDF e o texto pra copiar mostram "CPF: ..." ou
+  "CNPJ: ..." automaticamente, sempre iguais entre si.
+- **UI:** `templates/cartas.html` — rótulo do campo trocado de "CPF" pra "CPF/CNPJ", placeholder
+  mostrando os dois formatos aceitos. O `id`/`name` do campo continuam `cpf` (só muda o rótulo
+  visível) — não precisou tocar em `routes_cartas.py`/`api/cartas.py`, que já passavam o valor bruto
+  adiante pra `montar_convite_banco` sem validar o formato ali.
+- **Testado:** `tests/test_cartas.py` — `identificar_documento` com CPF válido/inválido, CNPJ
+  válido/inválido, e quantidade de dígitos que não é nem 11 nem 14; texto e rota com titular pessoa
+  jurídica mostrando "CNPJ" corretamente (e não "CPF"); regressão confirmando CPF continua
+  funcionando igual; PDF gerado sem erro com CNPJ. 204 testes, lint limpo. Verificado com Playwright
+  na tela real: CNPJ válido copia o texto certo, CNPJ com dígito verificador errado mostra o erro
+  "CNPJ inválido" (não mais a mensagem genérica de CPF), CPF válido continua funcionando.
+- **Reversível:** sim — extensão aditiva da validação existente; quem já usa CPF normalmente não
+  percebe diferença nenhuma.
+

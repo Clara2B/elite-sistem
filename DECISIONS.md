@@ -1632,3 +1632,25 @@ as duas rotas novas. 196 testes, lint limpo. Verificado com Playwright: texto co
 exatamente com o texto do PDF (conferido campo a campo), toast de sucesso/erro funcionando.
 
 **Reversível:** sim — duas rotas e um botão novos, aditivos; nada do fluxo de PDF existente mudou.
+
+## 2026-09-30 — Carta Banco: campo "CPF" aceita CNPJ (identificação automática)
+
+**Pedido da Clara:** "o campo CPF do cliente seja possível inserir CNPJ e, para o texto da carta,
+ela precisa identificar se é CPF ou CNPJ e colocar de forma correta no texto do pdf e para colar" —
+o titular da unidade, na Carta Convite Banco, às vezes é pessoa jurídica.
+
+**Decisão de design (sem ambiguidade de negócio):** o campo passou a aceitar CPF (11 dígitos) ou
+CNPJ (14 dígitos), identificados automaticamente pela quantidade de dígitos — sem precisar de um
+seletor "tipo de documento" separado, já que o próprio número já diz qual é. Cada um é validado com
+seu próprio algoritmo de dígito verificador (CPF já existia; CNPJ novo, mesmo padrão da Receita). O
+rótulo mostrado no PDF e no texto pra copiar ("CPF: ..." ou "CNPJ: ...") muda de acordo com o que foi
+identificado — nunca mais fixo em "CPF:". Renomeei o rótulo do campo na tela de "CPF" pra "CPF/CNPJ"
+pra deixar claro que os dois são aceitos, sem mexer no nome técnico do campo (`id`/`name="cpf"`
+continuam iguais — só o texto visível mudou).
+
+**Testado:** `tests/test_cartas.py` — validação de CPF/CNPJ certos e errados, texto/PDF com titular
+pessoa jurídica mostrando "CNPJ" (não "CPF"), regressão com CPF continuando igual. 204 testes, lint
+limpo. Verificado com Playwright: CNPJ válido funciona (copia o texto certo, rótulo "CNPJ:"), CNPJ
+com dígito verificador errado mostra "CNPJ inválido" (mensagem específica, não a genérica de CPF).
+
+**Reversível:** sim — extensão aditiva; CPF continua funcionando exatamente como antes.
