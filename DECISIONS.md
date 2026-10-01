@@ -1683,3 +1683,35 @@ engano). 205 testes, lint limpo.
 
 **Reversível:** sim — só alarga uma coluna existente; nenhum dado perdido, nenhum comportamento
 visível muda além do bug corrigido.
+
+## 2026-10-01 — Pop-up de suporte: abandonado e-mail, chamado guardado no sistema + aviso no Discord
+
+**Pergunta da Clara:** depois de três tentativas sem sucesso de enviar o chamado por e-mail em
+produção (rede bloqueada → Cloudflare → verificação de domínio da Resend não completando mesmo em
+duas tentativas dela), ela perguntou se havia outra forma, e o que empresas costumam fazer pra
+receber esse tipo de chamado.
+
+**Minha resposta (antes de implementar):** a maioria guarda o chamado no próprio sistema — nunca
+depende de provedor externo, sempre funciona — e usa um canal mais simples de configurar que e-mail
+corporativo pra avisar na hora (Discord/Slack/Telegram, sem verificação de domínio nenhuma).
+Recomendei migrar pra essa abordagem em vez de insistir num quarto provedor de e-mail. A Clara
+confirmou e escolheu Discord como canal de aviso.
+
+**Implementado:** chamado vira uma tabela nova (`Chamado`) — salva sempre, sem depender de nada
+externo. Uma tela de Configuração (`/app/chamados`, só Admin) lista todos e permite marcar/reabrir
+resolvido. O aviso no Discord é opcional e best-effort: configurado via `DISCORD_WEBHOOK_SUPORTE`,
+e uma falha nele (webhook errado, Discord fora do ar, não configurado) nunca impede o chamado de
+ser salvo — diferente da versão por e-mail de antes, onde falha no provedor recusava o chamado
+inteiro. Removi `smtplib`/Resend por completo do código (sem deixar caminho morto).
+
+**Testado:** `tests/test_suporte.py` reescrito (banco + aviso Discord mockado, incluindo teste de
+que falha no Discord não impede salvar); `tests/test_chamados.py` novo (lista, gate de Admin,
+marcar/reabrir). 208 testes, lint limpo. Verificado com Playwright: chamado aberto pelo pop-up sem
+nenhum Discord configurado — sucesso imediato, sem erro nenhum (diferente de antes, quando faltar
+configuração recusava o chamado); aparece na lista; resolver/reabrir funcionando.
+
+**Pendência da Clara:** criar um webhook num canal do Discord (opcional — Configurações do canal →
+Integrações → Webhooks) e configurar `DISCORD_WEBHOOK_SUPORTE` no Render, se quiser ser avisada na
+hora. Sem isso, os chamados continuam aparecendo normalmente na tela de Chamados.
+
+**Reversível:** sim — tabela nova, nada existente foi alterado.

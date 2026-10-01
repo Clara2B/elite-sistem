@@ -213,6 +213,30 @@ class LogAuditoria(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class Chamado(Base):
+    """Chamados de suporte abertos pelo pop-up flutuante (ver templates/
+    base.html). Guardados direto aqui (2026-10-01, a pedido da Clara) —
+    depois de três tentativas sem sucesso de enviar por e-mail (SMTP
+    bloqueado, depois Cloudflare bloqueando a Resend, depois o domínio não
+    verificar na Resend mesmo em duas tentativas — ver DECISIONS.md),
+    trocamos pra guardar o chamado no próprio sistema: nunca depende de
+    provedor externo. A tela de Configuração > Chamados lista todos; o
+    Discord (opcional, ver services/suporte.py) só avisa na hora — não é o
+    registro em si."""
+
+    __tablename__ = "chamados"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    assunto: Mapped[str] = mapped_column(Text)
+    descricao: Mapped[str] = mapped_column(Text)
+    resolvido: Mapped[bool] = mapped_column(default=False)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    resolvido_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    usuario: Mapped[Usuario] = relationship()
+
+
 class Processo(Base):
     """Gestão de Processos (Fase 5, ELITE) — ver DATABASE.md seção 6.1."""
 

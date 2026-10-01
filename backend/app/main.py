@@ -23,6 +23,7 @@ from app.web.auth import PrecisaLogin, SemPermissao
 from app.web.routes_audiencias import router as web_audiencias_router
 from app.web.routes_auth import router as web_auth_router
 from app.web.routes_cartas import router as web_cartas_router
+from app.web.routes_chamados import router as web_chamados_router
 from app.web.routes_configuracao import router as web_configuracao_router
 from app.web.routes_dashboard import router as web_dashboard_router
 from app.web.routes_empresas import router as web_empresas_router
@@ -156,3 +157,4 @@ app.include_router(web_cartas_router)
 app.include_router(web_setores_router)
 app.include_router(web_configuracao_router)
 app.include_router(web_suporte_router)
+app.include_router(web_chamados_router)

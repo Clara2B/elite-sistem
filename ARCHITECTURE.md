@@ -1875,3 +1875,49 @@ porque **este projeto já teve esse exato bug antes**, em outras tabelas (ver
 - **Reversível:** sim — só alarga uma coluna existente (de `VARCHAR(40)` pra `TEXT`); nenhum dado é
   perdido, nenhum comportamento visível muda além do bug corrigido.
 
+### 4.32 Pop-up de suporte: abandonado e-mail, chamado guardado no sistema + aviso no Discord (2026-10-01)
+
+Depois de três tentativas sem sucesso de enviar o chamado por e-mail em produção (seções 4.26-4.28:
+`[Errno 101]` → `timed out` → migração pra Resend → bloqueio do Cloudflare → `error code: 1010`
+corrigido → e por fim a verificação de domínio da Resend não completando pra Clara, mesmo em duas
+tentativas dela), a Clara perguntou se havia outra forma e o que empresas costumam fazer. Resposta:
+a maioria guarda o chamado no próprio sistema (nunca depende de provedor externo) e usa um canal
+mais simples que e-mail corporativo pra avisar na hora — ela escolheu Discord.
+
+- **`app/models.py`** — nova tabela `Chamado` (`chamados`): `usuario_id`, `assunto`, `descricao`
+  (ambos `Text`, sem limite), `resolvido`/`resolvido_em`. Tabela nova — `create_all` cria sozinho,
+  sem precisar de `_garantir_coluna`/`_garantir_texto_ilimitado` (esses só existem pra alterar
+  tabela que **já existe** em produção).
+- **`app/services/suporte.py`** reescrito — `abrir_chamado(db, usuario, assunto, descricao)` salva
+  o `Chamado` no banco e só depois chama `_avisar_discord` (best-effort): se
+  `DISCORD_WEBHOOK_SUPORTE` não estiver configurado, ou o POST pro Discord falhar por qualquer
+  motivo, o chamado **já foi salvo** — só fica sem o aviso em tempo real (log de warning, não
+  exceção). Diferença de design importante em relação à versão por e-mail: antes, falha no provedor
+  = chamado inteiro recusado; agora, o registro (o que a Clara realmente precisa) nunca depende do
+  aviso funcionar.
+- **`app/web/routes_chamados.py`** (novo) — `GET /app/chamados` (lista, mais recentes/abertos
+  primeiro) e `POST /app/chamados/{id}/resolvido?resolvido=true|false` (marcar/reabrir), ambos só
+  Admin (`admin_logado_web`, mesmo padrão de Usuários/Empresas/Setores). Vira a 5ª área de
+  Configuração (`areas_configuracao.py` + `templates/chamados.html`, mesmo sub-nav das outras 4) —
+  `menu.py` ganhou `/app/chamados` em `tambem_ativo_em` do item "Configuração".
+- **`app/web/routes_suporte.py`** — `POST /app/suporte/chamado` (o pop-up, inalterado pro usuário:
+  mesmo botão flutuante, mesmo fetch) agora chama `abrir_chamado` em vez de `enviar_chamado` — só
+  recusa por campo vazio, nunca mais por "não configurado" (o registro no banco sempre funciona).
+- **`app/config.py`** — `resend_api_key`/`resend_remetente`/`destinatario_suporte` removidos por
+  completo (não deixados como caminho morto); `discord_webhook_suporte: str | None = None` no
+  lugar — opcional, sem ele o chamado só não avisa ninguém na hora.
+- **Testado:** `tests/test_suporte.py` reescrito (mocka `urllib.request.urlopen` pro aviso do
+  Discord, não mais pra um envio obrigatório — inclui teste específico confirmando que uma falha no
+  Discord não impede o chamado de ser salvo); `tests/test_chamados.py` novo (lista, gate de Admin,
+  marcar/reabrir resolvido). 208 testes, lint limpo. Verificado com Playwright: chamado aberto pelo
+  pop-up sem nenhum Discord configurado neste ambiente — sucesso imediato (toast "Chamado enviado!",
+  sem erro nenhum, diferente de antes); aparece na lista de Configuração > Chamados; "Marcar
+  resolvido"/"Reabrir" funcionando; card "Chamados" aparece na tela de Configuração.
+- **Pendência da Clara:** se quiser o aviso em tempo real, criar um webhook num canal do Discord
+  (Configurações do canal → Integrações → Webhooks → Criar Webhook → copiar URL) e configurar
+  `DISCORD_WEBHOOK_SUPORTE` no Render — mas isso é totalmente opcional agora: mesmo sem fazer nada,
+  os chamados já aparecem na tela de Chamados normalmente.
+- **Reversível:** sim — tabela nova, nenhuma estrutura existente alterada; voltar a usar e-mail
+  (ou qualquer outro provedor) exigiria só reescrever `abrir_chamado`/`_avisar_discord`, sem perder
+  nenhum chamado já salvo.
+

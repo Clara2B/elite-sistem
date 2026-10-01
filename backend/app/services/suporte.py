@@ -1,73 +1,64 @@
 """Chamados de suporte (2026-09-28, a pedido da Clara) — o pop-up flutuante
-(ver templates/base.html) manda o chamado pra cá, que envia por e-mail via a
-API HTTP da Resend.
+(ver templates/base.html) manda o chamado pra cá.
 
-Não é SMTP direto de propósito: a primeira versão usava `smtplib`, e em
-produção (Render) o envio nunca completava — primeiro `OSError: [Errno 101]
-Network is unreachable` (corrigido forçando IPv4), depois "timed out" mesmo
-assim (achado real com a Clara, 2026-09-29 — ver DECISIONS.md). Isso é o
-padrão de um firewall de saída derrubando a conexão silenciosamente, comum
-em plataformas de hospedagem pra evitar que a plataforma vire relay de
-spam — não um bug de código. Uma API HTTP (porta 443, mesma usada por
-qualquer chamada normal do navegador) contorna isso por completo; este
-mesmo projeto já usou a Resend com sucesso nesse mesmo Render antes (alerta
-de prazo de Gestão de Processos, removido depois por decisão de produto da
-Clara, não por falha técnica — ver ARCHITECTURE.md 3.5).
+Guardado direto no banco (2026-10-01) — depois de três tentativas sem
+sucesso de enviar por e-mail em produção (SMTP bloqueado pelo Render,
+depois a API HTTP da Resend bloqueada pelo Cloudflare, depois o domínio
+elitemediacoes.com.br não verificando na Resend mesmo em duas tentativas da
+Clara — ver DECISIONS.md 2026-10-01), abandonamos e-mail de vez: guardar o
+chamado no próprio sistema nunca depende de provedor externo, sempre
+funciona. A tela de Configuração > Chamados (ver web/routes_chamados.py)
+lista todos.
 
-Sem `RESEND_API_KEY` configurada, o envio recusa com uma mensagem amigável
-em vez de estourar um erro genérico. Usa só a biblioteca padrão do Python
-(`urllib`) — a Resend não exige nenhum SDK, é uma chamada HTTP simples.
-
-`User-Agent` explícito (2026-09-29, achado real com a Clara: `error code:
-1010` — bloqueio do Cloudflare, que protege a API da Resend, "acesso negado
-com base na assinatura do navegador") — sem um `User-Agent` próprio, o
-`urllib` se identifica como `Python-urllib/x.y`, uma assinatura que esse
-tipo de proteção anti-bot reconhece e barra antes mesmo da requisição
-chegar na Resend de verdade."""
+`_avisar_discord` é só um aviso complementar, opcional (configurado via
+`DISCORD_WEBHOOK_SUPORTE`) — o chamado já foi salvo antes dela ser chamada,
+então uma falha aqui (webhook não configurado, Discord fora do ar, etc.)
+nunca derruba a abertura do chamado; só fica sem o aviso em tempo real."""
 from __future__ import annotations
 
 import json
+import logging
 import urllib.error
 import urllib.request
 
+from sqlalchemy.orm import Session
+
 from app.config import settings
-from app.models import Usuario
+from app.models import Chamado, Usuario
 
-_RESEND_URL = "https://api.resend.com/emails"
+_logger = logging.getLogger("elite_sistem.suporte")
 
 
-def enviar_chamado(usuario: Usuario, assunto: str, descricao: str) -> None:
-    if not settings.resend_api_key:
-        raise ValueError(
-            "O envio de chamados ainda não está configurado neste sistema "
-            "(falta a chave de API do Resend). Avise o administrador."
-        )
+def abrir_chamado(db: Session, usuario: Usuario, assunto: str, descricao: str) -> Chamado:
+    chamado = Chamado(usuario_id=usuario.id, assunto=assunto, descricao=descricao)
+    db.add(chamado)
+    db.commit()
+    db.refresh(chamado)
+    _avisar_discord(usuario, chamado)
+    return chamado
+
+
+def _avisar_discord(usuario: Usuario, chamado: Chamado) -> None:
+    if not settings.discord_webhook_suporte:
+        return
 
     corpo = {
-        "from": settings.resend_remetente,
-        "to": [settings.destinatario_suporte],
-        "reply_to": usuario.email,
-        "subject": f"[Elite Sistem] {assunto}",
-        "text": f"Chamado aberto por {usuario.nome} ({usuario.email}) no Elite Sistem.\n\n{descricao}",
+        "content": (
+            f"**Novo chamado — {chamado.assunto}**\n"
+            f"De: {usuario.nome} ({usuario.email})\n\n"
+            f"{chamado.descricao}"
+        )
     }
     requisicao = urllib.request.Request(
-        _RESEND_URL,
+        settings.discord_webhook_suporte,
         data=json.dumps(corpo).encode("utf-8"),
         headers={
-            "Authorization": f"Bearer {settings.resend_api_key}",
             "Content-Type": "application/json",
-            "Accept": "application/json",
             "User-Agent": "EliteSistem/1.0 (+https://elite-sistem.onrender.com)",
         },
         method="POST",
     )
-
     try:
-        urllib.request.urlopen(requisicao, timeout=15)
-    except urllib.error.HTTPError as e:
-        detalhe = e.read().decode("utf-8", errors="replace")
-        raise ValueError(
-            f"Não foi possível enviar o chamado agora (Resend recusou: {detalhe}). Tente de novo em instantes."
-        ) from e
-    except urllib.error.URLError as e:
-        raise ValueError(f"Não foi possível enviar o chamado agora ({e.reason}). Tente de novo em instantes.") from e
+        urllib.request.urlopen(requisicao, timeout=10)
+    except (urllib.error.HTTPError, urllib.error.URLError) as e:
+        _logger.warning("Não foi possível avisar o Discord sobre o chamado #%s: %s", chamado.id, e)

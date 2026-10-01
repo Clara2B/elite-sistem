@@ -1,31 +1,34 @@
 """Pop-up de suporte (2026-09-28) — chamado via fetch (JSON), não form.
 
-Envia por e-mail via a API HTTP da Resend (2026-09-29, trocado de SMTP
-direto depois de confirmar em produção que o Render bloqueia/derruba a
-conexão de saída por SMTP — ver services/suporte.py e DECISIONS.md)."""
+Guardado no banco (2026-10-01, trocado de e-mail depois de três tentativas
+sem sucesso em produção — SMTP bloqueado, Resend bloqueada pelo Cloudflare,
+domínio não verificando na Resend — ver services/suporte.py e
+DECISIONS.md). O Discord é só um aviso complementar, opcional e best-
+effort: ver test_abrir_chamado_discord_configurado_mas_falha_nao_impede_salvar."""
+from __future__ import annotations
+
 import io
 import json
 import urllib.error
 import urllib.request
 
 import pytest
+from sqlalchemy import select
 
 from app.auth import hash_senha
 from app.config import settings
-from app.models import Usuario
-from app.services.suporte import enviar_chamado
+from app.models import Chamado, LogAuditoria, Usuario
+from app.services.suporte import abrir_chamado
 
 
 @pytest.fixture()
-def _sem_resend_configurado(monkeypatch):
-    monkeypatch.setattr(settings, "resend_api_key", None)
+def _sem_discord_configurado(monkeypatch):
+    monkeypatch.setattr(settings, "discord_webhook_suporte", None)
 
 
 @pytest.fixture()
-def _com_resend_configurado(monkeypatch):
-    monkeypatch.setattr(settings, "resend_api_key", "re_chave_de_teste")
-    monkeypatch.setattr(settings, "resend_remetente", "Elite Sistem <onboarding@resend.dev>")
-    monkeypatch.setattr(settings, "destinatario_suporte", "claracosta@elitemediacoes.com.br")
+def _com_discord_configurado(monkeypatch):
+    monkeypatch.setattr(settings, "discord_webhook_suporte", "https://discord.com/api/webhooks/teste")
 
 
 _requisicoes_enviadas: list[dict] = []
@@ -39,7 +42,7 @@ class _RespostaFalsa:
         return False
 
     def read(self):
-        return b'{"id": "email-de-teste"}'
+        return b""
 
 
 def _urlopen_falso(requisicao, timeout=None):
@@ -51,77 +54,79 @@ def _urlopen_falso(requisicao, timeout=None):
 
 def _urlopen_falha_http(requisicao, timeout=None):
     raise urllib.error.HTTPError(
-        url="https://api.resend.com/emails", code=422, msg="Unprocessable Entity",
-        hdrs=None, fp=io.BytesIO(b'{"message": "domain not verified"}'),
+        url="https://discord.com/api/webhooks/teste", code=404, msg="Not Found",
+        hdrs=None, fp=io.BytesIO(b"Unknown Webhook"),
     )
 
 
-def _usuario_logado(db, client, email="chamado@teste.local"):
-    db.add(Usuario(nome="Fulana", email=email, senha_hash=hash_senha("certa")))
+def _usuario(db, email="chamado@teste.local") -> Usuario:
+    usuario = Usuario(nome="Fulana", email=email, senha_hash=hash_senha("certa"))
+    db.add(usuario)
     db.commit()
+    db.refresh(usuario)
+    return usuario
+
+
+def _usuario_logado(db, client, email="chamado@teste.local"):
+    _usuario(db, email)
     client.post("/login", data={"email": email, "senha": "certa"})
 
 
-def test_enviar_chamado_sem_api_key_recusa(db, _sem_resend_configurado):
-    usuario = Usuario(nome="Fulana", email="fulana@teste.local", senha_hash=hash_senha("x"))
-    with pytest.raises(ValueError, match="não está configurado"):
-        enviar_chamado(usuario, "Assunto", "Descrição")
+def test_abrir_chamado_sem_discord_configurado_salva_normalmente(db, _sem_discord_configurado):
+    usuario = _usuario(db)
+    chamado = abrir_chamado(db, usuario, "Erro ao importar", "Não consigo importar a planilha de Laudos.")
+
+    assert chamado.id is not None
+    salvo = db.get(Chamado, chamado.id)
+    assert salvo.assunto == "Erro ao importar"
+    assert salvo.descricao == "Não consigo importar a planilha de Laudos."
+    assert salvo.usuario_id == usuario.id
+    assert salvo.resolvido is False
 
 
-def test_enviar_chamado_com_resend_mockado_envia(monkeypatch, db, _com_resend_configurado):
+def test_abrir_chamado_com_discord_configurado_avisa(monkeypatch, db, _com_discord_configurado):
     _requisicoes_enviadas.clear()
     monkeypatch.setattr(urllib.request, "urlopen", _urlopen_falso)
-    usuario = Usuario(nome="Fulana", email="fulana@teste.local", senha_hash=hash_senha("x"))
+    usuario = _usuario(db)
 
-    enviar_chamado(usuario, "Erro ao importar", "Não consigo importar a planilha de Laudos.")
+    abrir_chamado(db, usuario, "Dúvida", "Como funciona X?")
 
     assert len(_requisicoes_enviadas) == 1
     corpo = _requisicoes_enviadas[0]["corpo"]
-    assert corpo["subject"] == "[Elite Sistem] Erro ao importar"
-    assert corpo["to"] == ["claracosta@elitemediacoes.com.br"]
-    assert corpo["reply_to"] == "fulana@teste.local"
-    assert "Não consigo importar a planilha de Laudos." in corpo["text"]
+    assert "Dúvida" in corpo["content"]
+    assert "Fulana" in corpo["content"]
+    assert "Como funciona X?" in corpo["content"]
     headers = _requisicoes_enviadas[0]["headers"]
-    assert headers["Authorization"] == "Bearer re_chave_de_teste"
-    # User-Agent explícito (2026-09-29) — sem ele, o Cloudflare que protege
-    # a API da Resend bloqueava a assinatura padrão do urllib com
-    # "error code: 1010" (achado real com a Clara).
     assert "Python-urllib" not in headers.get("User-agent", "")
-    assert headers.get("User-agent")
 
 
-def test_enviar_chamado_resend_recusa_http_vira_erro_amigavel(monkeypatch, db, _com_resend_configurado):
+def test_abrir_chamado_discord_configurado_mas_falha_nao_impede_salvar(monkeypatch, db, _com_discord_configurado):
+    """O aviso do Discord é complementar — se ele falhar, o chamado já foi
+    salvo e continua lá (diferente da versão por e-mail de antes, onde a
+    falha do provedor derrubava a abertura do chamado inteira)."""
     monkeypatch.setattr(urllib.request, "urlopen", _urlopen_falha_http)
-    usuario = Usuario(nome="Fulana", email="fulana@teste.local", senha_hash=hash_senha("x"))
+    usuario = _usuario(db)
 
-    with pytest.raises(ValueError, match="domain not verified"):
-        enviar_chamado(usuario, "Assunto", "Descrição")
+    chamado = abrir_chamado(db, usuario, "Assunto", "Descrição")
+
+    assert db.get(Chamado, chamado.id) is not None
 
 
-def test_rota_chamado_sem_login_nao_envia(client, db, _sem_resend_configurado):
+def test_rota_chamado_sem_login_nao_acessa(client, db):
     resposta = client.post(
         "/app/suporte/chamado", json={"assunto": "X", "descricao": "Y"}, follow_redirects=False
     )
     assert resposta.status_code != 200
 
 
-def test_rota_chamado_valida_campos_vazios(client, db, _com_resend_configurado):
+def test_rota_chamado_valida_campos_vazios(client, db):
     _usuario_logado(db, client)
     resposta = client.post("/app/suporte/chamado", json={"assunto": "  ", "descricao": "  "})
     assert resposta.status_code == 400
     assert "assunto" in resposta.json()["erro"].lower()
 
 
-def test_rota_chamado_sem_api_key_retorna_erro_amigavel(client, db, _sem_resend_configurado):
-    _usuario_logado(db, client)
-    resposta = client.post("/app/suporte/chamado", json={"assunto": "Dúvida", "descricao": "Como funciona X?"})
-    assert resposta.status_code == 400
-    assert "administrador" in resposta.json()["erro"].lower()
-
-
-def test_rota_chamado_com_resend_mockado_envia_e_retorna_ok(monkeypatch, client, db, _com_resend_configurado):
-    _requisicoes_enviadas.clear()
-    monkeypatch.setattr(urllib.request, "urlopen", _urlopen_falso)
+def test_rota_chamado_salva_e_retorna_ok(client, db):
     _usuario_logado(db, client, email="chamado.sucesso@teste.local")
 
     resposta = client.post(
@@ -130,4 +135,11 @@ def test_rota_chamado_com_resend_mockado_envia_e_retorna_ok(monkeypatch, client,
     )
     assert resposta.status_code == 200
     assert resposta.json() == {"ok": True}
-    assert len(_requisicoes_enviadas) == 1
+
+    chamado = db.scalar(select(Chamado).where(Chamado.assunto == "Relatório não abre"))
+    assert chamado is not None
+    assert chamado.descricao == "O PDF de Audiências não gera."
+
+    log = db.scalar(select(LogAuditoria).where(LogAuditoria.acao == "ABRIU_CHAMADO_SUPORTE"))
+    assert log is not None
+    assert log.entidade_id == str(chamado.id)

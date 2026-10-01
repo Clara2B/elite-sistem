@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block titulo %}Chamados — Elite Sistem{% endblock %}
+{% block voltar %}
+  {% import "_icones.html" as icones %}
+  {% from "_config_subnav.html" import subnav %}
+  <a href="/app/configuracao" class="link-voltar">{{ icones.icone('voltar') }} Voltar à Configuração</a>
+  {{ subnav(areas_configuracao, request.url.path) }}
+{% endblock %}
+{% block conteudo %}
+  <h1>Chamados</h1>
+  <p class="subtitulo">Chamados de suporte abertos pelo pop-up, em qualquer tela do sistema.</p>
+
+  <div class="card">
+    <div class="card-header"><h2>Chamados ({{ chamados|length }})</h2></div>
+    {% if chamados %}
+      <div class="tabela-wrap">
+        <table>
+          <thead>
+            <tr><th>Status</th><th>Assunto</th><th>Descrição</th><th>Aberto por</th><th>Data</th><th style="width:1%;"></th></tr>
+          </thead>
+          <tbody>
+            {% for c in chamados %}
+              <tr>
+                <td>
+                  {% if c.resolvido %}
+                    <span class="badge ativo">Resolvido</span>
+                  {% else %}
+                    <span class="badge fatal">Aberto</span>
+                  {% endif %}
+                </td>
+                <td>{{ c.assunto }}</td>
+                <td style="max-width:360px; white-space:pre-wrap;">{{ c.descricao }}</td>
+                <td>{{ c.usuario.nome }}<br><span class="subtitulo" style="font-size:0.78rem;">{{ c.usuario.email }}</span></td>
+                <td>{{ c.criado_em.strftime("%d/%m/%Y %H:%M") }}</td>
+                <td>
+                  <form method="post"
+                        action="/app/chamados/{{ c.id }}/resolvido?resolvido={{ 'false' if c.resolvido else 'true' }}">
+                    <button type="submit" class="secundario" style="padding:7px 12px; font-size:0.8rem;">
+                      {{ "Reabrir" if c.resolvido else "Marcar resolvido" }}
+                    </button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="vazio">Nenhum chamado aberto ainda.</p>
+    {% endif %}
+  </div>
+{% endblock %}

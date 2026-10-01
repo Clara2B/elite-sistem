@@ -4,7 +4,11 @@ de operadora/módulo: é um recurso do sistema como um todo, não de um
 produto específico. Chamado a partir do JS via fetch (não form/redirect),
 porque o botão pode ser aberto de qualquer página — devolve JSON, nunca uma
 página HTML (ver app/main.py::_e_rota_html, que trata esse prefixo à
-parte)."""
+parte).
+
+O chamado é guardado no banco (2026-10-01 — ver services/suporte.py);
+nunca recusa por falta de configuração externa, diferente da versão por
+e-mail de antes."""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
@@ -15,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import Usuario
 from app.services.auditoria import registrar
-from app.services.suporte import enviar_chamado
+from app.services.suporte import abrir_chamado
 from app.web.auth import usuario_logado_web
 
 router = APIRouter(prefix="/app/suporte")
@@ -27,7 +31,7 @@ class NovoChamado(BaseModel):
 
 
 @router.post("/chamado")
-def abrir_chamado(
+def criar_chamado(
     payload: NovoChamado,
     usuario: Usuario = Depends(usuario_logado_web),
     db: Session = Depends(get_db),
@@ -37,10 +41,6 @@ def abrir_chamado(
     if not assunto or not descricao:
         return JSONResponse({"erro": "Preencha o assunto e a descrição do chamado."}, status_code=400)
 
-    try:
-        enviar_chamado(usuario, assunto, descricao)
-    except ValueError as e:
-        return JSONResponse({"erro": str(e)}, status_code=400)
-
-    registrar(db, usuario, "ABRIU_CHAMADO_SUPORTE", entidade="chamado", detalhes=assunto)
+    chamado = abrir_chamado(db, usuario, assunto, descricao)
+    registrar(db, usuario, "ABRIU_CHAMADO_SUPORTE", entidade="chamado", entidade_id=chamado.id, detalhes=assunto)
     return {"ok": True}

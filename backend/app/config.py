@@ -18,20 +18,17 @@ class Settings(BaseSettings):
     # essas variáveis do Render sem afetar nada.
     admin_bootstrap_email: str | None = None
     admin_bootstrap_senha: str | None = None
-    # Fase 6 (2026-09-28): pop-up de suporte. Primeira versão enviava por
-    # SMTP direto (smtplib) — trocado em 2026-09-29 pra API HTTP da Resend
-    # depois de confirmar, em produção, que o Render derruba/bloqueia
-    # conexão de saída por SMTP (primeiro "[Errno 101] Network is
-    # unreachable", depois "timed out" mesmo forçando IPv4 — sintoma de
-    # firewall de saída, não bug de código; ver DECISIONS.md 2026-09-29).
-    # Sem `resend_api_key`, o botão continua aparecendo mas o envio recusa
-    # com um erro amigável (ver services/suporte.py). `resend_remetente`
-    # usa o endereço de teste da própria Resend por padrão — funciona sem
-    # precisar verificar um domínio próprio; troque depois de verificar
-    # elitemediacoes.com.br no painel da Resend, se quiser.
-    resend_api_key: str | None = None
-    resend_remetente: str = "Elite Sistem <onboarding@resend.dev>"
-    destinatario_suporte: str = "claracosta@elitemediacoes.com.br"
+    # Fase 6 (2026-09-28): pop-up de suporte. Três tentativas de enviar por
+    # e-mail não vingaram em produção — SMTP bloqueado pelo Render, depois a
+    # API HTTP da Resend bloqueada pelo Cloudflare, depois o domínio
+    # elitemediacoes.com.br não verificando na Resend (mesmo em duas
+    # tentativas da Clara) — ver DECISIONS.md 2026-10-01. Trocado pra
+    # guardar o chamado direto no banco (sempre funciona, nenhum provedor
+    # externo envolvido — ver services/suporte.py e a tela de Configuração
+    # > Chamados). `discord_webhook_suporte` é só um aviso complementar,
+    # opcional: sem ele, o chamado continua sendo salvo normalmente, só não
+    # avisa ninguém na hora.
+    discord_webhook_suporte: str | None = None
 
 
 settings = Settings()

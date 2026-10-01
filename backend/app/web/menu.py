@@ -27,7 +27,9 @@ def itens_menu(db: Session, usuario: Usuario) -> list[dict]:
         # dela, que mantiveram suas rotas próprias (`/app/usuarios` etc.) sem mudança.
         itens.append({
             "url": "/app/configuracao", "rotulo": "Configuração", "icone": "configuracao",
-            "descricao": "Usuários, empresas-clientes, assistentes e setores.",
-            "tambem_ativo_em": ["/app/usuarios", "/app/empresas", "/app/funcionarios", "/app/setores"],
+            "descricao": "Usuários, empresas-clientes, assistentes, setores e chamados.",
+            "tambem_ativo_em": [
+                "/app/usuarios", "/app/empresas", "/app/funcionarios", "/app/setores", "/app/chamados",
+            ],
         })
     return itens
