@@ -418,6 +418,41 @@ def test_import_data_real_de_aba_dia_nao_e_marcada_como_liberacao(db):
     assert relatorio.secoes[0].total_processos == 1
 
 
+def test_import_fatal_so_na_aba_fatais_entra_no_relatorio_mesmo_sem_data_real(db):
+    """2026-10-02, a pedido da Clara: um processo cujo único registro é um
+    "SIM" na aba FATAIS (sem nenhum andamento com data real em outra aba)
+    não pode ficar de fora do relatório — diferente do caso "sem fatal"
+    testado acima (`test_import_marca_data_de_liberacao_e_relatorio_a_exclui_do_periodo`),
+    que continua excluído do período normalmente."""
+    numero = "2222222-22.2026.8.11.0022"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "FATAIS 09"
+    ws.append([
+        "ASSISTENTE", "ANO", "MÊS",
+        "DATA DE LIBERAÇÃO - QUANDO A DRA INSERIIU O CLIENTE NA PLANILHA",
+        "CLIENTE", "Nº PROCESSO", "EVENTO", "FATAL",
+    ])
+    ws.append(["DANILO", 2026, "SETEMBRO", date(2026, 9, 5), "ABSOLUTA - Fulano de Tal", numero, "CUSTAS", "SIM"])
+    path = Path(tempfile.mkdtemp()) / "processos.xlsx"
+    wb.save(path)
+
+    resumo = importar_planilha(db, str(path))
+    assert resumo.linhas_novas == 1
+
+    evento = db.query(EventoProcesso).join(Processo).filter(Processo.numero_processo == numero).one()
+    assert evento.data_e_liberacao is True
+    assert evento.prazo_fatal is True
+
+    relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30))
+    assert relatorio.secoes[0].total_processos == 1
+    assert relatorio.secoes[0].linhas[0].numero_processo == numero
+    assert relatorio.secoes[0].linhas[0].fatal is True
+
+    por_empresa = gerar_relatorio_por_empresa(db, "ABSOLUTA", date(2026, 9, 1), date(2026, 9, 30))
+    assert por_empresa.total_processos == 1
+
+
 # --- Bloco 1 (2026-09-25): relatório Geral / Por empresa ------------------
 
 

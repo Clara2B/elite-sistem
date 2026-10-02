@@ -1921,3 +1921,39 @@ mais simples que e-mail corporativo pra avisar na hora — ela escolheu Discord.
   (ou qualquer outro provedor) exigiria só reescrever `abrir_chamado`/`_avisar_discord`, sem perder
   nenhum chamado já salvo.
 
+### 4.33 Gestão de Processos: fatal só na aba FATAIS (sem data real) agora entra no relatório (2026-10-02)
+
+A Clara perguntou se o relatório pega os fatais das abas "FATAIS [mês]". Investigando: a maioria
+dessas abas tem uma coluna de data real do andamento ("DIA") e já entra normalmente — mas abas (ou
+linhas) que só têm a "DATA DE LIBERAÇÃO — QUANDO A DRA INSERIU O CLIENTE NA PLANILHA" (sem nenhuma
+data de andamento de verdade) são marcadas `data_e_liberacao=True` e **totalmente excluídas** do
+relatório por período (seção 4.12, decisão da Clara em 2026-09-24) — inclusive da determinação do
+"Fatal" (que olha pro último andamento real do processo). Resultado: um processo cujo único
+registro é um "SIM" na aba FATAIS, sem nenhum andamento datado em outro lugar, nunca aparecia em
+relatório nenhum, fatal ou não.
+
+A Clara confirmou (via pergunta): quer que esses apareçam mesmo assim, usando a data de liberação
+como se fosse a data do andamento (opção recomendada, em vez de uma lista separada fora do filtro
+por período) — mesmo comportamento que qualquer outra data de andamento já tem no resto do sistema.
+
+- **`app/services/processos.py::_processos_em_escopo`** e **`_ultimo_evento_por_processo`** — a
+  exclusão `EventoProcesso.data_e_liberacao.is_(False)` virou
+  `or_(EventoProcesso.data_e_liberacao.is_(False), EventoProcesso.prazo_fatal.is_(True))` nas duas
+  funções (únicos dois lugares do arquivo que aplicavam essa exclusão, compartilhados pelos
+  relatórios Geral e Por Empresa). Uma linha `data_e_liberacao=True` **sem** `prazo_fatal="SIM"`
+  continua excluída, exatamente como antes (comportamento da seção 4.12 preservado para o caso
+  comum) — só fatal ganha a exceção.
+- **Sem migração de dados:** `data_e_liberacao`/`prazo_fatal` já eram gravados corretamente no
+  import desde a seção 4.12 — o problema era só o filtro na hora de ler o relatório, não o que foi
+  salvo. A mudança vale pra dados já importados, sem precisar reimportar a planilha.
+- **Testado:** novo teste `test_import_fatal_so_na_aba_fatais_entra_no_relatorio_mesmo_sem_data_real`
+  (`tests/test_processos_service.py`) — processo só com um "SIM" numa aba com apenas data de
+  liberação aparece no relatório Geral e Por Empresa, com `fatal=True`; o teste existente que cobre
+  o caso "sem fatal" (`test_import_marca_data_de_liberacao_e_relatorio_a_exclui_do_periodo`) segue
+  passando sem alteração — confirma que só fatal ganhou a exceção. 209 testes, lint limpo.
+- **Efeito colateral esperado:** a contagem de processos por mês pode subir um pouco depois desse
+  deploy, onde houver fatal só na aba FATAIS dentro do período — isso é o comportamento pedido, não
+  uma regressão.
+- **Reversível:** sim — trocar o `or_(...)` de volta por só `.is_(False)` nas duas funções desfaz,
+  sem precisar reimportar nada.
+

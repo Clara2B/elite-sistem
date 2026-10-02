@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.excel_reader import load_data_sheets
@@ -434,7 +434,15 @@ def _processos_em_escopo(
     mesmo filtro que o relatório antigo já usava pra decidir quais
     processos entram. Só os eventos DENTRO do período (não a tabela inteira
     filtrada em Python depois) — ver nota de performance equivalente que já
-    existia aqui antes desta reescrita (2026-09-23/24, ver DECISIONS.md)."""
+    existia aqui antes desta reescrita (2026-09-23/24, ver DECISIONS.md).
+
+    Exceção (2026-10-02, a pedido da Clara): um evento `data_e_liberacao`
+    com `prazo_fatal` = SIM conta mesmo assim — um fatal lançado só na aba
+    FATAIS (sem andamento real em nenhuma outra aba) não pode ficar de fora
+    do relatório só por não ter data de andamento de verdade. Usa a própria
+    data de liberação como se fosse a data do andamento nesse caso (mesmo
+    comportamento que o resto do sistema já dá pra uma data de andamento
+    qualquer) — ver DECISIONS.md."""
     query = (
         select(Processo)
         .join(EventoProcesso, EventoProcesso.processo_id == Processo.id)
@@ -442,7 +450,7 @@ def _processos_em_escopo(
         .where(
             EventoProcesso.data >= periodo_ini,
             EventoProcesso.data <= periodo_fim,
-            EventoProcesso.data_e_liberacao.is_(False),
+            or_(EventoProcesso.data_e_liberacao.is_(False), EventoProcesso.prazo_fatal.is_(True)),
         )
         .distinct()
     )
@@ -461,12 +469,18 @@ def _ultimo_evento_por_processo(db: Session, processo_ids: set[int]) -> dict[int
     só dentro da janela filtrada. Exclui eventos `data_e_liberacao` (não são
     andamentos de verdade — mesmo motivo de `_processos_em_escopo`), senão
     a data de quando o cliente foi cadastrado numa aba "coringa" apareceria
-    como se fosse o andamento mais recente."""
+    como se fosse o andamento mais recente — exceto quando `prazo_fatal` é
+    SIM (2026-10-02, mesma exceção de `_processos_em_escopo`): um fatal só
+    registrado na aba FATAIS precisa aparecer como "Fatal: Sim" quando for
+    de fato o evento mais recente do processo."""
     if not processo_ids:
         return {}
     subq = (
         select(EventoProcesso.processo_id, func.max(EventoProcesso.criado_em).label("max_criado_em"))
-        .where(EventoProcesso.processo_id.in_(processo_ids), EventoProcesso.data_e_liberacao.is_(False))
+        .where(
+            EventoProcesso.processo_id.in_(processo_ids),
+            or_(EventoProcesso.data_e_liberacao.is_(False), EventoProcesso.prazo_fatal.is_(True)),
+        )
         .group_by(EventoProcesso.processo_id)
         .subquery()
     )

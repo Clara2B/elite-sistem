@@ -1715,3 +1715,38 @@ Integrações → Webhooks) e configurar `DISCORD_WEBHOOK_SUPORTE` no Render, se
 hora. Sem isso, os chamados continuam aparecendo normalmente na tela de Chamados.
 
 **Reversível:** sim — tabela nova, nada existente foi alterado.
+
+## 2026-10-02 — Gestão de Processos: fatal só na aba FATAIS agora entra no relatório
+
+**Pergunta da Clara:** se o relatório pega os fatais das abas FATAIS (com os meses ao lado).
+
+**Investigação:** sim, pra abas FATAIS que têm uma coluna de data real ("DIA") — mas abas/linhas
+que só têm a data de quando a cliente foi inserida na planilha (sem data de andamento real) são
+excluídas do relatório inteiro desde a correção de 2026-09-24 (seção 4.12 do ARCHITECTURE.md,
+decisão já confirmada pela Clara na época — fazia o processo "ganhar" um mês errado). Isso incluía
+excluir a determinação do "Fatal" também: um processo só marcado fatal numa dessas abas, sem
+nenhum outro andamento datado, nunca aparecia em relatório nenhum.
+
+**Pergunta de volta à Clara (ambiguidade real — como tratar o "mês" de algo sem data real):** usar
+a data de liberação como se fosse a data do andamento (processo entra no relatório do mês em que
+foi inserido na aba FATAIS), ou criar uma lista separada "fatais sem data" sempre visível,
+independente do período escolhido. **Ela escolheu a primeira opção** (recomendada — mantém a
+mesma lógica de período que o resto do sistema já usa).
+
+**Implementado:** `_processos_em_escopo`/`_ultimo_evento_por_processo`
+(`app/services/processos.py`) passam a incluir um evento `data_e_liberacao=True` quando
+`prazo_fatal` for "SIM" — antes excluíam sempre. Um evento sem fatal continua excluído
+normalmente (comportamento de 2026-09-24 preservado pro caso comum). Dados já importados não
+precisam de reimportação — o `data_e_liberacao`/`prazo_fatal` já eram gravados certos, só o
+filtro de leitura do relatório mudou.
+
+**Testado:** novo teste confirma o processo-só-fatal-na-FATAIS aparecendo no relatório Geral e
+Por Empresa com `fatal=True`; o teste antigo (caso sem fatal, continua excluído) segue passando
+sem mudança. 209 testes, lint limpo.
+
+**Efeito esperado:** contagem de processos por mês pode subir um pouco onde houver fatal só na
+aba FATAIS dentro do período — é o comportamento pedido, avisar a Clara se ela notar a diferença
+num relatório já conhecido.
+
+**Reversível:** sim — reverter a condição `or_(...)` nas duas funções desfaz, sem mexer em dado
+nenhum já importado.
