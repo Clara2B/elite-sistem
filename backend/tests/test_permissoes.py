@@ -192,13 +192,15 @@ def _usuario_no_setor(db, setor_id: int, email: str) -> Usuario:
 
 def test_modulos_acessiveis_admin_ve_todos(db, admin_token):
     admin = db.scalar(select(Usuario).where(Usuario.email == "admin@teste.local"))
-    assert modulos_acessiveis(db, admin) == {"LAUDOS", "PROCESSOS", "AUDIENCIAS", "CARTAS", "PENDENCIAS"}
+    assert modulos_acessiveis(db, admin) == {
+        "LAUDOS", "PROCESSOS", "AUDIENCIAS", "CARTAS", "PENDENCIAS", "CORRESPONDENCIAS",
+    }
 
 
 def test_modulos_acessiveis_setor_sem_configuracao_libera_tudo_da_operadora(db):
     setor = db.scalar(select(Setor).where(Setor.nome == "Financeiro", Setor.operadora.has(nome="ELITE")))
     usuario = _usuario_no_setor(db, setor.id, "setor.sem-config@teste.local")
-    assert modulos_acessiveis(db, usuario) == {"LAUDOS", "PROCESSOS", "PENDENCIAS"}
+    assert modulos_acessiveis(db, usuario) == {"LAUDOS", "PROCESSOS", "PENDENCIAS", "CORRESPONDENCIAS"}
 
 
 def test_modulos_acessiveis_setor_restrito_fica_so_com_o_configurado(db):
@@ -218,7 +220,7 @@ def test_modulos_acessiveis_uniao_de_varios_setores(db):
     db.add(UsuarioSetor(usuario_id=usuario.id, setor_id=setor_elite.id, papel="COLABORADOR"))
     db.commit()
     # EXIMIA restrito a CARTAS + ELITE sem configuração (tudo da operadora)
-    assert modulos_acessiveis(db, usuario) == {"CARTAS", "LAUDOS", "PROCESSOS", "PENDENCIAS"}
+    assert modulos_acessiveis(db, usuario) == {"CARTAS", "LAUDOS", "PROCESSOS", "PENDENCIAS", "CORRESPONDENCIAS"}
 
 
 def test_setor_restrito_a_laudos_nao_acessa_processos_nem_pendencias(client, db):

@@ -21,6 +21,8 @@ def itens_menu(db: Session, usuario: Usuario) -> list[dict]:
         itens.append({"url": "/app/cartas", "rotulo": "Cartas", "icone": "cartas", "descricao": "Cartas-convite em PDF para clientes e bancos."})
     if "PENDENCIAS" in acessiveis:
         itens.append({"url": "/app/pendencias", "rotulo": "Pendências", "icone": "pendencias", "descricao": "Cobranças em aberto por empresa-cliente."})
+    if "CORRESPONDENCIAS" in acessiveis:
+        itens.append({"url": "/app/correspondencias", "rotulo": "Correspondências", "icone": "correspondencias", "descricao": "Importar planilha e gerar relatório por mês e empresa."})
     if usuario.papel_global in PAPEIS_GLOBAIS:
         # Área administrativa separada (2026-09-28, a pedido da Clara) — um item só no
         # menu, mas continua "ativo" (destacado) em qualquer uma das telas por baixo

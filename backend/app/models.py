@@ -75,6 +75,37 @@ class Laudo(Base):
     empresa_cliente: Mapped[EmpresaCliente] = relationship(back_populates="laudos")
 
 
+class Correspondencia(Base):
+    """Correspondências (Fase 9, ELITE, 2026-10-05) — mesmo padrão de Laudos:
+    upload de planilha acumula histórico aqui, o relatório filtra por mês +
+    empresa já importados. Sem coluna de data/dia na planilha real (só o
+    nome do mês, ex. "JANEIRO") — `mes` é literalmente esse texto,
+    normalizado em maiúsculas; não há controle de ano (confirmado com a
+    Clara: a planilha não distingue, um reimport do mesmo mês em outro ano
+    mistura os dados, aceito assim por enquanto).
+
+    `valor` fica `None` quando a célula de VALOR não é um número
+    reconhecível (ex.: "a combinar") — nesse caso `valor_texto` guarda o
+    texto original da planilha pra mostrar no relatório tal como está
+    (decisão da Clara: não zerar nem travar o import por causa disso), e a
+    linha fica de fora da soma do Total."""
+
+    __tablename__ = "correspondencias"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    empresa_cliente_id: Mapped[int] = mapped_column(ForeignKey("empresas_clientes.id"))
+    mes: Mapped[str] = mapped_column(String(20), index=True)
+    advogado: Mapped[str] = mapped_column(Text)
+    autor: Mapped[str] = mapped_column(Text)
+    adv_preposto: Mapped[str] = mapped_column(Text)
+    valor_texto: Mapped[str] = mapped_column(Text)
+    valor: Mapped[float | None] = mapped_column(Float, nullable=True)
+    tipo_acao: Mapped[str] = mapped_column(Text)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    empresa_cliente: Mapped[EmpresaCliente] = relationship()
+
+
 class FaixaAudiencia(Base):
     __tablename__ = "faixas_audiencia"
 

@@ -2002,3 +2002,71 @@ dos dois tem PDF hoje por esse mesmo motivo, então nenhum ganhou Excel.
   mostra.
 - **Reversível:** sim — rotas e módulo novos, aditivos; nada do fluxo de PDF existente mudou.
 
+### 4.35 Novo módulo: Correspondências (Fase 9, ELITE, 2026-10-05)
+
+A Clara pediu um ambiente novo ("Correspondências") no mesmo padrão de Laudos: upload de planilha,
+filtro por mês + empresa, relatório em PDF e Excel. Planilha de exemplo anexada por ela
+(`PLANILHA_2026.xlsx`) — a aba real com os dados é "ADV. CONTRATOS" (as outras 7 abas do arquivo
+são de outras áreas, sem relação, ignoradas). Antes de implementar, segui a regra mais importante
+que ela deu ("qualquer dúvida, pergunte antes de decidir"): perguntei o nome do ambiente (sua
+mensagem original tinha "[NOME DO AMBIENTE]" sem preencher) e pedi pra completar uma frase que
+cortou no meio ("Regras de leitura da planilha... - Linhas"). Depois de ler o código de Laudos de
+ponta a ponta, apresentei um plano com o que seria reaproveitado vs. novo e perguntei 4 decisões
+em aberto (persistência, fonte da lista de empresas, tratamento de VALOR inválido, linha de total)
+— ver DECISIONS.md 2026-10-05 pras respostas.
+
+- **`app/models.py::Correspondencia`** — tabela nova (`correspondencias`), mesmo padrão de `Laudo`:
+  acumula histórico entre uploads. `mes` é o texto literal da planilha ("JANEIRO"), sem controle de
+  ano — a planilha real não tem coluna de ano, e a Clara confirmou que não precisa por enquanto.
+  `valor` fica `None` quando a célula não é um número reconhecível; `valor_texto` guarda o texto
+  original pra mostrar no relatório (decisão da Clara: não zerar nem travar o import).
+- **`app/services/correspondencias.py`** (novo) — `importar_planilha`/`gerar_relatorio`/
+  `apagar_todas_correspondencias`/`parse_valor`. Usa `load_data_sheets` igual a todo o resto do
+  sistema (varre todas as abas, pega as que batem os cabeçalhos exigidos, por nome — tolerante a
+  maiúscula/acento/espaço). Diferente de Laudos: só `MÊS`+`EMPRESA` ancoram a seleção de aba; as
+  outras 5 colunas são checadas uma a uma depois, pra dar uma mensagem específica de qual coluna
+  falta (a Clara pediu isso explicitamente) em vez da mensagem genérica de "nenhuma aba com essas
+  colunas".
+  - **`parse_valor`** — "R$ 180,00"/"R$160,00" (sem espaço)/"R$ 1.234,56" → número; `None` quando
+    não reconhece (ex.: "a combinar"). Achado real testando contra a planilha da Clara: "R$
+    280,00." (ponto final sobrando, digitação) não batia o regex original — ajustado pra tolerar
+    ponto final solto, recuperando 6 das 9 linhas que teriam ficado "sem valor" por causa só de um
+    típo de digitação, não por serem genuinamente não numéricas.
+- **`app/pdf_export.py::gerar_pdf_correspondencias`** — único relatório do sistema que usa
+  `reportlab.platypus.Table` (com `repeatRows=1`) em vez de desenhar linha a linha no `canvas` como
+  os outros. Motivo: a Clara pediu que texto longo quebre linha dentro da célula (altura de linha
+  variável) e que o cabeçalho da tabela repita quando passa de uma página — as duas coisas já vêm
+  prontas do `Table`, enquanto os outros relatórios (`canvas` cru) exigiriam reimplementar os dois
+  na mão. A faixa azul (Empresa/Mês) só aparece na 1ª página, igual ao padrão que Laudos já tinha
+  (as páginas seguintes não repetem a faixa, só os dados) — confirmado com 7 páginas de teste
+  (textos propositalmente longos), cabeçalho da tabela repetindo certinho em todas.
+- **`app/excel_export.py::gerar_excel_correspondencias`** — mesmo padrão dos outros 4 relatórios em
+  Excel (seção 4.34): VALOR vira célula numérica com formato de moeda quando reconhecido, célula de
+  texto comum quando não (mesma regra do PDF); `wrap_text` nas colunas de texto corrido.
+- **Rotas:** `app/web/routes_correspondencias.py` (`/app/correspondencias`, mesmo padrão de
+  `routes_laudos.py` — importar/gerar relatório/zona de perigo) e `app/api/correspondencias.py`
+  (`/correspondencias/relatorio`, `.pdf`, `.xlsx`, mesma autenticação por cookie). Novo módulo
+  `CORRESPONDENCIAS` em `app/auth.py::MODULOS_OPERADORA` (ELITE, confirmado com a Clara) e
+  `MODULOS_ROTULO`; item novo no menu lateral (`app/web/menu.py`); ícone novo (`correspondencias`,
+  avião de papel) em `_icones.html`.
+- **Bug real encontrado e corrigido durante o teste end-to-end:** a tela de importar renderizava o
+  dropdown de empresas **antes** de rodar o import — uma empresa nova trazida pela própria planilha
+  (ex.: "EROS", que não existia ainda no banco) não aparecia no filtro logo depois de importar, só
+  depois de recarregar a página na mão. Corrigido montando o contexto da página **depois** do
+  import. Não existe em Laudos (não mexido) — mas vale considerar o mesmo ajuste lá depois, como
+  tarefa separada, se a Clara quiser.
+- **Laudos não foi tocado:** nenhuma função de `services/laudos.py`, `pdf_export.py::gerar_pdf_laudos`
+  nem `excel_export.py::gerar_excel_laudos` foi alterada — tudo que Correspondências reaproveita
+  são peças já genéricas/compartilhadas (`_fundo`, `_cabecalho_empresa`, `NAVY`, `MARGEM`,
+  `format_brl`, `nome_arquivo_pdf/xlsx`, `load_data_sheets`, classes CSS). Suíte de testes de
+  Laudos passa sem nenhuma mudança.
+- **Testado:** `tests/test_correspondencias_service.py` (22 testes — parse_valor, import,
+  colunas obrigatórias faltando, relatório, total), `tests/test_api_correspondencias.py` (3),
+  `tests/test_web_correspondencias.py` (5, incluindo o bug do dropdown acima),
+  `tests/test_correspondencias_export.py` (6 — PDF/Excel, valor inválido, paginação). 254 testes no
+  total, lint limpo. Verificado com Playwright: upload da planilha real da Clara (155 linhas
+  novas), filtro Empresa/Mês mostrando só as linhas certas, PDF e Excel baixados batendo com a
+  tela, mês/empresa sem resultado mostrando mensagem amigável (sem erro), Laudos intacto.
+- **Reversível:** sim — módulo, tabela e rotas novos, 100% aditivo; nada existente foi alterado
+  além da correção isolada do bug do dropdown (só em código novo desta sessão).
+

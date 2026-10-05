@@ -15,12 +15,13 @@ import io
 from typing import TYPE_CHECKING
 
 from openpyxl import Workbook
-from openpyxl.styles import Font
+from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
 if TYPE_CHECKING:
     from app.services.audiencias import AudienciasResult
+    from app.services.correspondencias import CorrespondenciasResult
     from app.services.laudos import LaudosResult
     from app.services.processos import RelatorioGeral, RelatorioPorEmpresa
 
@@ -178,4 +179,58 @@ def gerar_excel_processos_por_empresa(relatorio: RelatorioPorEmpresa) -> bytes:
         ws.append(linha)
 
     _autosize(ws, [[relatorio.empresa], ["Assistente", "Nº Processo", "Cliente", "Último evento"]] + linhas_dados)
+    return _para_bytes(wb)
+
+
+def gerar_excel_correspondencias(result: CorrespondenciasResult) -> bytes:
+    """Correspondências (Fase 9, 2026-10-05, a pedido da Clara). VALOR:
+    quando a célula original era um número reconhecível, grava como número
+    de verdade (dá pra somar no Excel); quando não era (ex.: "a
+    combinar"), grava o texto original da planilha — mesma regra da
+    versão em PDF, ver pdf_export.py::gerar_pdf_correspondencias e
+    services/correspondencias.py::parse_valor. `wrap_text` nas colunas de
+    texto longo, a pedido da Clara ("colunas largas o suficiente e quebra
+    de texto") — o Excel recalcula a altura da linha sozinho ao abrir."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Correspondências"
+
+    ws.append(["Empresa", result.empresa])
+    ws["A1"].font = _NEGRITO
+    ws.append(["Mês", result.mes.title()])
+    ws[f"A{ws.max_row}"].font = _NEGRITO
+    ws.append([])
+
+    _cabecalho_tabela(ws, ["Advogado", "Autor", "Adv / Preposto", "Valor", "Tipo de ação"])
+    linha_cabecalho = ws.max_row
+    linhas_dados = [
+        [linha.advogado, linha.autor, linha.adv_preposto, linha.valor if linha.valor is not None else linha.valor_texto, linha.tipo_acao]
+        for linha in result.linhas
+    ]
+    for linha in linhas_dados:
+        ws.append(linha)
+    ws.append(["", "", "", "", ""])
+    ws[f"D{ws.max_row}"] = "Total"
+    ws[f"D{ws.max_row}"].font = _NEGRITO
+    ws[f"E{ws.max_row}"] = result.total
+    ws[f"E{ws.max_row}"].font = _NEGRITO
+    ws[f"E{ws.max_row}"].number_format = _FORMATO_MOEDA
+
+    quebra = Alignment(wrap_text=True, vertical="top")
+    for row in ws.iter_rows(min_row=linha_cabecalho + 1, max_row=linha_cabecalho + len(linhas_dados)):
+        for cel in row:
+            cel.alignment = quebra
+        if isinstance(row[3].value, int | float):
+            row[3].number_format = _FORMATO_MOEDA
+
+    _autosize(
+        ws,
+        [["Advogado", "Autor", "Adv / Preposto", "Valor", "Tipo de ação"]]
+        + [[v if not isinstance(v, float) else "R$ 000.000,00" for v in linha] for linha in linhas_dados],
+    )
+    # Colunas de texto corrido ficam mais largas que o autosize padrão
+    # sozinho daria (ele mede o texto inteiro numa linha só) — sem isso, a
+    # coluna fica larguíssima pra caber a frase mais longa sem quebrar.
+    for letra, largura in (("A", 30), ("B", 32), ("E", 28)):
+        ws.column_dimensions[letra].width = min(ws.column_dimensions[letra].width or largura, largura)
     return _para_bytes(wb)

@@ -50,6 +50,7 @@ MODULOS_OPERADORA: dict[str, str | None] = {
     "AUDIENCIAS": "EXIMIA",
     "CARTAS": "EXIMIA",
     "PENDENCIAS": None,
+    "CORRESPONDENCIAS": "ELITE",
 }
 
 # Rótulo pra tela de Setores (checkboxes de módulo) — mesmo texto usado no
@@ -60,6 +61,7 @@ MODULOS_ROTULO: dict[str, str] = {
     "AUDIENCIAS": "Audiências",
     "CARTAS": "Cartas",
     "PENDENCIAS": "Pendências",
+    "CORRESPONDENCIAS": "Correspondências",
 }
 
 

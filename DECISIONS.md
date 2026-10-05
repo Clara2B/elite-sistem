@@ -1774,3 +1774,54 @@ rota em `test_api_laudos.py`/`test_web.py`. 218 testes, lint limpo. Verificado c
 4 downloads completam, conteúdo bate com a tela.
 
 **Reversível:** sim — módulo e rotas novos, aditivos.
+
+## 2026-10-05 — Novo módulo "Correspondências": perguntas respondidas e decisões
+
+**Pedido da Clara:** ambiente novo, mesmo padrão de Laudos (upload, filtro mês+empresa, PDF/Excel),
+com uma regra explícita no topo da mensagem: "qualquer dúvida, pergunte antes de decidir — não
+assuma nem escolha uma solução por conta própria". A mensagem original tinha o nome do ambiente
+como placeholder ("[NOME DO AMBIENTE]") não preenchido, e cortava no meio de uma frase.
+
+**Primeira rodada de perguntas (antes de qualquer código):**
+1. Nome do ambiente → **"Correspondências"**.
+2. Completar a frase cortada → regra de linha em branco (ignorar), regra de coluna faltando
+   (mensagem clara) e cinco perguntas que a própria Clara já tinha identificado como precisando da
+   minha pergunta antes de implementar (itens 3-4 abaixo).
+
+**Segunda rodada, depois de explorar o código de Laudos e ler a planilha de exemplo anexada (achei
+a aba real: "ADV. CONTRATOS", dentro de `PLANILHA_2026.xlsx`, que tem mais 7 abas sem relação):**
+3. **Operadora** → ELITE (mesma de Laudos/Processos).
+4. **Controle de ano** → a planilha real só tem o nome do mês ("JANEIRO"), sem ano — a Clara
+   confirmou que não precisa controlar ano por enquanto (aceitou o risco de reimportar o mesmo mês
+   de anos diferentes misturar os dados).
+5. **Persistência** → a planilha enviada fica salva (acumula histórico), mesmo padrão exato de
+   Laudos — não é "gerar e esquecer".
+6. **Fonte da lista de empresas no filtro** → tabela oficial Empresas-clientes (não só as que
+   aparecem na planilha), mesmo padrão de Laudos.
+7. **VALOR vazio/inválido** → a Clara pediu pra manter escrito o que estiver na planilha (não
+   zerar, não travar o import) — diferente da minha sugestão original (ignorar a linha). Isso
+   significa que a coluna VALOR no banco guarda tanto o número interpretado (quando dá) quanto o
+   texto original (`Correspondencia.valor`/`valor_texto`) — o relatório mostra o número formatado
+   quando existe, ou o texto cru quando não.
+8. **Linha de Total** → sim, soma de VALOR, mesmo padrão de Laudos (só soma as linhas com número
+   reconhecido, por consequência direta da decisão 7).
+
+**Discrepância encontrada e esclarecida sem precisar perguntar de novo:** a mensagem da Clara
+mencionava "aplique a mesma regra já usada em Laudos" pra separar nome de Dra. do nome da empresa
+— mas essa regra (`_separar_empresa_cliente`) existe em Gestão de Processos, não em Laudos. A
+planilha real não tem esse problema (coluna EMPRESA já vem limpa: EROS, REVISION, NEXUS, etc.) —
+decidi não aplicar nenhuma separação, já que os dados reais não precisam.
+
+**Achado técnico durante a implementação, não uma decisão de negócio:** valores como "R$ 280,00."
+(ponto final sobrando) apareciam na planilha real e não batiam o parser original — ajustado pra
+tolerar esse típo de digitação (ponto final solto no fim), recuperando 6 de 9 linhas que teriam
+ficado "sem valor reconhecido" por um erro de digitação, não por serem genuinamente não numéricas
+(tipo "a combinar", que continua corretamente como texto).
+
+**Testado:** 36 testes novos (serviço, API, web, PDF/Excel) — ver ARCHITECTURE.md 4.35 pros
+detalhes. 254 testes no total, lint limpo. Verificado com Playwright usando a planilha real que a
+Clara anexou (155 linhas novas importadas) e com uma amostra fictícia de textos bem longos (pra
+testar quebra de linha e paginação com cabeçalho repetido) — ambas as amostras (PDF e Excel) foram
+enviadas pra aprovação visual da Clara antes de considerar a tarefa concluída.
+
+**Reversível:** sim — módulo, tabela e rotas 100% novos; nada em Laudos foi alterado.

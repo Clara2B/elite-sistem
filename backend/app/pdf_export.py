@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from reportlab.lib.colors import HexColor, white, whitesmoke
-from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
+from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
-from reportlab.platypus import Frame, Paragraph
+from reportlab.platypus import Frame, Paragraph, SimpleDocTemplate, Table, TableStyle
 
 from app.services.cartas import href_absoluto
 from app.utils import format_brl
@@ -21,6 +21,7 @@ from app.utils import format_brl
 if TYPE_CHECKING:
     from app.services.audiencias import AudienciasResult
     from app.services.cartas import ConviteBanco, ConviteCliente
+    from app.services.correspondencias import CorrespondenciasResult
     from app.services.laudos import LaudosResult
     from app.services.processos import RelatorioGeral, RelatorioPorEmpresa
 
@@ -511,4 +512,76 @@ def gerar_pdf_carta_banco(convite: ConviteBanco) -> bytes:
 
     c.showPage()
     c.save()
+    return buffer.getvalue()
+
+
+def gerar_pdf_correspondencias(result: CorrespondenciasResult) -> bytes:
+    """Correspondências (Fase 9, 2026-10-05, a pedido da Clara) — diferente
+    dos outros relatórios (que desenham linha a linha direto no `canvas`,
+    com paginação manual via `c.showPage()`), este usa `Table` do
+    `reportlab.platypus` com `repeatRows=1`: a Clara pediu que texto longo
+    quebre linha dentro da célula (altura de linha variável, não corta
+    nome/frase) e que o cabeçalho da tabela se repita quando o relatório
+    passa de uma página — as duas coisas já vêm prontas do `Table`, sem
+    reimplementar cálculo de altura de linha/paginação na mão feito nos
+    outros relatórios. Célula de texto longo = `Paragraph` (só `Paragraph`
+    quebra linha dentro de uma célula de `Table`; uma `str` direta não)."""
+    buffer = io.BytesIO()
+
+    estilo_celula = ParagraphStyle(
+        "corresp_celula", fontName="Helvetica", fontSize=8.5, leading=11, textColor=HexColor("#222222")
+    )
+    estilo_cabecalho = ParagraphStyle(
+        "corresp_cabecalho", fontName="Helvetica-Bold", fontSize=9, leading=12, textColor=whitesmoke
+    )
+    estilo_total = ParagraphStyle(
+        "corresp_total", fontName="Helvetica-Bold", fontSize=9, leading=12, textColor=NAVY, alignment=TA_RIGHT
+    )
+
+    cabecalhos = ["ADVOGADO", "AUTOR", "ADV / PREPOSTO", "VALOR", "TIPO DE AÇÃO"]
+    dados = [[Paragraph(h, estilo_cabecalho) for h in cabecalhos]]
+    for linha in result.linhas:
+        valor_str = format_brl(linha.valor) if linha.valor is not None else (linha.valor_texto or "—")
+        dados.append([
+            Paragraph(linha.advogado or "—", estilo_celula),
+            Paragraph(linha.autor or "—", estilo_celula),
+            Paragraph(linha.adv_preposto or "—", estilo_celula),
+            Paragraph(valor_str, estilo_celula),
+            Paragraph(linha.tipo_acao or "—", estilo_celula),
+        ])
+    dados.append([
+        "", "", "", Paragraph("Total", estilo_total), Paragraph(format_brl(result.total), estilo_total),
+    ])
+
+    largura_util = LARGURA - 2 * MARGEM
+    col_larguras = [w * largura_util for w in (0.22, 0.26, 0.15, 0.14, 0.23)]
+    tabela = Table(dados, colWidths=col_larguras, repeatRows=1)
+    tabela.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+        ("GRID", (0, 0), (-1, -2), 0.4, HexColor("#CBD2D9")),
+        ("LINEABOVE", (0, -1), (-1, -1), 0.8, NAVY),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -2), [white, HexColor("#F3F5F8")]),
+    ]))
+
+    def _desenhar_fundo(c, _doc):
+        _fundo(c, FUNDO_LAUDOS, cobrir_rodape=True)
+
+    def _primeira_pagina(c, _doc):
+        _fundo(c, FUNDO_LAUDOS, cobrir_rodape=True)
+        _cabecalho_empresa(c, TOPO_CONTEUDO, result.empresa, None, [f"Mês: {result.mes.title()}"])
+
+    # A faixa azul (Empresa/Mês) só aparece na 1ª página, igual ao resto do
+    # sistema (ex.: Laudos também não repete a faixa nas páginas seguintes
+    # — só os dados continuam) — a margem de topo reserva esse espaço em
+    # toda página pra simplificar, mesmo nas que não desenham a faixa.
+    margem_topo = ALTURA - (TOPO_CONTEUDO - 62)
+    doc = SimpleDocTemplate(
+        buffer, pagesize=A4, topMargin=margem_topo, leftMargin=MARGEM, rightMargin=MARGEM, bottomMargin=RODAPE_LIMITE,
+    )
+    doc.build([tabela], onFirstPage=_primeira_pagina, onLaterPages=_desenhar_fundo)
     return buffer.getvalue()
