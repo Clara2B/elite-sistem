@@ -2070,3 +2070,41 @@ em aberto (persistência, fonte da lista de empresas, tratamento de VALOR invál
 - **Reversível:** sim — módulo, tabela e rotas novos, 100% aditivo; nada existente foi alterado
   além da correção isolada do bug do dropdown (só em código novo desta sessão).
 
+### 4.36 Excel dos 5 relatórios com o mesmo visual do PDF (2026-10-06)
+
+A Clara viu as amostras de Correspondências e pediu: PDFs mantêm a formatação atual, mas as
+planilhas devem "ser geradas na mesma configuração dos PDFs, mas com o formato de planilha para
+editar nomes e valores se necessário". Perguntei se era só pra Correspondências ou pros 5
+relatórios em Excel — ela confirmou: todos.
+
+- **`app/excel_export.py`** reescrito — três funções compartilhadas novas usadas pelos 5
+  geradores: `_faixa_titulo` (faixa navy no topo, uma linha mesclada por item — mesmo texto/ordem
+  que `pdf_export.py::_cabecalho_empresa` desenha no PDF, ex.: "Empresa: X", "CNPJ: Y", "Status:
+  Z"), `_cabecalho_tabela` (linha de cabeçalho da tabela com fundo navy/texto branco, em vez de só
+  negrito) e `_estilizar_linhas_dados` (borda fina + quebra de texto em toda linha de dado, com
+  fundo alternado claro/branco — mesma ideia do `ROWBACKGROUNDS` que o PDF de Correspondências já
+  tinha). A linha de Total virou uma barra navy com texto branco negrito em todas as colunas —
+  mesmo destaque que Laudos/Audiências/Processos já tinham no PDF (faixa navy cheia), só que agora
+  reproduzido no Excel também.
+- **Estrutura dos dados continua "achatada"** (uma linha por item, sem as múltiplas tabelas/seções
+  por página que alguns PDFs mostram) — isso não mudou: só o visual (cores/faixa/cabeçalho)
+  replica o PDF, não a paginação. É o que mantém a planilha fácil de editar/filtrar/somar, que é
+  literalmente o que a Clara pediu ("formato de planilha para editar nomes e valores").
+- **Achado ao replicar a faixa do PDF:** o Excel de "Processos — Geral" não tinha "Empresa: ELITE
+  MEDIAÇÕES" nem "Relatório geral de processos" na faixa (só "Período") — o PDF tinha essas duas
+  linhas e o Excel não. Corrigido pra bater exatamente com o que o PDF mostra.
+- **Pequena simplificação de estrutura:** o Total de Audiências, que antes ficava em duas linhas
+  (rótulo "Total" numa linha, valor na linha de baixo), virou uma linha só (rótulo + valor juntos)
+  — mesmo padrão de Laudos/Processos, mais simples de estilizar com a barra navy e mais consistente
+  entre os relatórios.
+- **Testado:** todos os testes de `tests/test_excel_export.py`/`test_correspondencias_export.py`/
+  `test_api_laudos.py`/`test_api_correspondencias.py` ajustados pra nova estrutura de linha (faixa
+  mesclada em vez de "rótulo | valor" em duas células) — nenhum teste novo precisou ser criado, os
+  mesmos continuam cobrindo conteúdo/formatação. 254 testes, lint limpo. Verificado inspecionando
+  as propriedades de cada célula (cor de fundo, negrito, texto branco, mesclagem, `wrap_text`) nos
+  5 relatórios — o renderizador de PDF/visualização de planilha deste ambiente (LibreOffice
+  headless) não conseguiu converter nenhum .xlsx pra imagem por um problema de ambiente não
+  relacionado ao conteúdo dos arquivos (nem um `.xlsx` em branco, recém-criado, converteu) — a
+  verificação ficou na inspeção direta das propriedades de célula em vez de uma captura visual.
+- **Reversível:** sim — é só o visual da função de export; nenhuma estrutura de dado/banco mudou.
+

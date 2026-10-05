@@ -70,7 +70,7 @@ def test_import_e_relatorio_via_api(db, admin_token):
         assert resp_xlsx.content[:2] == b"PK"
         planilha = openpyxl.load_workbook(io.BytesIO(resp_xlsx.content)).active
         linhas = list(planilha.iter_rows(values_only=True))
-        assert linhas[0][:2] == ("Empresa", "ABSOLUTA")
+        assert linhas[0][0] == "Empresa: ABSOLUTA"
 
         resp_sem_login = client.get("/laudos/relatorio", params={"empresa": "ABSOLUTA", "ano": 2026, "mes": 9})
         assert resp_sem_login.status_code == 401

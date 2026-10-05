@@ -1825,3 +1825,30 @@ testar quebra de linha e paginação com cabeçalho repetido) — ambas as amost
 enviadas pra aprovação visual da Clara antes de considerar a tarefa concluída.
 
 **Reversível:** sim — módulo, tabela e rotas 100% novos; nada em Laudos foi alterado.
+
+## 2026-10-06 — Excel dos 5 relatórios com o mesmo visual do PDF
+
+**Feedback da Clara:** "Os PDFs estão ok, mantenha a mesma formatação, porém, para as planilhas,
+quero que elas sejam geradas na mesma configuração dos PDFs, mas com o formato de planilha para
+editar nomes e valores se necessários" — reação às amostras de Correspondências.
+
+**Pergunta antes de implementar:** só Correspondências, ou todos os 5 relatórios em Excel? **Ela
+confirmou: todos.**
+
+**Implementado:** faixa azul no topo (mesmo texto do PDF), cabeçalho da tabela com fundo navy/
+texto branco, linhas intercaladas claro/branco, Total numa barra navy — aplicado aos 5 relatórios
+(Laudos, Audiências, Processos Geral, Processos Por Empresa, Correspondências). A estrutura de
+dados continua uma linha por item (não recriei a paginação/múltiplas tabelas por seção que alguns
+PDFs têm) — isso é o que mantém a planilha editável/somável, que é o que ela pediu explicitamente.
+
+**Achado ao comparar com o PDF:** a faixa do Excel de "Processos — Geral" estava incompleta (só
+"Período", faltava "Empresa: ELITE MEDIAÇÕES" e "Relatório geral de processos" que o PDF mostra) —
+corrigido.
+
+**Testado:** 254 testes (os já existentes, ajustados pra nova estrutura de linha — nenhum teste
+novo precisou ser escrito). Lint limpo. Verificado inspecionando as propriedades de cada célula
+(cor, negrito, mesclagem) nos 5 relatórios, já que o conversor de planilha pra imagem deste
+ambiente (LibreOffice) não funcionou por um problema de ambiente (nem um arquivo em branco
+converteu) — não é um problema dos arquivos gerados.
+
+**Reversível:** sim — só o visual da função de export mudou.

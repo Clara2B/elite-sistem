@@ -65,7 +65,7 @@ def test_import_e_relatorio_via_api(db, admin_token):
         )
         planilha = openpyxl.load_workbook(io.BytesIO(resp_xlsx.content)).active
         linhas = list(planilha.iter_rows(values_only=True))
-        assert linhas[0][:2] == ("Empresa", "EROS")
+        assert linhas[0][0] == "Empresa: EROS"
 
         resp_sem_login = client.get("/correspondencias/relatorio", params={"empresa": "EROS", "mes": "Janeiro"})
         assert resp_sem_login.status_code == 401

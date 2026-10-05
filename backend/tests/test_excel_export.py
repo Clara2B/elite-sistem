@@ -52,8 +52,8 @@ def test_excel_laudos_linhas_e_formatacao():
     assert cabecalho == ["Data", "Cliente", "Tipo de laudo", "Status", "Valor"]
 
     linhas = list(ws.iter_rows(values_only=True))
-    assert ("Empresa", "Absoluta") == linhas[0][:2]
-    assert ("CNPJ", "00.000.000/0001-00") == linhas[1][:2]
+    assert linhas[0][0] == "Empresa: ABSOLUTA"
+    assert linhas[1][0] == "CNPJ: 00.000.000/0001-00"
     # uma linha por item, nenhum dado perdido
     assert linhas[5][1:4] == ("Fulano", "Laudo X", "SOLICITACAO")
     assert linhas[6][1:4] == ("Beltrana", "Laudo Y", "SOLICITACAO")
@@ -81,8 +81,8 @@ def test_excel_laudos_sem_cnpj_nao_desalinha_a_tabela():
     ws = _abrir(gerar_excel_laudos(result))
     linhas = list(ws.iter_rows(values_only=True))
     # sem CNPJ: Empresa / Status / (branco) / cabeçalho / dado — uma linha a menos que com CNPJ
-    assert linhas[0][:2] == ("Empresa", "Zenith")
-    assert linhas[1][:2] == ("Status", "SOLICITACAO")
+    assert linhas[0][0] == "Empresa: ZENITH"
+    assert linhas[1][0] == "Status: SOLICITACAO"
     assert linhas[3][:5] == ("Data", "Cliente", "Tipo de laudo", "Status", "Valor")
     assert linhas[4][1:4] == ("Ciclana", "Laudo Z", "SOLICITACAO")
 
@@ -94,10 +94,10 @@ def test_excel_audiencias_lista_clientes_numerados():
     )
     ws = _abrir(gerar_excel_audiencias(result))
     linhas = list(ws.iter_rows(values_only=True))
-    assert ("Empresa", "Absoluta") == linhas[0]
+    assert linhas[0][0] == "Empresa: ABSOLUTA"
     assert (1, "FULANO") == linhas[8]
     assert (2, "BELTRANA") == linhas[9]
-    assert linhas[-1] == (None, 160)
+    assert linhas[-1] == ("Total", 160)
 
 
 def test_excel_processos_geral_junta_as_duas_partes_por_processo():
@@ -118,9 +118,10 @@ def test_excel_processos_geral_junta_as_duas_partes_por_processo():
     )
     ws = _abrir(gerar_excel_processos_geral(relatorio))
     linhas = list(ws.iter_rows(values_only=True))
-    assert linhas[2] == ("Empresa", "Assistente", "Nº Processo", "Cliente", "Evento", "Fatal", "Observação")
-    assert linhas[3] == ("Absoluta", "Danilo", "1234567-12.2026.8.11.0001", "Fulano", "CUSTAS", "Sim", "ok")
-    assert linhas[4] == ("Zenith", "Ana", "7654321-21.2026.8.11.0002", "Ciclana", "DESPACHO", "Não", "pendente")
+    assert linhas[0][0] == "Empresa: ELITE MEDIAÇÕES"
+    assert linhas[4] == ("Empresa", "Assistente", "Nº Processo", "Cliente", "Evento", "Fatal", "Observação")
+    assert linhas[5] == ("Absoluta", "Danilo", "1234567-12.2026.8.11.0001", "Fulano", "CUSTAS", "Sim", "ok")
+    assert linhas[6] == ("Zenith", "Ana", "7654321-21.2026.8.11.0002", "Ciclana", "DESPACHO", "Não", "pendente")
 
 
 def test_excel_processos_por_empresa():
@@ -135,7 +136,7 @@ def test_excel_processos_por_empresa():
     )
     ws = _abrir(gerar_excel_processos_por_empresa(relatorio))
     linhas = list(ws.iter_rows(values_only=True))
-    assert linhas[0][:2] == ("Empresa", "Absoluta")
+    assert linhas[0][0] == "Empresa: ABSOLUTA"
     assert linhas[4][:5] == ("Assistente", "Nº Processo", "Cliente", "Último evento", "Última observação")
     assert linhas[5][:5] == ("Danilo", "1234567-12.2026.8.11.0001", "Fulano", "CUSTAS", "ok")
 
@@ -163,7 +164,7 @@ def test_rota_audiencias_relatorio_xlsx(client, db):
     assert resposta.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     planilha = load_workbook(io.BytesIO(resposta.content)).active
     linhas = list(planilha.iter_rows(values_only=True))
-    assert linhas[0][:2] == ("Empresa", "ALFA")
+    assert linhas[0][0] == "Empresa: ALFA"
 
 
 def test_rota_processos_relatorio_xlsx_por_empresa(client, db):
@@ -186,4 +187,4 @@ def test_rota_processos_relatorio_xlsx_geral(client, db):
     assert resposta.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     planilha = load_workbook(io.BytesIO(resposta.content)).active
     linhas = list(planilha.iter_rows(values_only=True))
-    assert linhas[2][:7] == ("Empresa", "Assistente", "Nº Processo", "Cliente", "Evento", "Fatal", "Observação")
+    assert linhas[4][:7] == ("Empresa", "Assistente", "Nº Processo", "Cliente", "Evento", "Fatal", "Observação")

@@ -62,8 +62,8 @@ def test_pdf_nao_quebra_com_valor_invalido():
 def test_excel_tem_cabecalho_mes_e_empresa_e_linhas():
     ws = load_workbook(io.BytesIO(gerar_excel_correspondencias(_resultado()))).active
     linhas = list(ws.iter_rows(values_only=True))
-    assert linhas[0][:2] == ("Empresa", "Empresa Teste Ltda")
-    assert linhas[1][:2] == ("Mês", "Janeiro")
+    assert linhas[0][0] == "Empresa: EMPRESA TESTE LTDA"
+    assert linhas[1][0] == "Mês: Janeiro"
     assert linhas[3][:5] == ("Advogado", "Autor", "Adv / Preposto", "Valor", "Tipo de ação")
     assert linhas[4][0] == _NOME_LONGO
     assert linhas[4][3] == 180
