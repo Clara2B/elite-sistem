@@ -1750,3 +1750,27 @@ num relatório já conhecido.
 
 **Reversível:** sim — reverter a condição `or_(...)` nas duas funções desfaz, sem mexer em dado
 nenhum já importado.
+
+## 2026-10-05 — Relatórios em Excel (Cartas e Pendências ficam de fora)
+
+**Pedido da Clara:** "preciso que todos os relatórios do sistema tenham a opção de serem baixados
+em formato de excel".
+
+**Decisão de escopo (sem ambiguidade de negócio — segui a própria definição do sistema do que é
+"relatório"):** Laudos, Audiências e Gestão de Processos (Geral e Por Empresa) ganharam Excel —
+são os 4 que já tinham PDF, isto é, os relatórios tabulares de verdade. Cartas (carta-convite, já
+tem "Copiar texto" desde 2026-09-29) e Pendências (mensagem de cobrança em texto corrido) ficam de
+fora — nenhum dos dois é uma tabela/lista, nenhum dos dois tinha PDF antes por esse mesmo motivo.
+Se a Clara quiser Excel pra algum desses dois mesmo assim, é um pedido novo (teria que definir o
+que viraria linha de planilha, já que hoje nenhum dos dois é tabular).
+
+**Implementado:** `app/excel_export.py` novo, uma função por relatório, reaproveitando o mesmo
+dataclass de resultado que o PDF já usa (sem repetir consulta ao banco). Rotas `GET /<módulo>/
+relatorio.xlsx`, mesmos parâmetros do `.pdf`, mesma autenticação por cookie. Botão "Baixar Excel"
+ao lado de "Baixar PDF" nas 3 telas.
+
+**Testado:** `tests/test_excel_export.py` novo (conteúdo/formatação das 4 planilhas) + testes de
+rota em `test_api_laudos.py`/`test_web.py`. 218 testes, lint limpo. Verificado com Playwright: os
+4 downloads completam, conteúdo bate com a tela.
+
+**Reversível:** sim — módulo e rotas novos, aditivos.

@@ -7,11 +7,15 @@ from sqlalchemy.orm import Session
 from app.api._shared import salvar_temp
 from app.auth import require_admin, require_modulo
 from app.db import get_db
+from app.excel_export import (
+    gerar_excel_processos_geral,
+    gerar_excel_processos_por_empresa,
+)
 from app.models import Usuario
 from app.pdf_export import gerar_pdf_processos_geral, gerar_pdf_processos_por_empresa
 from app.services import processos as processos_service
 from app.services.auditoria import registrar
-from app.utils import nome_arquivo_pdf
+from app.utils import nome_arquivo_pdf, nome_arquivo_xlsx
 
 router = APIRouter(prefix="/processos", tags=["processos"])
 
@@ -98,6 +102,35 @@ def relatorio_pdf(
     nome_arquivo = nome_arquivo_pdf("processos", empresa or "geral", str(periodo_ini), str(periodo_fim))
     return Response(
         content=pdf_bytes, media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},
+    )
+
+
+@router.get("/relatorio.xlsx")
+def relatorio_xlsx(
+    periodo_ini: date,
+    periodo_fim: date,
+    tipo: str = "geral",
+    empresa: str | None = None,
+    assistente: str | None = None,
+    usuario: Usuario = Depends(_acesso_elite),
+    db: Session = Depends(get_db),
+):
+    try:
+        if tipo == "empresa":
+            if not empresa:
+                raise ValueError("Selecione uma empresa para o relatório 'Por empresa'.")
+            resultado = processos_service.gerar_relatorio_por_empresa(db, empresa, periodo_ini, periodo_fim, assistente)
+            excel_bytes = gerar_excel_processos_por_empresa(resultado)
+        else:
+            resultado = processos_service.gerar_relatorio_geral(db, periodo_ini, periodo_fim, assistente)
+            excel_bytes = gerar_excel_processos_geral(resultado)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    registrar(db, usuario, "GEROU_RELATORIO_PROCESSOS_XLSX", entidade="processo", detalhes=f"tipo={tipo}")
+    nome_arquivo = nome_arquivo_xlsx("processos", empresa or "geral", str(periodo_ini), str(periodo_fim))
+    return Response(
+        content=excel_bytes, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},
     )
 

@@ -68,6 +68,10 @@
            href="/laudos/relatorio.pdf?empresa={{ filtro.empresa }}&ano={{ filtro.ano }}&mes={{ filtro.mes }}&status={{ filtro.status }}">
           Baixar PDF
         </a>
+        <a class="botao secundario" style="float:right; font-size:0.82rem; padding:6px 12px; margin-right:8px;"
+           href="/laudos/relatorio.xlsx?empresa={{ filtro.empresa }}&ano={{ filtro.ano }}&mes={{ filtro.mes }}&status={{ filtro.status }}">
+          Baixar Excel
+        </a>
       </h2>
       <p class="subtitulo">
         {{ resultado.periodo_ini.strftime("%d/%m/%Y") }} a {{ resultado.periodo_fim.strftime("%d/%m/%Y") }}

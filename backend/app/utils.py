@@ -85,15 +85,25 @@ def format_brl(value: float) -> str:
     return f"R$ {text}"
 
 
-def nome_arquivo_pdf(*partes: str) -> str:
-    """Monta um nome de arquivo seguro para o cabeçalho `Content-Disposition`
-    (Fase 6) a partir de textos livres (ex.: nome de empresa-cliente) — troca
-    espaços por "_" e remove caracteres que poderiam quebrar o cabeçalho ou
-    virar um nome de arquivo estranho."""
+def _nome_arquivo(extensao: str, partes: tuple[str, ...]) -> str:
     limpas = []
     for parte in partes:
         texto = normalize(parte).replace(" ", "_")
         texto = "".join(c for c in texto if c.isalnum() or c in "_-")
         if texto:
             limpas.append(texto)
-    return "_".join(limpas) + ".pdf"
+    return "_".join(limpas) + extensao
+
+
+def nome_arquivo_pdf(*partes: str) -> str:
+    """Monta um nome de arquivo seguro para o cabeçalho `Content-Disposition`
+    (Fase 6) a partir de textos livres (ex.: nome de empresa-cliente) — troca
+    espaços por "_" e remove caracteres que poderiam quebrar o cabeçalho ou
+    virar um nome de arquivo estranho."""
+    return _nome_arquivo(".pdf", partes)
+
+
+def nome_arquivo_xlsx(*partes: str) -> str:
+    """Mesma lógica de `nome_arquivo_pdf` (2026-10-05, versão em Excel dos
+    relatórios) — ver app/excel_export.py."""
+    return _nome_arquivo(".xlsx", partes)

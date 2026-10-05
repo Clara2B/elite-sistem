@@ -1957,3 +1957,48 @@ por período) — mesmo comportamento que qualquer outra data de andamento já t
 - **Reversível:** sim — trocar o `or_(...)` de volta por só `.is_(False)` nas duas funções desfaz,
   sem precisar reimportar nada.
 
+### 4.34 Relatórios em Excel (2026-10-05)
+
+A Clara pediu: "preciso que todos os relatórios do sistema tenham a opção de serem baixados em
+formato de excel". Os relatórios tabulares do sistema já baixavam em PDF (Laudos, Audiências,
+Gestão de Processos — Geral e Por Empresa, todos via `/<módulo>/relatorio.pdf` em `app/api/*.py`,
+autenticados pelo mesmo cookie da sessão web, ver `app/auth.py`). Cartas e Pendências ficam de
+fora: Cartas é texto de carta-convite, não uma lista/tabela (já tem "Copiar texto", ver seção
+4.29); Pendências gera uma mensagem de cobrança em texto corrido, não um relatório tabular — nenhum
+dos dois tem PDF hoje por esse mesmo motivo, então nenhum ganhou Excel.
+
+- **`app/excel_export.py`** (novo) — `gerar_excel_laudos`/`gerar_excel_audiencias`/
+  `gerar_excel_processos_geral`/`gerar_excel_processos_por_empresa`, cada uma recebendo o mesmo
+  dataclass de resultado que a função `gerar_pdf_*` correspondente (`app/pdf_export.py`) já usa —
+  mesmos dados, sem repetir nenhuma consulta ao banco. Usa `openpyxl` (já era dependência, só pra
+  leitura de planilha até então) pra escrever — sem lib nova. Datas e valores viram célula de
+  verdade (`datetime`/`float` com `number_format`), não texto formatado à mão, pra dar pra somar/
+  filtrar/ordenar direto no Excel.
+- **Processos Geral é "achatado":** o PDF mostra duas tabelas por empresa (Parte 1: Assistente/Nº
+  processo/Evento/Fatal; Parte 2: Cliente/Nº processo/Último evento/Última observação, mesmo
+  processo repetido nas duas). No Excel isso vira uma linha por processo só, com as colunas das
+  duas partes juntas (casadas pelo nº do processo) e Empresa como coluna — mais fácil de filtrar/
+  somar numa planilha só do que duas tabelas por seção/empresa como no PDF.
+- **Rotas novas:** `GET /laudos/relatorio.xlsx`, `/audiencias/relatorio.xlsx`,
+  `/processos/relatorio.xlsx` (mesmos parâmetros dos `.pdf` equivalentes, inclusive `tipo=geral|
+  empresa` em Processos) — `Content-Type:
+  application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, mesmo padrão de nome de
+  arquivo (`app/utils.py::nome_arquivo_xlsx`, generalizado a partir de `nome_arquivo_pdf` sem mudar
+  nenhum call site existente).
+- **UI:** botão "Baixar Excel" ao lado de "Baixar PDF" em `laudos.html`/`audiencias.html`/
+  `processos.html` (nos dois tipos de relatório de Processos) — mesmo link direto (sem JS), mesma
+  autenticação por cookie que o PDF já usava.
+- **Bug pego nos próprios testes, antes de chegar em produção:** `ws.append([])` (linha em branco
+  separando o bloco de cabeçalho da tabela) não avança `ws.max_row` do jeito previsível no
+  openpyxl — calcular a posição da linha de cabeçalho da tabela de antemão (`max_row + 1`, antes de
+  escrevê-la) saiu errado por uma linha, fazendo a formatação de data/moeda vazar pro texto do
+  cabeçalho e faltar na última linha de dado. Corrigido capturando a posição **depois** de escrever
+  o cabeçalho, nunca antes — ver comentário em `gerar_excel_laudos`.
+- **Testado:** `tests/test_excel_export.py` (novo) — conteúdo/formatação das 4 planilhas, inclusive
+  o caso sem CNPJ (testa que a tabela não desalinha) e a junção Parte 1 + Parte 2 de Processos
+  Geral; mais os testes de rota (auth por cookie, Content-Type, nome de arquivo) em
+  `test_api_laudos.py` e `test_web.py`. 218 testes, lint limpo. Verificado com Playwright nas 4
+  telas reais: os 4 downloads completam e o conteúdo da planilha bate exatamente com o que a tela
+  mostra.
+- **Reversível:** sim — rotas e módulo novos, aditivos; nada do fluxo de PDF existente mudou.
+

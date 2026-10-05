@@ -5,11 +5,12 @@ from sqlalchemy.orm import Session
 from app.api._shared import salvar_temp
 from app.auth import require_admin, require_modulo
 from app.db import get_db
+from app.excel_export import gerar_excel_laudos
 from app.models import Usuario
 from app.pdf_export import gerar_pdf_laudos
 from app.services import laudos as laudos_service
 from app.services.auditoria import registrar
-from app.utils import nome_arquivo_pdf
+from app.utils import nome_arquivo_pdf, nome_arquivo_xlsx
 
 router = APIRouter(prefix="/laudos", tags=["laudos"])
 
@@ -97,5 +98,29 @@ def relatorio_pdf(
     nome_arquivo = nome_arquivo_pdf("laudos", resultado.empresa, f"{ano}-{mes:02d}")
     return Response(
         content=pdf_bytes, media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},
+    )
+
+
+@router.get("/relatorio.xlsx")
+def relatorio_xlsx(
+    empresa: str,
+    ano: int,
+    mes: int,
+    status: str = laudos_service.OPCOES_STATUS[0],
+    cnpj: str | None = None,
+    usuario: Usuario = Depends(_acesso_elite),
+    db: Session = Depends(get_db),
+):
+    periodo_ini, periodo_fim = laudos_service.periodo_20_a_20(ano, mes)
+    try:
+        resultado = laudos_service.gerar_relatorio(db, empresa, periodo_ini, periodo_fim, status, cnpj)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    registrar(db, usuario, "GEROU_RELATORIO_LAUDOS_XLSX", entidade="empresa_cliente", entidade_id=empresa)
+    excel_bytes = gerar_excel_laudos(resultado)
+    nome_arquivo = nome_arquivo_xlsx("laudos", resultado.empresa, f"{ano}-{mes:02d}")
+    return Response(
+        content=excel_bytes, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},
     )

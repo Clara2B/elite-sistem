@@ -58,6 +58,20 @@ def test_import_e_relatorio_via_api(db, admin_token):
         assert resp_pdf.headers["content-type"] == "application/pdf"
         assert resp_pdf.content[:4] == b"%PDF"
 
+        resp_xlsx = client.get(
+            "/laudos/relatorio.xlsx",
+            params={"empresa": "ABSOLUTA", "ano": 2026, "mes": 9, "status": "Solicitação + Corrigido (cobrança)"},
+            headers=headers,
+        )
+        assert resp_xlsx.status_code == 200
+        assert resp_xlsx.headers["content-type"] == (
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        assert resp_xlsx.content[:2] == b"PK"
+        planilha = openpyxl.load_workbook(io.BytesIO(resp_xlsx.content)).active
+        linhas = list(planilha.iter_rows(values_only=True))
+        assert linhas[0][:2] == ("Empresa", "ABSOLUTA")
+
         resp_sem_login = client.get("/laudos/relatorio", params={"empresa": "ABSOLUTA", "ano": 2026, "mes": 9})
         assert resp_sem_login.status_code == 401
     finally:

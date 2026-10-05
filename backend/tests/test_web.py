@@ -142,6 +142,20 @@ def test_pdf_via_cookie_de_sessao_funciona_sem_bearer(client, db):
     assert "attachment" in resposta.headers["content-disposition"]
 
 
+def test_xlsx_via_cookie_de_sessao_funciona_sem_bearer(client, db):
+    """Mesma coisa que o teste acima, pro "Baixar Excel" (2026-10-05, a
+    pedido da Clara: "preciso que todos os relatórios do sistema tenham a
+    opção de serem baixados em formato de excel")."""
+    db.add(Usuario(nome="Fulano", email="fulano.xlsx@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    db.commit()
+    client.post("/login", data={"email": "fulano.xlsx@teste.local", "senha": "certa"})
+
+    resposta = client.get("/processos/relatorio.xlsx?periodo_ini=2026-01-01&periodo_fim=2026-01-31")
+    assert resposta.status_code == 200
+    assert resposta.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert "attachment" in resposta.headers["content-disposition"]
+
+
 def test_empresas_admin_cria_edita_e_desativa(client, db):
     db.add(Usuario(nome="Fulano", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
     db.commit()
