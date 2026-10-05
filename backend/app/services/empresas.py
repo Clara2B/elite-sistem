@@ -9,18 +9,34 @@ from dataclasses import dataclass, field
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
-from app.models import Audiencia, Cobranca, EmpresaCliente, Laudo, Processo
+from app.models import (
+    Audiencia,
+    Cobranca,
+    Correspondencia,
+    EmpresaCliente,
+    Laudo,
+    Processo,
+)
 from app.utils import normalize
 
 # Entidades com FK NOT NULL pra empresa-cliente — todo laudo/audiência/
-# cobrança/processo tem que pertencer a alguma empresa (ver models.py), por
-# isso "excluir mesmo com vínculo" só é possível reatribuindo esses
-# registros a outra empresa antes de apagar (nunca deixando-os orfãos).
+# cobrança/processo/correspondência tem que pertencer a alguma empresa (ver
+# models.py), por isso "excluir mesmo com vínculo" só é possível
+# reatribuindo esses registros a outra empresa antes de apagar (nunca
+# deixando-os orfãos). "correspondências" faltou aqui quando o módulo foi
+# criado (2026-10-05) — bug real reportado pela Clara: excluir uma empresa
+# com correspondência vinculada não caía no aviso amigável de baixo (porque
+# `contar_vinculos_empresa` não sabia contar), ia direto pro `db.delete`, e
+# o Postgres de produção recusava o DELETE por violação de FK (SQLite, usado
+# nos testes, não aplica FK por padrão — por isso não pegou antes) — vira
+# erro não tratado, tela genérica "Algo deu errado", sempre que tentasse de
+# novo (ver DECISIONS.md 2026-10-06).
 _ENTIDADES_VINCULADAS = {
     "laudos": Laudo,
     "audiências": Audiencia,
     "cobranças": Cobranca,
     "processos": Processo,
+    "correspondências": Correspondencia,
 }
 
 

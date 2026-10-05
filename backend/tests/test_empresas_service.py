@@ -1,6 +1,13 @@
 from datetime import date
 
-from app.models import Audiencia, Cobranca, EmpresaCliente, Laudo, Processo
+from app.models import (
+    Audiencia,
+    Cobranca,
+    Correspondencia,
+    EmpresaCliente,
+    Laudo,
+    Processo,
+)
 from app.services.empresas import (
     LISTA_OFICIAL_EMPRESAS,
     contar_vinculos_empresa,
@@ -123,13 +130,17 @@ def test_excluir_empresa_com_vinculo_sem_destino_continua_bloqueada(db):
     assert db.get(EmpresaCliente, origem.id) is not None
 
 
-def test_excluir_empresa_com_destino_reatribui_os_quatro_tipos_de_vinculo(db):
+def test_excluir_empresa_com_destino_reatribui_os_cinco_tipos_de_vinculo(db):
     origem = get_or_create_empresa(db, "ORIGEM COM DESTINO")
     destino = get_or_create_empresa(db, "DESTINO")
     db.add(Laudo(empresa_cliente_id=origem.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 1), status="SOLICITAÇÃO"))
     db.add(Audiencia(empresa_cliente_id=origem.id, nome_cliente="Fulano", data_recebimento=date(2026, 1, 1)))
     db.add(Cobranca(empresa_cliente_id=origem.id, data=date(2026, 1, 1), tipo_cobranca="MENSALIDADE", cobrador="ELITE", valor=100.0))
     db.add(Processo(numero_processo="0001", empresa_cliente_id=origem.id))
+    db.add(Correspondencia(
+        empresa_cliente_id=origem.id, mes="JANEIRO", advogado="Dra. Fulana", autor="Beltrano",
+        adv_preposto="ADVOGADO", valor_texto="R$ 100,00", valor=100.0, tipo_acao="PROCON",
+    ))
     db.commit()
 
     excluir_empresa(db, origem.id, empresa_destino_id=destino.id)
@@ -139,10 +150,36 @@ def test_excluir_empresa_com_destino_reatribui_os_quatro_tipos_de_vinculo(db):
     audiencia = db.query(Audiencia).one()
     cobranca = db.query(Cobranca).one()
     processo = db.query(Processo).one()
+    correspondencia = db.query(Correspondencia).one()
     assert laudo.empresa_cliente_id == destino.id
     assert audiencia.empresa_cliente_id == destino.id
     assert cobranca.empresa_cliente_id == destino.id
     assert processo.empresa_cliente_id == destino.id
+    assert correspondencia.empresa_cliente_id == destino.id
+
+
+def test_excluir_empresa_com_correspondencia_vinculada_sem_destino_e_bloqueada(db):
+    """Bug real reportado pela Clara (2026-10-06): excluir uma empresa com
+    correspondência vinculada dava a tela genérica de erro ("Algo deu
+    errado"), repetindo a cada tentativa — `correspondências` faltava em
+    `_ENTIDADES_VINCULADAS`, então `contar_vinculos_empresa` não via o
+    vínculo, o código não caía no aviso amigável de baixo, e o `db.delete`
+    ia direto pro banco — em produção (Postgres, que aplica a FK de
+    verdade) isso vira erro de integridade não tratado; o SQLite dos testes
+    não aplica FK por padrão, por isso não foi pego antes."""
+    origem = get_or_create_empresa(db, "ORIGEM COM CORRESPONDENCIA")
+    db.add(Correspondencia(
+        empresa_cliente_id=origem.id, mes="JANEIRO", advogado="Dra. Fulana", autor="Beltrano",
+        adv_preposto="ADVOGADO", valor_texto="R$ 100,00", valor=100.0, tipo_acao="PROCON",
+    ))
+    db.commit()
+
+    try:
+        excluir_empresa(db, origem.id)
+        assert False, "deveria ter recusado"
+    except ValueError as e:
+        assert "correspondências" in str(e).lower()
+    assert db.get(EmpresaCliente, origem.id) is not None
 
 
 def test_excluir_empresa_destino_precisa_existir(db):

@@ -2108,3 +2108,31 @@ relatórios em Excel — ela confirmou: todos.
   verificação ficou na inspeção direta das propriedades de célula em vez de uma captura visual.
 - **Reversível:** sim — é só o visual da função de export; nenhuma estrutura de dado/banco mudou.
 
+### 4.37 Bug: excluir empresa com correspondência vinculada dava erro genérico (2026-10-06)
+
+A Clara reportou: "Quando apago uma empresa o sistema da erro e aparece a página dizendo para
+chamar o suporte, e ai eu recarrego a página e tudo se repete".
+
+- **Causa raiz:** `app/services/empresas.py::_ENTIDADES_VINCULADAS` — o dicionário que
+  `contar_vinculos_empresa`/`excluir_empresa` usam pra saber o que está "preso" a uma empresa antes
+  de apagar — tinha `Laudo`, `Audiencia`, `Cobranca` e `Processo`, mas não `Correspondencia` (o
+  modelo novo da seção 4.35, que tem FK `empresa_cliente_id` NOT NULL igual aos outros). Faltando
+  ali, o código não detectava o vínculo, não caía no aviso amigável ("não é possível excluir...") e
+  seguia direto pro `db.delete(empresa)` — em produção (Postgres, que aplica a FK de verdade) isso
+  vira `IntegrityError` não tratado, cai na tela genérica de erro, e como a transação é desfeita a
+  cada tentativa (nenhum dado é perdido), recarregar e tentar de novo repete o mesmo erro. O SQLite
+  usado nos testes não aplica FK por padrão, por isso a suíte inteira passava sem pegar esse caso.
+- **Correção:** adicionado `"correspondências": Correspondencia` em `_ENTIDADES_VINCULADAS`
+  (`app/services/empresas.py`). Agora excluir uma empresa com correspondência vinculada: sem
+  informar empresa de destino, bloqueia com a mensagem amigável já existente (em vez do erro
+  genérico); informando um destino, reatribui as correspondências pra ela antes de apagar — mesmo
+  comportamento que já existia pra laudos/audiências/cobranças/processos.
+  Nenhum outro arquivo/comportamento foi alterado.
+- **Testado:** `tests/test_empresas_service.py` — teste existente renomeado e estendido
+  (`test_excluir_empresa_com_destino_reatribui_os_cinco_tipos_de_vinculo`, agora cobrindo também
+  Correspondencia) e um teste novo (`test_excluir_empresa_com_correspondencia_vinculada_sem_destino_e_bloqueada`)
+  reproduzindo exatamente o bug relatado e confirmando o bloqueio amigável. 255 testes no total,
+  lint limpo.
+- **Reversível:** sim — uma linha adicionada a um dicionário de registro; nenhuma migração ou
+  mudança de banco.
+

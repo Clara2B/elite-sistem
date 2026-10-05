@@ -1852,3 +1852,25 @@ ambiente (LibreOffice) não funcionou por um problema de ambiente (nem um arquiv
 converteu) — não é um problema dos arquivos gerados.
 
 **Reversível:** sim — só o visual da função de export mudou.
+
+## 2026-10-06 — Bug: excluir empresa com correspondência vinculada dava erro genérico
+
+**Relato da Clara:** "Quando apago uma empresa o sistema da erro e aparece a página dizendo para
+chamar o suporte, e ai eu recarrego a página e tudo se repete".
+
+**Causa:** quando o módulo Correspondências foi criado (seção 4.35), o modelo `Correspondencia`
+não foi adicionado em `_ENTIDADES_VINCULADAS` (`app/services/empresas.py`) — o registro central que
+diz o que precisa ser verificado/reatribuído antes de apagar uma empresa. Sem isso, excluir uma
+empresa com correspondência vinculada não caía no aviso amigável de "não é possível excluir" —
+seguia direto pro banco, e em produção (Postgres, que aplica a FK) virava erro de integridade não
+tratado, daí a tela genérica. Nenhum dado foi perdido (a transação é desfeita a cada tentativa com
+erro), só não dava pra apagar aquela empresa.
+
+**Correção:** adicionada a entrada que faltava. Comportamento agora igual ao de laudos/audiências/
+cobranças/processos: bloqueia com mensagem clara se não houver empresa de destino informada,
+reatribui as correspondências pra ela se houver.
+
+**Testado:** teste existente de reatribuição estendido pra cobrir Correspondencia + teste novo
+reproduzindo o bug relatado e confirmando o bloqueio amigável. 255 testes, lint limpo.
+
+**Reversível:** sim — mudança de uma linha num dicionário de registro em código, sem migração.
