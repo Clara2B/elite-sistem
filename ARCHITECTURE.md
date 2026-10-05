@@ -2136,3 +2136,61 @@ chamar o suporte, e ai eu recarrego a página e tudo se repete".
 - **Reversível:** sim — uma linha adicionada a um dicionário de registro; nenhuma migração ou
   mudança de banco.
 
+### 4.38 Exclusão e realocação de empresas em massa (2026-10-06)
+
+A Clara pediu: "preciso de alguma forma de selecionar e apagar empresas em massa, além de
+realocá-las em massa se necessário". Antes de implementar, perguntei 3 pontos de comportamento
+(regra de sempre perguntar antes de decidir sozinho):
+
+1. **Exclusão em massa com vínculo misto** (algumas selecionadas têm histórico vinculado, outras
+   não): ela escolheu **uma única empresa de destino pra todas** — as sem vínculo são excluídas
+   direto, as com vínculo são movidas pra esse destino antes de excluir.
+2. **Realocação em massa** (mover histórico sem excluir): ela confirmou que é uma **ação
+   separada** da exclusão, não só uma etapa dela.
+3. **Depois de realocar**, as empresas de origem (que ficam sem vínculo): ela escolheu que
+   **ficam como estão, ativas** — decide depois, manualmente, o que fazer com cada uma.
+
+- **`app/services/empresas.py`** — duas funções novas, reaproveitando ao máximo o que já existia:
+  - `excluir_empresas_em_massa(db, empresa_ids, empresa_destino_id=None)`: chama `excluir_empresa`
+    uma vez por id selecionado, sempre com o mesmo `empresa_destino_id` (ou `None`). Recusa de
+    cara se o destino estiver entre os próprios selecionados, ou se o destino informado não
+    existir. Cada id que falhar (vínculo sem destino) entra em `nao_excluidas_por_vinculo` sem
+    travar os demais — mesmo texto de erro de sempre, só que por lote.
+  - `realocar_empresas_em_massa(db, empresa_ids, empresa_destino_id)`: pra cada id selecionado,
+    conta os vínculos (`contar_vinculos_empresa`) e, se houver, reatribui todos pro destino (mesmo
+    loop de `_ENTIDADES_VINCULADAS` que `excluir_empresa` já usa) — sem chamar `db.delete` em
+    nenhum momento. Quem não tiver nada vinculado entra em `sem_vinculo` (não é erro, só não há o
+    que mover). Também recusa destino entre os selecionados ou destino inexistente.
+- **Tela (`empresas.html` + `static/app.js` + `static/style.css`)** — reaproveitando o padrão
+  existente de modal de confirmação (`dialog.modal-confirmacao`, `data-abrir-confirmacao`) com uma
+  variação nova (`data-abrir-selecao-massa`) pra seleção em lote:
+  - Uma caixa de seleção por linha (`.chk-empresa-massa`) + uma no cabeçalho pra marcar/desmarcar
+    todas (com estado indeterminado quando a seleção é parcial).
+  - Uma barra de ações (`#barra-selecao-empresas`) que só aparece com pelo menos 1 selecionada,
+    com os botões "Excluir selecionadas" e "Realocar selecionadas".
+  - No modal de excluir, o campo de empresa de destino só aparece (e só fica obrigatório) se
+    alguma das selecionadas tiver vínculo — decidido no navegador, comparando com
+    `vinculos_por_empresa` que a tela já carregava. No modal de realocar, o destino é sempre
+    obrigatório.
+  - Em ambos os modais, as próprias empresas selecionadas nunca aparecem como opção de destino.
+  - Os ids selecionados são injetados como campos ocultos dentro do `<form>` de cada modal no
+    momento de abrir (as caixas de seleção não pertencem a nenhum form — vivem soltas na tabela,
+    igual ao padrão de editar nome/CNPJ que já existia).
+  - As duas rotas novas (`POST /app/empresas/excluir-em-massa` e `POST /app/empresas/
+    realocar-em-massa`) são admin-only (mesma proteção da "Zona de perigo" existente), registram
+    auditoria (`EXCLUIU_EMPRESAS_EM_MASSA`/`REALOCOU_EMPRESAS_EM_MASSA`) e precisam ficar
+    registradas ANTES de `POST /{empresa_id}` — mesmo motivo de sempre (`sincronizar-lista-
+    oficial`/`excluir-inativas`): o Starlette casaria a rota genérica primeiro e devolveria 422.
+- **Testado:** `tests/test_empresas_service.py` (8 testes novos cobrindo sem vínculo, vínculo
+  misto sem destino, vínculo com destino, destino entre as selecionadas, realocação com/sem
+  vínculo, destino inexistente) e `tests/test_web_empresas.py` (novo arquivo, 7 testes — fluxo
+  completo pela tela, sem seleção, exige admin). 270 testes no total, lint limpo. Verificado com
+  Playwright de ponta a ponta: selecionar 2 empresas (uma sem vínculo, uma com laudo vinculado),
+  excluir em massa sem destino (confirma que o campo de destino aparece automaticamente por ter
+  vínculo selecionado, que nenhuma das próprias selecionadas aparece como opção de destino),
+  excluir com destino escolhido (as duas somem da tela, o laudo migra pro destino), depois
+  selecionar uma empresa com audiência vinculada e realocar pro mesmo destino (a empresa de
+  origem continua cadastrada e ativa na tela, só a audiência migra).
+- **Reversível:** sim — duas funções de serviço e duas rotas 100% novas, aditivas; nenhum
+  comportamento existente (exclusão individual, zona de perigo) foi alterado.
+

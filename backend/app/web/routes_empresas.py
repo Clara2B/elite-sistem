@@ -15,8 +15,10 @@ from app.services.empresas import (
     contar_vinculos_empresa,
     criar_empresa,
     excluir_empresa,
+    excluir_empresas_em_massa,
     excluir_empresas_inativas,
     listar_empresas,
+    realocar_empresas_em_massa,
     sincronizar_lista_oficial,
 )
 from app.web.areas_configuracao import AREAS_CONFIGURACAO
@@ -141,6 +143,81 @@ def excluir_inativas(
             f" {len(resumo.nao_excluidas_por_vinculo)} não puderam ser excluídas por terem histórico "
             f"vinculado: {', '.join(resumo.nao_excluidas_por_vinculo)}."
         )
+    return RedirectResponse(f"/app/empresas?mensagem={quote(mensagem)}", status_code=303)
+
+
+@router.post("/excluir-em-massa")
+def excluir_em_massa(
+    empresa_ids: list[int] = Form([]),
+    empresa_destino_id: str | None = Form(None),
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Exclusão em massa (a pedido da Clara, 2026-10-06) — a seleção
+    (checkboxes) e a confirmação acontecem no navegador antes desse POST
+    (ver empresas.html e static/app.js). Uma única `empresa_destino_id`
+    (opcional) vale pra todas as selecionadas que tiverem vínculo; sem
+    destino, essas ficam de fora da exclusão, sem travar as demais. Precisa
+    ficar ANTES de `POST /{empresa_id}` abaixo — mesmo motivo de
+    `sincronizar-lista-oficial`."""
+    if not empresa_ids:
+        return RedirectResponse(f"/app/empresas?erro={quote('Nenhuma empresa selecionada.')}", status_code=303)
+    destino_id = int(empresa_destino_id) if empresa_destino_id else None
+    try:
+        resumo = excluir_empresas_em_massa(db, empresa_ids, destino_id)
+    except ValueError as e:
+        return RedirectResponse(f"/app/empresas?erro={quote(str(e))}", status_code=303)
+    registrar(
+        db, usuario, "EXCLUIU_EMPRESAS_EM_MASSA", entidade="empresa_cliente",
+        detalhes=(
+            f"{len(resumo.excluidas)} excluída(s), "
+            f"{len(resumo.nao_excluidas_por_vinculo)} não excluída(s) por vínculo"
+        ),
+    )
+    mensagem = f"{len(resumo.excluidas)} empresa(s) excluída(s) definitivamente."
+    if resumo.nao_excluidas_por_vinculo:
+        mensagem += (
+            f" {len(resumo.nao_excluidas_por_vinculo)} não puderam ser excluídas por terem histórico "
+            f"vinculado sem destino informado: {', '.join(resumo.nao_excluidas_por_vinculo)}."
+        )
+    return RedirectResponse(f"/app/empresas?mensagem={quote(mensagem)}", status_code=303)
+
+
+@router.post("/realocar-em-massa")
+def realocar_em_massa(
+    empresa_ids: list[int] = Form([]),
+    empresa_destino_id: str | None = Form(None),
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Realocação em massa (a pedido da Clara, 2026-10-06) — ação separada
+    da exclusão: move o histórico vinculado das empresas selecionadas pra
+    uma empresa de destino, sem excluir nem desativar as empresas de
+    origem. Precisa ficar ANTES de `POST /{empresa_id}` abaixo — mesmo
+    motivo de `sincronizar-lista-oficial`."""
+    if not empresa_ids:
+        return RedirectResponse(f"/app/empresas?erro={quote('Nenhuma empresa selecionada.')}", status_code=303)
+    if not empresa_destino_id:
+        return RedirectResponse(f"/app/empresas?erro={quote('Escolha uma empresa de destino.')}", status_code=303)
+    try:
+        resumo = realocar_empresas_em_massa(db, empresa_ids, int(empresa_destino_id))
+    except ValueError as e:
+        return RedirectResponse(f"/app/empresas?erro={quote(str(e))}", status_code=303)
+    registrar(
+        db, usuario, "REALOCOU_EMPRESAS_EM_MASSA", entidade="empresa_cliente",
+        detalhes=(
+            f"{len(resumo.realocadas)} empresa(s) com histórico movido, "
+            f"{len(resumo.sem_vinculo)} sem nada a mover"
+        ),
+    )
+    destino = db.get(EmpresaCliente, int(empresa_destino_id))
+    total_registros = sum(qtd for _, qtd in resumo.realocadas)
+    mensagem = (
+        f"{total_registros} registro(s) de {len(resumo.realocadas)} empresa(s) movido(s) "
+        f"para {destino.nome if destino else empresa_destino_id}."
+    )
+    if resumo.sem_vinculo:
+        mensagem += f" {len(resumo.sem_vinculo)} empresa(s) não tinham nada vinculado: {', '.join(resumo.sem_vinculo)}."
     return RedirectResponse(f"/app/empresas?mensagem={quote(mensagem)}", status_code=303)
 
 

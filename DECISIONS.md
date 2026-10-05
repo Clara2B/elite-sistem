@@ -1874,3 +1874,30 @@ reatribui as correspondências pra ela se houver.
 reproduzindo o bug relatado e confirmando o bloqueio amigável. 255 testes, lint limpo.
 
 **Reversível:** sim — mudança de uma linha num dicionário de registro em código, sem migração.
+
+## 2026-10-06 — Exclusão e realocação de empresas em massa
+
+**Pedido da Clara:** "preciso de alguma forma de selecionar e apagar empresas em massa, além de
+realocá-las em massa se necessário".
+
+**Perguntas antes de implementar e respostas:**
+1. Exclusão em massa com vínculo misto (algumas com histórico vinculado, outras sem) → **uma
+   única empresa de destino pra todas** (sem vínculo exclui direto; com vínculo move pro destino
+   antes de excluir).
+2. Realocação em massa é ação separada da exclusão, ou só parte dela? → **ação separada** (mover
+   histórico de várias empresas pra uma, sem apagar as de origem).
+3. Depois de realocar, o que fazer com as empresas de origem (ficam sem vínculo)? → **ficam como
+   estão, ativas** — ela decide depois, manualmente.
+
+**Implementado:** duas funções novas em `app/services/empresas.py`
+(`excluir_empresas_em_massa`/`realocar_empresas_em_massa`), reaproveitando `excluir_empresa` e
+`contar_vinculos_empresa`/`_ENTIDADES_VINCULADAS` já existentes — nenhuma lógica de vínculo foi
+duplicada. Tela de Empresas-clientes ganhou checkboxes por linha + "selecionar todas", uma barra
+de ações que aparece com a seleção, e dois modais (excluir/realocar) que reaproveitam o padrão de
+modal de confirmação já usado na tela. Duas rotas novas, admin-only, com auditoria.
+
+**Testado:** 15 testes novos (8 de serviço, 7 de tela). 270 testes no total, lint limpo. Verificado
+com Playwright de ponta a ponta (seleção, modal com campo de destino condicional, exclusão em
+massa movendo histórico, realocação em massa mantendo as empresas de origem cadastradas e ativas).
+
+**Reversível:** sim — tudo aditivo; exclusão individual e zona de perigo continuam intactas.

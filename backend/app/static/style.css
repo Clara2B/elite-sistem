@@ -833,6 +833,22 @@ details.modulos-setor .modulos-setor-painel {
   gap: 8px;
 }
 
+.barra-selecao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: var(--highlight-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.86rem;
+  font-weight: 650;
+  color: var(--heading);
+  flex-wrap: wrap;
+}
+
 .vazio {
   color: var(--text-muted);
   font-size: 0.9rem;

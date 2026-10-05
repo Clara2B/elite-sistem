@@ -21,12 +21,35 @@
       {% for e in empresas %}
         <form id="empresa-{{ e.id }}" method="post" action="/app/empresas/{{ e.id }}"></form>
       {% endfor %}
+      <div id="barra-selecao-empresas" class="barra-selecao" style="display:none;">
+        <span id="contador-selecao-empresas">0 selecionada(s)</span>
+        <div class="acoes-linha">
+          <button type="button" id="botao-realocar-em-massa" class="secundario"
+                  data-abrir-selecao-massa="modal-realocar-em-massa">
+            Realocar selecionadas
+          </button>
+          <button type="button" id="botao-excluir-em-massa" class="perigo"
+                  data-abrir-selecao-massa="modal-excluir-em-massa">
+            {{ icones.icone('lixeira') }} Excluir selecionadas
+          </button>
+        </div>
+      </div>
       <div class="tabela-wrap">
         <table>
-          <thead><tr><th>Nome</th><th>CNPJ</th><th>Status</th><th style="width:1%;"></th></tr></thead>
+          <thead>
+            <tr>
+              <th style="width:1%;"><input type="checkbox" id="chk-empresa-todas" aria-label="Selecionar todas"></th>
+              <th>Nome</th><th>CNPJ</th><th>Status</th><th style="width:1%;"></th>
+            </tr>
+          </thead>
           <tbody>
             {% for e in empresas %}
               <tr>
+                <td>
+                  <input type="checkbox" class="chk-empresa-massa" value="{{ e.id }}"
+                         data-vinculo="{{ '1' if vinculos_por_empresa.get(e.id, 0) else '0' }}"
+                         aria-label="Selecionar {{ e.nome }}">
+                </td>
                 <td>
                   <input type="text" name="nome" value="{{ e.nome }}" required form="empresa-{{ e.id }}"
                          style="min-width:200px; padding:6px 9px; border:1px solid var(--border); border-radius:7px; font-size:0.86rem;">
@@ -95,6 +118,64 @@
           </div>
         </dialog>
       {% endfor %}
+
+      <dialog id="modal-excluir-em-massa" class="modal-confirmacao">
+        <div class="modal-corpo">
+          <div class="modal-icone">{{ icones.icone('alerta') }}</div>
+          <h3>Excluir <span data-contador-modal>0</span> empresa(s) selecionada(s)?</h3>
+          <p>
+            Isso vai apagar definitivamente, sem volta, as empresas selecionadas que não tiverem
+            laudo, audiência, cobrança, processo ou correspondência vinculado. As que tiverem só
+            são excluídas se você escolher abaixo uma empresa de destino — o histórico delas é
+            movido pra lá antes da exclusão. Sem destino, essas ficam de fora (as demais são
+            excluídas normalmente).
+          </p>
+          <div class="campo" data-bloco-destino-obrigatorio style="margin-top: 14px; display: none;">
+            <label for="destino-em-massa-excluir">Mover histórico vinculado para</label>
+            <select id="destino-em-massa-excluir" name="empresa_destino_id" form="form-excluir-em-massa">
+              <option value="">Selecione...</option>
+              {% for outra in empresas %}
+                <option value="{{ outra.id }}" data-opcao-destino>{{ outra.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="modal-acoes">
+          <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
+          <form id="form-excluir-em-massa" method="post" action="/app/empresas/excluir-em-massa">
+            <span data-ids-selecionados></span>
+            <button type="submit" class="perigo">Excluir selecionadas</button>
+          </form>
+        </div>
+      </dialog>
+
+      <dialog id="modal-realocar-em-massa" class="modal-confirmacao">
+        <div class="modal-corpo">
+          <div class="modal-icone">{{ icones.icone('alerta') }}</div>
+          <h3>Realocar <span data-contador-modal>0</span> empresa(s) selecionada(s)?</h3>
+          <p>
+            Isso vai mover todo o histórico (laudos, audiências, cobranças, processos e
+            correspondências) das empresas selecionadas para a empresa de destino escolhida
+            abaixo. As empresas de origem continuam cadastradas e ativas — nada é excluído.
+          </p>
+          <div class="campo" style="margin-top: 14px;">
+            <label for="destino-em-massa-realocar">Mover todo o histórico para</label>
+            <select id="destino-em-massa-realocar" name="empresa_destino_id" form="form-realocar-em-massa" required>
+              <option value="">Selecione...</option>
+              {% for outra in empresas %}
+                <option value="{{ outra.id }}" data-opcao-destino>{{ outra.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="modal-acoes">
+          <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
+          <form id="form-realocar-em-massa" method="post" action="/app/empresas/realocar-em-massa">
+            <span data-ids-selecionados></span>
+            <button type="submit" class="perigo">Realocar selecionadas</button>
+          </form>
+        </div>
+      </dialog>
     {% else %}
       <p class="vazio">Nenhuma empresa-cliente cadastrada ainda.</p>
     {% endif %}

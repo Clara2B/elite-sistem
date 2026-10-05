@@ -12,8 +12,10 @@ from app.services.empresas import (
     LISTA_OFICIAL_EMPRESAS,
     contar_vinculos_empresa,
     excluir_empresa,
+    excluir_empresas_em_massa,
     excluir_empresas_inativas,
     get_or_create_empresa,
+    realocar_empresas_em_massa,
     sincronizar_lista_oficial,
 )
 from app.utils import normalize
@@ -223,6 +225,121 @@ def test_contar_vinculos_empresa(db):
     vinculos = contar_vinculos_empresa(db, empresa.id)
     assert vinculos["laudos"] == 1
     assert vinculos["processos"] == 0
+
+
+def test_excluir_em_massa_sem_vinculo_exclui_todas_direto(db):
+    a = get_or_create_empresa(db, "MASSA SEM VINCULO A")
+    b = get_or_create_empresa(db, "MASSA SEM VINCULO B")
+    db.commit()
+
+    resumo = excluir_empresas_em_massa(db, [a.id, b.id])
+
+    assert sorted(resumo.excluidas) == ["MASSA SEM VINCULO A", "MASSA SEM VINCULO B"]
+    assert resumo.nao_excluidas_por_vinculo == []
+    assert db.get(EmpresaCliente, a.id) is None
+    assert db.get(EmpresaCliente, b.id) is None
+
+
+def test_excluir_em_massa_mista_sem_destino_exclui_so_as_sem_vinculo(db):
+    """Clara (2026-10-06): com destino único opcional, quem tem vínculo e
+    não tem destino informado fica de fora, sem travar as demais."""
+    sem_vinculo = get_or_create_empresa(db, "MASSA MISTA SEM VINCULO")
+    com_vinculo = get_or_create_empresa(db, "MASSA MISTA COM VINCULO")
+    db.add(Laudo(empresa_cliente_id=com_vinculo.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 1), status="SOLICITAÇÃO"))
+    db.commit()
+
+    resumo = excluir_empresas_em_massa(db, [sem_vinculo.id, com_vinculo.id])
+
+    assert resumo.excluidas == ["MASSA MISTA SEM VINCULO"]
+    assert resumo.nao_excluidas_por_vinculo == ["MASSA MISTA COM VINCULO"]
+    assert db.get(EmpresaCliente, sem_vinculo.id) is None
+    assert db.get(EmpresaCliente, com_vinculo.id) is not None
+
+
+def test_excluir_em_massa_com_destino_reatribui_e_exclui_todas(db):
+    com_vinculo_1 = get_or_create_empresa(db, "MASSA DESTINO ORIGEM 1")
+    com_vinculo_2 = get_or_create_empresa(db, "MASSA DESTINO ORIGEM 2")
+    destino = get_or_create_empresa(db, "MASSA DESTINO FINAL")
+    db.add(Laudo(empresa_cliente_id=com_vinculo_1.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 1), status="SOLICITAÇÃO"))
+    db.add(Audiencia(empresa_cliente_id=com_vinculo_2.id, nome_cliente="Fulano", data_recebimento=date(2026, 1, 1)))
+    db.commit()
+
+    resumo = excluir_empresas_em_massa(db, [com_vinculo_1.id, com_vinculo_2.id], empresa_destino_id=destino.id)
+
+    assert sorted(resumo.excluidas) == ["MASSA DESTINO ORIGEM 1", "MASSA DESTINO ORIGEM 2"]
+    assert resumo.nao_excluidas_por_vinculo == []
+    assert db.get(EmpresaCliente, com_vinculo_1.id) is None
+    assert db.get(EmpresaCliente, com_vinculo_2.id) is None
+    assert db.query(Laudo).one().empresa_cliente_id == destino.id
+    assert db.query(Audiencia).one().empresa_cliente_id == destino.id
+
+
+def test_excluir_em_massa_destino_entre_selecionadas_e_recusada(db):
+    a = get_or_create_empresa(db, "MASSA DESTINO NA SELECAO A")
+    b = get_or_create_empresa(db, "MASSA DESTINO NA SELECAO B")
+    db.commit()
+
+    try:
+        excluir_empresas_em_massa(db, [a.id, b.id], empresa_destino_id=a.id)
+        assert False, "deveria ter recusado"
+    except ValueError as e:
+        assert "destino" in str(e).lower()
+    assert db.get(EmpresaCliente, a.id) is not None
+    assert db.get(EmpresaCliente, b.id) is not None
+
+
+def test_realocar_em_massa_move_historico_sem_excluir_origem(db):
+    origem_1 = get_or_create_empresa(db, "REALOCAR MASSA ORIGEM 1")
+    origem_2 = get_or_create_empresa(db, "REALOCAR MASSA ORIGEM 2")
+    destino = get_or_create_empresa(db, "REALOCAR MASSA DESTINO")
+    db.add(Laudo(empresa_cliente_id=origem_1.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 1), status="SOLICITAÇÃO"))
+    db.add(Processo(numero_processo="9999", empresa_cliente_id=origem_2.id))
+    db.commit()
+
+    resumo = realocar_empresas_em_massa(db, [origem_1.id, origem_2.id], destino.id)
+
+    assert sorted(resumo.realocadas) == [("REALOCAR MASSA ORIGEM 1", 1), ("REALOCAR MASSA ORIGEM 2", 1)]
+    assert resumo.sem_vinculo == []
+    # empresas de origem continuam cadastradas e ativas — só o histórico se move
+    origem_1_db = db.get(EmpresaCliente, origem_1.id)
+    origem_2_db = db.get(EmpresaCliente, origem_2.id)
+    assert origem_1_db is not None and origem_1_db.ativo
+    assert origem_2_db is not None and origem_2_db.ativo
+    assert db.query(Laudo).one().empresa_cliente_id == destino.id
+    assert db.query(Processo).one().empresa_cliente_id == destino.id
+
+
+def test_realocar_em_massa_sem_vinculo_nao_move_nada(db):
+    vazia = get_or_create_empresa(db, "REALOCAR MASSA VAZIA")
+    destino = get_or_create_empresa(db, "REALOCAR MASSA DESTINO VAZIA")
+    db.commit()
+
+    resumo = realocar_empresas_em_massa(db, [vazia.id], destino.id)
+
+    assert resumo.realocadas == []
+    assert resumo.sem_vinculo == ["REALOCAR MASSA VAZIA"]
+
+
+def test_realocar_em_massa_destino_entre_selecionadas_e_recusada(db):
+    a = get_or_create_empresa(db, "REALOCAR DESTINO NA SELECAO A")
+    db.commit()
+
+    try:
+        realocar_empresas_em_massa(db, [a.id], a.id)
+        assert False, "deveria ter recusado"
+    except ValueError as e:
+        assert "destino" in str(e).lower()
+
+
+def test_realocar_em_massa_destino_inexistente_e_recusada(db):
+    a = get_or_create_empresa(db, "REALOCAR DESTINO INEXISTENTE A")
+    db.commit()
+
+    try:
+        realocar_empresas_em_massa(db, [a.id], 999999)
+        assert False, "deveria ter recusado"
+    except ValueError as e:
+        assert "não encontrada" in str(e).lower()
 
 
 def test_lista_oficial_tem_48_empresas_sem_duplicidade():

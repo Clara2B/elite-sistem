@@ -386,6 +386,99 @@ function iniciarCopiaDeTextoCartas() {
   });
 }
 
+// Seleção em massa de empresas (2026-10-06, a pedido da Clara: "selecionar
+// e apagar empresas em massa, além de realocá-las em massa se necessário").
+// Checkboxes `.chk-empresa-massa` (uma por linha) + `#chk-empresa-todas`
+// (marca/desmarca todas) alimentam uma barra de ações (`#barra-selecao-
+// empresas`) que só aparece com pelo menos 1 selecionada. Os botões dessa
+// barra (`[data-abrir-selecao-massa="id-do-modal"]`) abrem um dos dois
+// modais de lote: ao abrir, os ids selecionados são injetados como campos
+// ocultos dentro do <form> de cada modal (`[data-ids-selecionados]`) — as
+// próprias caixas de seleção não pertencem a nenhum form (vivem soltas na
+// tabela), então isso é o jeito de levar a seleção até o POST certo. No
+// modal de excluir, o campo de empresa de destino só aparece (e só fica
+// obrigatório) se alguma selecionada tiver vínculo — ver
+// `contar_vinculos_empresa`/`_ENTIDADES_VINCULADAS` no backend. Em ambos os
+// modais, a própria empresa selecionada nunca aparece como opção de destino.
+function iniciarSelecaoEmMassaDeEmpresas() {
+  var caixaTodas = document.getElementById("chk-empresa-todas");
+  var caixas = Array.prototype.slice.call(document.querySelectorAll(".chk-empresa-massa"));
+  var barra = document.getElementById("barra-selecao-empresas");
+  var contador = document.getElementById("contador-selecao-empresas");
+  if (!caixas.length || !barra) return;
+
+  function selecionadas() {
+    return caixas.filter(function (caixa) { return caixa.checked; });
+  }
+
+  function atualizarBarra() {
+    var sel = selecionadas();
+    barra.style.display = sel.length ? "" : "none";
+    if (contador) contador.textContent = sel.length + " selecionada(s)";
+    if (caixaTodas) {
+      caixaTodas.checked = sel.length > 0 && sel.length === caixas.length;
+      caixaTodas.indeterminate = sel.length > 0 && sel.length < caixas.length;
+    }
+  }
+
+  caixas.forEach(function (caixa) {
+    caixa.addEventListener("change", atualizarBarra);
+  });
+  if (caixaTodas) {
+    caixaTodas.addEventListener("change", function () {
+      caixas.forEach(function (caixa) { caixa.checked = caixaTodas.checked; });
+      atualizarBarra();
+    });
+  }
+
+  function preencherIdsOcultos(modal, idsSelecionados) {
+    var contorno = modal.querySelector("[data-ids-selecionados]");
+    if (!contorno) return;
+    contorno.innerHTML = "";
+    idsSelecionados.forEach(function (id) {
+      var oculto = document.createElement("input");
+      oculto.type = "hidden";
+      oculto.name = "empresa_ids";
+      oculto.value = id;
+      contorno.appendChild(oculto);
+    });
+  }
+
+  document.querySelectorAll("[data-abrir-selecao-massa]").forEach(function (botao) {
+    botao.addEventListener("click", function () {
+      var modal = document.getElementById(botao.getAttribute("data-abrir-selecao-massa"));
+      var sel = selecionadas();
+      if (!modal || !sel.length) return;
+
+      var idsSelecionados = sel.map(function (caixa) { return caixa.value; });
+      preencherIdsOcultos(modal, idsSelecionados);
+
+      modal.querySelectorAll("[data-contador-modal]").forEach(function (span) {
+        span.textContent = sel.length;
+      });
+
+      var blocoDestino = modal.querySelector("[data-bloco-destino-obrigatorio]");
+      if (blocoDestino) {
+        var algumComVinculo = sel.some(function (caixa) { return caixa.getAttribute("data-vinculo") === "1"; });
+        blocoDestino.style.display = algumComVinculo ? "" : "none";
+        var selectCondicional = blocoDestino.querySelector("select");
+        if (selectCondicional) selectCondicional.required = algumComVinculo;
+      }
+
+      modal.querySelectorAll("select").forEach(function (select) {
+        select.value = "";
+        select.querySelectorAll("[data-opcao-destino]").forEach(function (opcao) {
+          opcao.hidden = idsSelecionados.indexOf(opcao.value) !== -1;
+        });
+      });
+
+      modal.showModal();
+    });
+  });
+
+  atualizarBarra();
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   iniciarZonasDeUpload();
   iniciarValidacaoDeUpload();
@@ -399,4 +492,5 @@ document.addEventListener("DOMContentLoaded", function () {
   iniciarModulosPorOperadora();
   iniciarSelecionarTodosModulos();
   iniciarPopupSuporte();
+  iniciarSelecaoEmMassaDeEmpresas();
 });

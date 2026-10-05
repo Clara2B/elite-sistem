@@ -221,6 +221,84 @@ def excluir_empresa(db: Session, empresa_id: int, empresa_destino_id: int | None
 
 
 @dataclass
+class ResumoExclusaoEmMassa:
+    excluidas: list[str] = field(default_factory=list)
+    nao_excluidas_por_vinculo: list[str] = field(default_factory=list)
+
+
+def excluir_empresas_em_massa(
+    db: Session, empresa_ids: list[int], empresa_destino_id: int | None = None
+) -> ResumoExclusaoEmMassa:
+    """Exclusão em massa (a pedido da Clara, 2026-10-06 — "preciso de alguma
+    forma de selecionar e apagar empresas em massa"): aplica `excluir_empresa`
+    a cada id selecionado, com uma ÚNICA empresa de destino pra todas (opção
+    que ela escolheu): quem não tiver vínculo é excluída direto; quem tiver
+    vínculo e um destino foi informado tem o histórico movido pra lá antes de
+    excluir; quem tiver vínculo e NENHUM destino foi informado fica de fora
+    (não bloqueia as demais) e entra em `nao_excluidas_por_vinculo` — mesma
+    mensagem amigável de sempre, só que por lote em vez de travar tudo."""
+    if empresa_destino_id is not None:
+        if empresa_destino_id in empresa_ids:
+            raise ValueError("A empresa de destino não pode estar entre as selecionadas para exclusão.")
+        if db.get(EmpresaCliente, empresa_destino_id) is None:
+            raise ValueError(f"Empresa-cliente de destino {empresa_destino_id} não encontrada.")
+
+    resumo = ResumoExclusaoEmMassa()
+    for empresa_id in dict.fromkeys(empresa_ids):
+        empresa = db.get(EmpresaCliente, empresa_id)
+        if empresa is None:
+            continue
+        nome = empresa.nome
+        try:
+            excluir_empresa(db, empresa_id, empresa_destino_id)
+            resumo.excluidas.append(nome)
+        except ValueError:
+            resumo.nao_excluidas_por_vinculo.append(nome)
+    return resumo
+
+
+@dataclass
+class ResumoRealocacaoEmMassa:
+    realocadas: list[tuple[str, int]] = field(default_factory=list)
+    sem_vinculo: list[str] = field(default_factory=list)
+
+
+def realocar_empresas_em_massa(
+    db: Session, empresa_ids: list[int], empresa_destino_id: int
+) -> ResumoRealocacaoEmMassa:
+    """Realocação em massa (a pedido da Clara, 2026-10-06 — "além de
+    realocá-las em massa se necessário"): ação SEPARADA da exclusão — move
+    todo o histórico vinculado (laudos, audiências, cobranças, processos,
+    correspondências) das empresas selecionadas pra uma única empresa de
+    destino, sem excluir nem desativar as empresas de origem (ela escolheu
+    deixá-las como estão — decide depois, manualmente, o que fazer com cada
+    uma). Quem não tiver nada vinculado entra em `sem_vinculo` (nada a
+    mover, não é erro)."""
+    if empresa_destino_id in empresa_ids:
+        raise ValueError("A empresa de destino não pode estar entre as selecionadas para realocação.")
+    if db.get(EmpresaCliente, empresa_destino_id) is None:
+        raise ValueError(f"Empresa-cliente de destino {empresa_destino_id} não encontrada.")
+
+    resumo = ResumoRealocacaoEmMassa()
+    for empresa_id in dict.fromkeys(empresa_ids):
+        empresa = db.get(EmpresaCliente, empresa_id)
+        if empresa is None:
+            continue
+        vinculos = contar_vinculos_empresa(db, empresa_id)
+        total = sum(vinculos.values())
+        if total == 0:
+            resumo.sem_vinculo.append(empresa.nome)
+            continue
+        for modelo in _ENTIDADES_VINCULADAS.values():
+            db.execute(
+                update(modelo).where(modelo.empresa_cliente_id == empresa_id).values(empresa_cliente_id=empresa_destino_id)
+            )
+        resumo.realocadas.append((empresa.nome, total))
+    db.commit()
+    return resumo
+
+
+@dataclass
 class ResumoExclusaoInativas:
     excluidas: list[str] = field(default_factory=list)
     nao_excluidas_por_vinculo: list[str] = field(default_factory=list)
