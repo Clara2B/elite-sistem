@@ -2194,3 +2194,44 @@ realocá-las em massa se necessário". Antes de implementar, perguntei 3 pontos 
 - **Reversível:** sim — duas funções de serviço e duas rotas 100% novas, aditivas; nenhum
   comportamento existente (exclusão individual, zona de perigo) foi alterado.
 
+### 4.39 Bug: "apagar em massa" não apagava todas as selecionadas (2026-10-06)
+
+A Clara testou a seção 4.38 e reportou: "Eu clico em apagar em massa e ele continua apagando um
+só" — e, ao eu perguntar se o campo de destino aparecia e se ela chegava a escolher uma empresa
+ali, confirmou: "Eu seleciono o campo para mover o histórico, e mesmo assim n apaga todos os
+selecionados."
+
+- **Causa raiz, reproduzida localmente:** o fluxo mais natural pra "excluir várias empresas e
+  manter uma como sobrevivente" é clicar em "Selecionar todas" (marca TODAS as linhas, inclusive a
+  que ela queria manter) e then escolher essa mesma empresa como destino no modal. Mas
+  `excluir_empresas_em_massa` recusa de propósito uma empresa de destino que esteja entre as
+  próprias selecionadas (não dá pra uma empresa ser destino de si mesma) — e quando isso acontece,
+  a operação inteira falha (0 excluídas) com um erro que não deixava claro o motivo. Reproduzi com
+  Playwright: 5 empresas com todos os 5 tipos de vínculo (laudo, audiência, cobrança, processo,
+  correspondência) + 1 candidata a destino, "Selecionar todas", escolher a candidata como destino
+  → falha total. Selecionando as 5 SEM a candidata (ela fica de fora da seleção) → as 5 são
+  excluídas corretamente com o histórico movido pro destino, confirmando que o motor de exclusão
+  em si (serviço + rota) sempre funcionou certo — o problema era só esse caso de seleção.
+- **Correção — `static/app.js`:** em vez de só recusar (ou só esconder a opção no dropdown, que já
+  acontecia mas não ajudava quem usa "Selecionar todas"), agora, ao escolher uma empresa no campo
+  de destino, se ela estiver marcada pra exclusão/realocação, a caixa dela é **desmarcada
+  automaticamente** (`iniciarAutoDesmarcarDestino`), com um toast explicando o que aconteceu ("A
+  empresa escolhida como destino foi retirada da seleção"). O fluxo "selecionar tudo e escolher
+  quem sobrevive" passa a funcionar sem exigir que a pessoa lembre de desmarcar manualmente. O
+  modal aberto (contador, campos ocultos, lista de opções de destino) é recalculado na hora
+  (`atualizarModalAberto`, extraído do código que já existia pra abrir o modal). Nenhuma mudança
+  no backend (`excluir_empresas_em_massa`/`realocar_empresas_em_massa`) — a proteção contra
+  destino-entre-selecionadas continua lá, só deixou de ser alcançável pelo fluxo normal da tela.
+- **Testado:** suíte completa sem alteração (270 testes, a proteção do backend contra destino
+  entre as selecionadas já tinha teste — `test_excluir_em_massa_destino_entre_selecionadas_e_
+  recusada`/`test_realocar_em_massa_destino_entre_selecionadas_e_recusada`, continuam passando,
+  confirmando que o backend ainda recusa se algum dia o JS for contornado). Verificado com
+  Playwright reproduzindo o cenário exato da Clara (selecionar todas, escolher a própria candidata
+  a destino) — a caixa dela desmarca sozinha, o contador do modal atualiza de 6 pra 5, e a
+  exclusão em massa conclui com sucesso, deixando a empresa-destino intacta com o histórico das
+  outras 5 nela. Esse é um bug só de JavaScript (lógica de seleção no navegador) — este projeto
+  não tem infraestrutura de teste automatizado de navegador na suíte (só `TestClient` server-side),
+  então a verificação ficou no teste manual com Playwright, documentado aqui.
+- **Reversível:** sim — mudança isolada em `static/app.js`; nenhum HTML, rota ou lógica de
+  serviço foi alterado.
+

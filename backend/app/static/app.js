@@ -400,6 +400,17 @@ function iniciarCopiaDeTextoCartas() {
 // obrigatório) se alguma selecionada tiver vínculo — ver
 // `contar_vinculos_empresa`/`_ENTIDADES_VINCULADAS` no backend. Em ambos os
 // modais, a própria empresa selecionada nunca aparece como opção de destino.
+//
+// Bug real reportado pela Clara (2026-10-06, "eu seleciono o campo pra
+// mover o histórico, e mesmo assim não apaga todos os selecionados"):
+// usando "Selecionar todas", a empresa que ela queria manter como destino
+// também ficava marcada pra exclusão — o backend recusa isso (não dá pra
+// uma empresa ser destino de si mesma), e a operação inteira falhava sem
+// deixar claro o motivo. Correção: ao escolher uma empresa no campo de
+// destino, se ela estiver marcada pra exclusão/realocação, a caixa dela é
+// desmarcada automaticamente (`iniciarAutoDesmarcarDestino`) — o fluxo
+// natural de "selecionar tudo e escolher uma sobrevivente" passa a
+// funcionar sem precisar desmarcar nada manualmente.
 function iniciarSelecaoEmMassaDeEmpresas() {
   var caixaTodas = document.getElementById("chk-empresa-todas");
   var caixas = Array.prototype.slice.call(document.querySelectorAll(".chk-empresa-massa"));
@@ -444,34 +455,62 @@ function iniciarSelecaoEmMassaDeEmpresas() {
     });
   }
 
+  // Mantém o modal aberto em sincronia com a seleção atual: reconstrói os
+  // campos ocultos, o contador, a exigência do campo de destino (modal de
+  // excluir) e quais empresas aparecem como opção de destino (nunca uma
+  // que esteja marcada). Chamada ao abrir o modal e de novo sempre que a
+  // seleção muda enquanto ele está aberto (ver `iniciarAutoDesmarcarDestino`).
+  function atualizarModalAberto(modal) {
+    var sel = selecionadas();
+    var idsSelecionados = sel.map(function (caixa) { return caixa.value; });
+    preencherIdsOcultos(modal, idsSelecionados);
+
+    modal.querySelectorAll("[data-contador-modal]").forEach(function (span) {
+      span.textContent = sel.length;
+    });
+
+    var blocoDestino = modal.querySelector("[data-bloco-destino-obrigatorio]");
+    if (blocoDestino) {
+      var algumComVinculo = sel.some(function (caixa) { return caixa.getAttribute("data-vinculo") === "1"; });
+      blocoDestino.style.display = algumComVinculo ? "" : "none";
+      var selectCondicional = blocoDestino.querySelector("select");
+      if (selectCondicional) selectCondicional.required = algumComVinculo;
+    }
+
+    modal.querySelectorAll("select").forEach(function (select) {
+      select.querySelectorAll("[data-opcao-destino]").forEach(function (opcao) {
+        opcao.hidden = idsSelecionados.indexOf(opcao.value) !== -1;
+      });
+    });
+  }
+
+  function iniciarAutoDesmarcarDestino(modal) {
+    var select = modal.querySelector("select[name=empresa_destino_id]");
+    if (!select) return;
+    select.addEventListener("change", function () {
+      if (!select.value) return;
+      var caixaDestino = caixas.filter(function (c) { return c.value === select.value; })[0];
+      if (caixaDestino && caixaDestino.checked) {
+        caixaDestino.checked = false;
+        atualizarBarra();
+        atualizarModalAberto(modal);
+        mostrarToast(
+          "A empresa escolhida como destino foi retirada da seleção (ela não pode ser destino de si mesma).",
+          "sucesso"
+        );
+      }
+    });
+  }
+
+  document.querySelectorAll("#modal-excluir-em-massa, #modal-realocar-em-massa").forEach(iniciarAutoDesmarcarDestino);
+
   document.querySelectorAll("[data-abrir-selecao-massa]").forEach(function (botao) {
     botao.addEventListener("click", function () {
       var modal = document.getElementById(botao.getAttribute("data-abrir-selecao-massa"));
-      var sel = selecionadas();
-      if (!modal || !sel.length) return;
+      if (!modal || !selecionadas().length) return;
 
-      var idsSelecionados = sel.map(function (caixa) { return caixa.value; });
-      preencherIdsOcultos(modal, idsSelecionados);
-
-      modal.querySelectorAll("[data-contador-modal]").forEach(function (span) {
-        span.textContent = sel.length;
-      });
-
-      var blocoDestino = modal.querySelector("[data-bloco-destino-obrigatorio]");
-      if (blocoDestino) {
-        var algumComVinculo = sel.some(function (caixa) { return caixa.getAttribute("data-vinculo") === "1"; });
-        blocoDestino.style.display = algumComVinculo ? "" : "none";
-        var selectCondicional = blocoDestino.querySelector("select");
-        if (selectCondicional) selectCondicional.required = algumComVinculo;
-      }
-
-      modal.querySelectorAll("select").forEach(function (select) {
-        select.value = "";
-        select.querySelectorAll("[data-opcao-destino]").forEach(function (opcao) {
-          opcao.hidden = idsSelecionados.indexOf(opcao.value) !== -1;
-        });
-      });
-
+      modal.querySelectorAll("select").forEach(function (select) { select.value = ""; });
+      atualizarModalAberto(modal);
       modal.showModal();
     });
   });

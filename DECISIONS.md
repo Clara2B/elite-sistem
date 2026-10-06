@@ -1901,3 +1901,30 @@ com Playwright de ponta a ponta (seleção, modal com campo de destino condicion
 massa movendo histórico, realocação em massa mantendo as empresas de origem cadastradas e ativas).
 
 **Reversível:** sim — tudo aditivo; exclusão individual e zona de perigo continuam intactas.
+
+## 2026-10-06 — Bug: exclusão em massa não apagava todas as selecionadas
+
+**Relato da Clara:** "Eu clico em apagar em massa e ele continua apagando um só" e, depois de eu
+perguntar se o campo de destino aparecia e se ela escolhia algo ali: "Eu seleciono o campo para
+mover o histórico, e mesmo assim n apaga todos os selecionados."
+
+**Causa:** o jeito mais natural de "excluir várias e manter uma" é clicar em "Selecionar todas"
+(que marca literalmente todas as linhas, inclusive a que ela queria manter) e escolher essa mesma
+empresa como destino. O backend recusa — de propósito — uma empresa de destino que esteja entre as
+próprias selecionadas pra exclusão, então a operação inteira falhava (0 excluídas), sem deixar
+claro por quê. Reproduzi localmente com Playwright e confirmei: sem a candidata a destino na
+seleção, a exclusão em massa sempre funcionou certo (testado com 5 empresas com todos os 5 tipos
+de vínculo); o problema era só esse caso específico de seleção.
+
+**Correção:** `static/app.js` agora desmarca automaticamente a caixa da empresa assim que ela é
+escolhida como destino no modal (se estiver marcada), com um aviso explicando. O fluxo "selecionar
+tudo, escolher quem sobrevive" passa a funcionar sem exigir nenhum passo manual extra. Nenhuma
+mudança no backend — a proteção contra destino-entre-selecionadas continua lá como última linha de
+defesa.
+
+**Testado:** suíte completa (270 testes) sem alteração — os testes de backend que já cobriam essa
+proteção continuam passando. Verificado manualmente com Playwright reproduzindo o cenário exato
+da Clara (selecionar todas, escolher a própria candidata a destino): a caixa dela desmarca
+sozinha, o contador do modal atualiza, e a exclusão conclui com sucesso.
+
+**Reversível:** sim — mudança isolada em JavaScript do navegador, sem tocar banco ou rotas.
