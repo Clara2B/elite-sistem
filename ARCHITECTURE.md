@@ -2235,3 +2235,42 @@ selecionados."
 - **Reversível:** sim — mudança isolada em `static/app.js`; nenhum HTML, rota ou lógica de
   serviço foi alterado.
 
+### 4.40 Bug (continuação): clique impreciso na caixinha de seleção (2026-10-06)
+
+A correção da seção 4.39 não resolveu — a Clara testou de novo e reportou o mesmo sintoma:
+"Seleciono mais de dois, escolho a empresa que deve ser passada os processos e ele apaga apenas
+um dos selecionados." Perguntei se aparecia erro, se demorava, quanto histórico as empresas
+tinham e quantas ela selecionava; ela respondeu: sem erro (mensagem verde normal, só que "1
+empresa(s) excluída(s)"), demora bastante, pouco histórico, e repetiu com empresas diferentes com
+o mesmo resultado — sempre exatamente 1 de N.
+
+- **Investigação:** reproduzi o cenário (mais de duas selecionadas, destino separado, sem estar
+  entre as selecionadas) de três formas — direto no serviço, via requisição HTTP crua, e com
+  navegador automatizado — **inclusive contra um Postgres real** (subi um cluster local,
+  `postgresql+psycopg://`, com FK aplicada de verdade, igual produção) com empresas tendo os 5
+  tipos de vínculo simultaneamente. Em todos os casos as empresas foram excluídas corretamente, as
+  4 de uma vez. A mensagem "sem erro, sempre exatamente 1 de N, não depende de quais empresas" é
+  incompatível com um erro de banco (apareceria vermelho) ou com o backend recebendo os ids
+  errados de forma aleatória — aponta pra alguma empresa na seleção dela nunca chegar a ficar
+  marcada de fato.
+- **Hipótese mais provável:** a caixinha de seleção (`.chk-empresa-massa`) é pequena numa tabela
+  densa — fácil clicar ao lado dela (no texto do nome, na célula de status) sem perceber que não
+  marcou. A pessoa "sente" que selecionou várias, mas só uma (a que acertou o clique) realmente
+  ficou marcada — exatamente o padrão "sempre 1, não importa quais" que ela descreveu.
+- **Correção — `static/app.js` (`iniciarCliqueNaLinhaParaSelecionar`):** clicar em qualquer espaço
+  vazio da linha (não só na caixinha) agora também alterna a seleção — clicar de novo desmarca.
+  Cliques nos campos de nome/CNPJ, botões (Salvar/Desativar/excluir) e links continuam com o
+  comportamento normal deles, sem disparar a seleção. Cursor vira "pointer" só nas linhas que têm
+  checkbox (não mexe em nenhuma outra tabela do sistema).
+- **Testado:** suíte completa sem alteração (270 testes, nada no backend mudou). Verificado com
+  Playwright: clicar na célula de "Status" (não na caixinha) de 4 linhas diferentes marca as 4
+  corretamente, clicar de novo desmarca, clicar no campo de texto do nome não interfere na seleção
+  — e o fluxo completo (selecionar por clique na linha, escolher destino, excluir) excluiu as 3
+  selecionadas corretamente, com o histórico reatribuído pro destino, confirmado direto no banco.
+- **Em aberto:** essa é a causa mais provável dada a investigação, mas não foi confirmada
+  diretamente com a Clara (ela não tem como saber se o clique "errou" a caixinha) — vou pedir pra
+  ela testar de novo e, se persistir, meu próximo passo é checar o contador "N selecionada(s)" na
+  tela dela no momento exato antes de clicar em excluir, que diria com certeza se o problema é
+  esse ou outra coisa.
+- **Reversível:** sim — mudança isolada em `static/app.js`.
+

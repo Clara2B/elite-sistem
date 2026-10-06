@@ -1928,3 +1928,35 @@ da Clara (selecionar todas, escolher a própria candidata a destino): a caixa de
 sozinha, o contador do modal atualiza, e a exclusão conclui com sucesso.
 
 **Reversível:** sim — mudança isolada em JavaScript do navegador, sem tocar banco ou rotas.
+
+## 2026-10-06 — Bug (continuação): exclusão em massa ainda só apagava uma
+
+A correção anterior não resolveu — mesmo sintoma reportado de novo: "Seleciono mais de dois,
+escolho a empresa que deve ser passada os processos e ele apaga apenas um dos selecionados."
+Perguntei detalhes (erro? demora? histórico? quantas?) — resposta: sem erro (mensagem verde normal
+com contagem "1"), demora bastante, pouco histórico, reproduzível com empresas diferentes, sempre
+exatamente 1 de N.
+
+**Investigação:** reproduzi exaustivamente (serviço direto, HTTP cru, navegador automatizado) —
+inclusive contra um **Postgres real** local (não só o SQLite dos testes) com FK aplicada de
+verdade e empresas com todos os 5 tipos de vínculo. Em todos os casos a exclusão em massa
+funcionou perfeitamente. "Sem erro + sempre exatamente 1, não importa quais empresas" não bate com
+um bug de banco/backend — bate com a seleção em si nunca chegando a marcar mais de uma caixinha de
+fato.
+
+**Hipótese mais provável:** a caixinha de seleção é pequena — fácil clicar ao lado dela (no nome,
+no status) sem perceber que não marcou. A pessoa sente que selecionou várias, mas só a que acertou
+o clique realmente ficou marcada.
+
+**Correção:** `static/app.js` agora deixa a linha inteira clicável pra alternar a seleção (não só
+a caixinha), sem interferir nos campos de nome/CNPJ nem nos botões da linha.
+
+**Testado:** 270 testes (backend inalterado). Verificado com Playwright simulando clique
+"impreciso" (na célula de status, não na caixinha) em 4 linhas — todas marcam corretamente, e o
+fluxo completo de exclusão em massa funciona.
+
+**Em aberto:** causa mais provável dada a investigação, mas não confirmada diretamente com a
+Clara. Próximo passo se persistir: pedir pra ela conferir o contador "N selecionada(s)" na tela
+antes de clicar em excluir.
+
+**Reversível:** sim — mudança isolada em JavaScript do navegador.

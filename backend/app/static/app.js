@@ -518,6 +518,28 @@ function iniciarSelecaoEmMassaDeEmpresas() {
   atualizarBarra();
 }
 
+// A caixa de seleção de cada linha (`.chk-empresa-massa`) é pequena — fácil
+// de errar o clique nela numa tabela densa. Bug real reportado pela Clara
+// (2026-10-06, 2ª rodada: "seleciono mais de dois... e ele apaga apenas um
+// dos selecionados", reproduzível com empresas diferentes toda vez): o
+// cenário mais provável é um clique que não acerta a caixinha em si — a
+// linha parece selecionada visualmente mas não está. Clicar em qualquer
+// espaço "vazio" da linha (fora dos campos de nome/CNPJ, botões e da
+// própria caixa) agora alterna a seleção também, tornando isso tolerante a
+// imprecisão de clique.
+function iniciarCliqueNaLinhaParaSelecionar() {
+  document.querySelectorAll("tbody tr").forEach(function (linha) {
+    var caixa = linha.querySelector(".chk-empresa-massa");
+    if (!caixa) return;
+    linha.style.cursor = "pointer";
+    linha.addEventListener("click", function (evento) {
+      if (evento.target.closest("input, button, a, select")) return;
+      caixa.checked = !caixa.checked;
+      caixa.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  });
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   iniciarZonasDeUpload();
   iniciarValidacaoDeUpload();
@@ -532,4 +554,5 @@ document.addEventListener("DOMContentLoaded", function () {
   iniciarSelecionarTodosModulos();
   iniciarPopupSuporte();
   iniciarSelecaoEmMassaDeEmpresas();
+  iniciarCliqueNaLinhaParaSelecionar();
 });
