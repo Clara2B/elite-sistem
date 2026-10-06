@@ -2267,10 +2267,37 @@ o mesmo resultado — sempre exatamente 1 de N.
   corretamente, clicar de novo desmarca, clicar no campo de texto do nome não interfere na seleção
   — e o fluxo completo (selecionar por clique na linha, escolher destino, excluir) excluiu as 3
   selecionadas corretamente, com o histórico reatribuído pro destino, confirmado direto no banco.
-- **Em aberto:** essa é a causa mais provável dada a investigação, mas não foi confirmada
-  diretamente com a Clara (ela não tem como saber se o clique "errou" a caixinha) — vou pedir pra
-  ela testar de novo e, se persistir, meu próximo passo é checar o contador "N selecionada(s)" na
-  tela dela no momento exato antes de clicar em excluir, que diria com certeza se o problema é
-  esse ou outra coisa.
+- **Em aberto (na época):** a causa real só foi confirmada na seção 4.41, abaixo — a Clara mesma
+  encontrou o motivo de verdade.
 - **Reversível:** sim — mudança isolada em `static/app.js`.
+
+### 4.41 Bug (causa raiz real, encontrada pela Clara): hábito do ícone de lixeira por linha (2026-10-06)
+
+Depois de três rodadas de investigação (seções 4.38-4.40, incluindo reproduzir contra Postgres
+real sem achar nada de errado no backend), a própria Clara encontrou a causa: "Quando apago elas
+eu clico em um único símbolo de lixo em uma única empresa, mesmo depois de selecionar todos os
+que quero apagar." Ou seja — ela marcava as caixinhas de várias empresas, mas pra excluir clicava
+no ícone de lixeira de UMA linha específica (o controle que já existia antes da seleção em massa
+existir, hábito de uso anterior), em vez do botão "Excluir selecionadas" na barra azul. Esse ícone
+sempre excluiu só aquela empresa — nunca leu a seleção em massa — então sempre "funcionava", só
+que exclui exatamente 1, por design (não é um bug no sentido de comportamento incorreto: o ícone
+fez exatamente o que sempre fez). Isso explica cada sintoma das rodadas anteriores: sem erro
+(exclusão individual funciona normal), sempre exatamente 1 (sempre foi a exclusão de 1 empresa só,
+nunca em massa de verdade), independente de quais empresas (não é dado-dependente, é hábito de
+clique). O "demora bastante"/"Method Not Allowed ao recarregar" da rodada anterior foi uma pista
+real mas secundária — não investigada a fundo porque a causa principal já foi resolvida aqui;
+registrado como possível acompanhamento futuro se ela notar lentidão de novo.
+- **Correção — `static/app.js`/`empresas.html`:** em vez de só confiar que a pessoa vai notar a
+  barra de seleção, os ícones de lixeira de CADA linha agora ficam desativados (cinza, com
+  `title` explicando o motivo) sempre que houver qualquer seleção em massa ativa (1 ou mais
+  caixinhas marcadas) — tanto nas linhas selecionadas quanto nas não selecionadas. Isso torna
+  fisicamente impossível repetir esse engano: ou a pessoa desmarca tudo e usa a lixeira individual
+  normalmente, ou usa "Excluir selecionadas"/"Realocar selecionadas" pra lidar com o lote inteiro.
+  Sem seleção ativa, os ícones continuam funcionando exatamente como sempre funcionaram.
+- **Testado:** suíte completa sem alteração (270 testes — isso é só HTML/JS, backend intocado).
+  Verificado com Playwright: lixeira habilitada sem seleção, desativada (nas 3 linhas, inclusive
+  a não marcada) assim que 2 ficam marcadas, com o texto do `title` explicando, e reabilitada ao
+  desmarcar tudo.
+- **Reversível:** sim — mudança isolada em `static/app.js` + uma classe nova no botão existente
+  em `empresas.html`; nenhuma rota ou lógica de serviço foi tocada.
 

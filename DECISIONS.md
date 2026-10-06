@@ -1955,8 +1955,32 @@ a caixinha), sem interferir nos campos de nome/CNPJ nem nos botões da linha.
 "impreciso" (na célula de status, não na caixinha) em 4 linhas — todas marcam corretamente, e o
 fluxo completo de exclusão em massa funciona.
 
-**Em aberto:** causa mais provável dada a investigação, mas não confirmada diretamente com a
-Clara. Próximo passo se persistir: pedir pra ela conferir o contador "N selecionada(s)" na tela
-antes de clicar em excluir.
+**Em aberto (na época):** a causa real foi encontrada depois pela própria Clara — ver a entrada
+seguinte.
 
 **Reversível:** sim — mudança isolada em JavaScript do navegador.
+
+## 2026-10-06 — Bug (causa raiz real): hábito do ícone de lixeira por linha
+
+Depois de 3 rodadas de investigação sem achar nada de errado no backend (incluindo teste contra
+Postgres real), a Clara encontrou a causa ela mesma: "Quando apago elas eu clico em um único
+símbolo de lixo em uma única empresa, mesmo depois de selecionar todos os que quero apagar."
+
+Ela marcava as caixinhas de várias empresas mas clicava no ícone de lixeira de UMA linha
+específica pra excluir — o controle que já existia antes da seleção em massa, hábito de uso
+anterior. Esse ícone sempre excluiu só aquela empresa (nunca leu a seleção em massa), então
+sempre "funcionava" — só que excluindo exatamente 1, por design. Explica tudo: sem erro (exclusão
+individual é normal), sempre exatamente 1, independente de quais empresas (hábito de clique, não
+dado).
+
+**Sugestão da Clara:** adicionar um botão pra excluir todas as selecionadas — que já existe
+("Excluir selecionadas" na barra azul). O problema era discoverability, não ausência da função.
+
+**Correção:** os ícones de lixeira de cada linha agora ficam desativados (com aviso explicando)
+sempre que houver qualquer seleção em massa ativa — torna fisicamente impossível repetir o
+engano, em vez de só confiar que a pessoa vai notar a barra de seleção.
+
+**Testado:** 270 testes (backend intocado). Verificado com Playwright: lixeira desativada em
+todas as linhas assim que qualquer seleção fica ativa, reabilitada ao desmarcar tudo.
+
+**Reversível:** sim — mudança isolada em JS + uma classe no HTML existente.

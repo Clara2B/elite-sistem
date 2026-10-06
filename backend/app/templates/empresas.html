@@ -69,9 +69,9 @@
                         {{ "Desativar" if e.ativo else "Ativar" }}
                       </button>
                     </form>
-                    <button type="button" class="perigo" style="padding:7px 10px; font-size:0.8rem;"
+                    <button type="button" class="perigo botao-excluir-linha" style="padding:7px 10px; font-size:0.8rem;"
                             data-abrir-confirmacao="modal-excluir-{{ e.id }}" data-nome-alvo="{{ e.nome }}"
-                            aria-label="Excluir {{ e.nome }}">
+                            title="Excluir {{ e.nome }}" aria-label="Excluir {{ e.nome }}">
                       {{ icones.icone('lixeira') }}
                     </button>
                   </div>

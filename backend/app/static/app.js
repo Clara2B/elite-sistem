@@ -416,12 +416,22 @@ function iniciarSelecaoEmMassaDeEmpresas() {
   var caixas = Array.prototype.slice.call(document.querySelectorAll(".chk-empresa-massa"));
   var barra = document.getElementById("barra-selecao-empresas");
   var contador = document.getElementById("contador-selecao-empresas");
+  var botoesExcluirLinha = Array.prototype.slice.call(document.querySelectorAll(".botao-excluir-linha"));
   if (!caixas.length || !barra) return;
 
   function selecionadas() {
     return caixas.filter(function (caixa) { return caixa.checked; });
   }
 
+  // Causa real do bug "seleciono várias mas só apaga uma" (2026-10-06, 3ª
+  // rodada — a própria Clara encontrou): com várias caixinhas marcadas, o
+  // hábito antigo (de antes dessa seleção em massa existir) é clicar no
+  // ícone de lixeira de UMA linha específica, que sempre existiu e exclui
+  // só aquela empresa — nada no app avisava que isso ignorava o resto da
+  // seleção. Em vez de só confiar que a pessoa vai notar a barra azul,
+  // desativa os ícones de lixeira de cada linha enquanto houver qualquer
+  // seleção em massa ativa, com um título explicando o porquê — assim esse
+  // engano deixa de ser possível.
   function atualizarBarra() {
     var sel = selecionadas();
     barra.style.display = sel.length ? "" : "none";
@@ -430,6 +440,12 @@ function iniciarSelecaoEmMassaDeEmpresas() {
       caixaTodas.checked = sel.length > 0 && sel.length === caixas.length;
       caixaTodas.indeterminate = sel.length > 0 && sel.length < caixas.length;
     }
+    botoesExcluirLinha.forEach(function (botao) {
+      botao.disabled = sel.length > 0;
+      botao.title = sel.length > 0
+        ? "Desmarque a seleção em massa pra excluir só esta empresa, ou use \"Excluir selecionadas\" acima."
+        : "";
+    });
   }
 
   caixas.forEach(function (caixa) {
