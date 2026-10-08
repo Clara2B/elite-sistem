@@ -1,0 +1,47 @@
+# Posição dos rótulos "UF + valor" no mapa do Brasil, e das linhas de
+# chamada dos estados pequenos (especificação, seção "Mapas com
+# matplotlib"): RN, PB, PE, AL, SE, ES, RJ têm o valor pequeno demais pra
+# caber dentro do próprio estado, então o rótulo fica fora do mapa, ligado
+# por uma linha até o centroide do estado.
+#
+# PLACEHOLDER — as coordenadas reais só dá pra ajustar visualmente depois
+# que o desenho do mapa existir de verdade (Fase 6), comparando com o
+# layout do modelo (Relatório_EWS_8.docx). Os valores abaixo são um ponto
+# de partida razoável (deslocamento radial simples a partir do centroide),
+# não os definitivos — serão corrigidos olhando o PNG gerado.
+#
+# offset_x/offset_y: deslocamento em pontos do matplotlib a partir do
+# centroide do estado, pra onde o texto do rótulo vai.
+estados_com_rotulo_externo:
+  RN:
+    offset_x: 40
+    offset_y: 10
+  PB:
+    offset_x: 45
+    offset_y: 0
+  PE:
+    offset_x: 50
+    offset_y: -10
+  AL:
+    offset_x: 50
+    offset_y: -20
+  SE:
+    offset_x: 50
+    offset_y: -30
+  ES:
+    offset_x: 35
+    offset_y: -15
+  RJ:
+    offset_x: 20
+    offset_y: -25
+
+# Paletas de cor por mapa (especificação: "Paleta azul no revisional e
+# azul/vermelho no contrárias, como no modelo") — cor base (valor 0) e cor
+# no valor máximo; tons intermediários interpolados entre as duas.
+paletas:
+  revisional:
+    cor_base: "#dbeafe"   # tom claro
+    cor_maximo: "#1e3a8a"  # tom mais forte (azul escuro)
+  contrarias:
+    cor_base: "#fee2e2"    # tom claro
+    cor_maximo: "#7f1d1d"  # tom mais forte (vermelho escuro)

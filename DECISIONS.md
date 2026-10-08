@@ -2091,3 +2091,56 @@ contexto abaixo), a Clara subiu as 6 planilhas reais (nomes, processos, valores)
 **Reversível:** não — é uma reescrita de histórico (irreversível por natureza), feita só com
 autorização explícita da Clara pra esse commit específico, fora do padrão normal do projeto de
 nunca reescrever histórico.
+
+## 2026-10-08 — Gerador de Relatórios Mensais das Assessorias: Fase 0 e decisões
+
+**Pedido da Clara:** nova área — ler 6 planilhas mensais e gerar o relatório de cada assessoria
+em .docx/.pdf, no layout do modelo atual. Especificação completa anexada por upload (não
+versionada no repo). Ver ARCHITECTURE.md seção 5 pros detalhes técnicos completos.
+
+**Achado que mudou o rumo de uma decisão:** o sistema não tem nenhum conversor de .docx pra PDF —
+o `pdf_export.py` existente desenha PDF do zero com reportlab, não converte documento. Recomendei
+LibreOffice headless (gratuito, mantém dado dentro do servidor — uma API externa mandaria
+nome/processo/valor de cliente pra terceiro, mais exposição LGPD) — pendente a Clara confirmar
+disponibilidade no Render antes da Fase 7. Fases 1-6 não dependem disso.
+
+**Decisões (pergunta explícita antes de cada uma — nenhuma assumida):**
+- Prazo dos laudos: 7 dias úteis (demais); 15 CONSÓRCIO/LOTEAMENTO.
+- Faixas das Iniciais: "até 7" e "8 a 20" (cobre todos os casos, diferente do modelo).
+- Armazenamento do resultado mensal: banco do sistema (tabela nova, aditiva).
+- Arquivos gerados (.docx/.pdf/.zip): não ficam armazenados, gerados sob demanda — mesmo padrão
+  de Laudos/Audiências hoje.
+- Feriados: biblioteca `holidays`, só nacionais.
+- Acesso: só admin por enquanto (mesmo padrão de Configuração) — resolve "ficar oculta até a
+  liberação" sem flag separada.
+- Cadastro de assessorias: YAML só pra apelidos; nome oficial e lista vêm de `EmpresaCliente`
+  (já existe — evita duas listas da mesma coisa fora de sincronia).
+
+**Dependências:** já presentes (`pandas`, `openpyxl`, `reportlab`) não precisam de aprovação nova.
+Novas, aprovação pendente conforme cada fase chegar nelas: `docxtpl`, `matplotlib`, `holidays`
+(Fases 4-7). `pyyaml` já adicionada (Fase 1 — ver abaixo), risco mínimo (puro Python, sem binário
+de sistema).
+
+**Reversível:** sim — nada implementado ainda além da Fase 1 (estrutura/config), 100% aditivo.
+
+## 2026-10-08 — Relatórios das Assessorias, Fase 1: estrutura e configuração
+
+Módulo criado em `backend/app/relatorio_assessorias/` — árvore completa da especificação
+(`config/`, `leitores/`, `normalizacao/`, `secoes/`, `validacao.py`, `mapas.py`, `render.py`,
+`armazenamento.py`, `templates/`, `assets/`), cada arquivo com um docstring descrevendo sua
+responsabilidade futura (lógica real nas Fases 2-7, nada pela metade).
+
+4 arquivos de configuração (`config/*.yaml`) com conteúdo real: `fontes.yaml` (as 7 fontes,
+transcrito da especificação), `regras.yaml` (prazos e faixas das decisões acima),
+`assessorias.yaml` (só os 2 apelidos que a especificação já confirma — o resto é descoberto na
+Fase 3, não adivinhado agora), `mapa_rotulos.yaml` (placeholder explícito — coordenadas reais só
+dá pra ajustar na Fase 6, olhando o mapa de verdade).
+
+Dependência nova: `pyyaml` (adicionada a `requirements.txt`) — já estava no ambiente por algum
+motivo indireto, mas não era declarada; risco mínimo (puro Python).
+
+**Testado:** 4 testes novos (cada YAML carrega com a estrutura esperada) + suíte completa (290
+testes) sem nenhuma quebra fora do módulo novo. Lint limpo.
+
+**Reversível:** sim — módulo 100% novo e isolado; nenhuma rota, menu, tabela ou comportamento
+existente foi tocado.

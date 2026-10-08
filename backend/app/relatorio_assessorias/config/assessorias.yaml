@@ -1,0 +1,21 @@
+# Apelidos/sinônimos por assessoria — SÓ apelidos. O nome oficial e a
+# lista completa de assessorias vêm de `EmpresaCliente` (decisão da Clara,
+# 2026-10-08, "Cadastro assessorias": reaproveitar o cadastro já existente
+# em vez de duplicar numa lista YAML separada, pra uma empresa nova
+# cadastrada em Empresas-clientes já aparecer aqui sem editar este arquivo).
+#
+# A chave tem que bater exatamente com `EmpresaCliente.nome` (comparação
+# feita sem acento/maiúscula via normalizacao/texto.py, então a grafia aqui
+# não precisa ser idêntica caractere a caractere, só normalizar igual).
+#
+# Confirmados pela especificação (seção "Cadastro de assessorias e
+# apelidos") — os demais apelidos são descobertos empiricamente na Fase 3,
+# rodando os leitores contra as planilhas reais e cruzando com
+# EmpresaCliente: nome que não bate com nenhum apelido cadastrado vira
+# aviso global ("empresa desconhecida: X, N linhas"), com botão pra
+# adicionar como apelido na hora — não precisa estar tudo mapeado de
+# antemão pra v1 funcionar, só pra não gerar avisos repetidos todo mês.
+EWS:
+  apelidos: ["EWS", "SW"]  # troca de nome em agosto/2026 (confirmado) — relatório sai como EWS
+WNR:
+  apelidos: ["WNR", "WNR CONSULTORIA"]

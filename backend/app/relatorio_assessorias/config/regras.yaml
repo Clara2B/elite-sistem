@@ -1,0 +1,45 @@
+# Regras de negócio por seção: prazos, faixas de dias úteis, status
+# excluídos. Nada disso fica fixo no código (especificação, "Arquitetura e
+# estrutura de módulos") — mudar um prazo ou uma faixa é editar aqui, sem
+# mexer em secoes/*.py.
+#
+# "Dias úteis" em todo o relatório exclui sábados, domingos e feriados
+# nacionais (biblioteca `holidays`, só nacionais — decisão da Clara,
+# 2026-10-08: processos são de vários estados, um feriado só nacional é a
+# regra mais simples e já é o que a especificação define).
+
+laudos:
+  prazo_dias_uteis:
+    padrao: 7  # confirmado pela Clara, 2026-10-08 — "demais tipos"
+    por_tipo:
+      CONSÓRCIO: 15
+      LOTEAMENTO: 15
+  status_cancelado: "Cancelado"  # ENTRADA DE LAUDO = este valor → excluído de "elaborados no mês"
+  laudo_pronto_valor: "Sim"
+
+iniciais:
+  # Faixas e rótulos confirmados pela Clara (2026-10-08): "até 7" e "8 a
+  # 20", cobrindo todos os casos (o modelo atual usa "5 a 7"/"10 a 20",
+  # que deixava de fora 1-4 e 8-9 dias — não reproduzir isso).
+  faixas_dias_uteis:
+    - rotulo: "Distribuídos em até 7 dias úteis"
+      min: 0
+      max: 7
+    - rotulo: "Distribuídos entre 8 e 20 dias úteis"
+      min: 8
+      max: 20
+  aviso_acima_de: 20  # acima da faixa superior vira aviso, não entra numa faixa
+
+extrajudiciais:
+  prazo_agendamento_dias_uteis: 15
+  presenca_realizada: ["PRESENTE", "AUSENTE"]  # conta como "realizada"
+  presenca_excluida: ["CANCELADO", "REMARCADO"]
+
+contrarias:
+  status_encerrados_padrao: ["ARQUIVADO"]  # fora desta lista = processo ativo
+  tipos_acao:
+    judicial: "JUDICIAL"
+    trabalhista: "TRABALHISTA"
+
+procons:
+  tipos_acao_incluidos: ["PROCON", "EXTRAJUDICIAL", "MP"]

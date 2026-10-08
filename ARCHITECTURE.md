@@ -2414,3 +2414,110 @@ Terceiro item da varredura 4.42, seguindo a ordem de dificuldade que a Clara ped
 - **Reversível:** sim — aditivo em `app.js`/`style.css`/`empresas.html`; nenhuma rota ou dado
   tocado.
 
+## 5. Gerador de Relatórios Mensais das Assessorias
+
+Novo módulo (2026-10-08, pedido da Clara), a partir de
+`docs/especificacao-relatorios-assessorias.pdf` (ela anexou por upload — não está versionada no
+repo). Objetivo: ler 6 planilhas enviadas uma vez por mês e gerar o relatório mensal de cada
+assessoria (empresa-cliente ELITE) em .docx/.pdf, no layout do modelo atual
+(`Relatório_EWS_8.docx`). Trabalho feito seguindo as 10 fases da especificação (Fase 0 a 9),
+registradas abaixo.
+
+### 5.1 Fase 0 — Reconhecimento e plano
+
+Antes de ler a especificação, 4 bloqueios reais impediram começar — nenhum foi contornado sem a
+Clara resolver:
+1. A especificação não estava no repositório (ela precisou anexar via upload).
+2. O repositório **não tem branch `main`** — confirmado por `git ls-remote` e pela API do GitHub
+   (`list_branches`): só existe `claude/relatorios-arquitetura-auditoria-pewhu8`. A Clara confirmou
+   usar essa branch mesmo (sem criar uma `feature/relatorios-assessorias` separada, já que não há
+   `main` pra ramificar).
+3 e 4. Os caminhos do modelo `.docx` e da pasta de planilhas vieram como placeholder literal no
+   pedido original — resolvidos com upload direto na conversa.
+
+**Achados da exploração do sistema atual:**
+- Padrão de automação: `services/` (lógica) + `web/routes_X.py` (telas) + `api/X.py` (rotas
+  externas PDF/Excel) + `templates/X.html`, registrados em `main.py`.
+- Permissões: módulos ficam em `app.auth.MODULOS_OPERADORA` (ELITE/EXIMIA/None), gateados por
+  setor; a área de Configuração (Usuários/Empresas/Setores/Chamados) é a exceção — só
+  `papel_global in PAPEIS_GLOBAIS`, sem setor.
+- Armazenamento: hoje nada fica em disco — PDF/Excel de Laudos etc. são gerados na hora e
+  devolvidos direto na resposta HTTP; upload usa arquivo temporário do SO, descartado depois.
+- **Não existe conversor de .docx pra PDF no sistema.** `pdf_export.py` desenha o PDF do zero com
+  `reportlab` (texto, tabela, cabeçalho em código) — não converte um documento existente. Não há
+  LibreOffice, não há `docxtpl`, não há `render.yaml`/`Dockerfile` no repo (Render configurado só
+  pelo painel deles). Qualquer caminho docx→pdf pra esse módulo é infraestrutura nova.
+- Dependências já presentes: `pandas`, `openpyxl`, `reportlab`. Novas, precisando aprovação:
+  `docxtpl`, `matplotlib`, `holidays` (e o binário LibreOffice, se for o caminho escolhido pra PDF
+  — não uma lib Python).
+- Modelo `Relatório_EWS_8.docx` conferido contra a especificação: 16 tabelas, bate exatamente com
+  as 4 seções + 2 mapas + listas + campos manuais descritos. Os erros de digitação que a
+  especificação pede pra corrigir (`REFRÊNCIA`, `ASSESSSORIA`, `QUATIDADE`, `distribuidos`) estão
+  todos lá, confirmados. Os números que a especificação já avisa que o modelo mostra errado (28 em
+  vez de 27, 30 em vez de 29, 14 processos distribuídos sem origem) também batem — sem surpresa
+  nova, só confirmação de que modelo e especificação são consistentes entre si.
+
+**Decisões tomadas com a Clara (todas por pergunta explícita, nenhuma assumida):**
+
+| # | Pergunta | Decisão |
+|---|---|---|
+| a | Prazo dos laudos | 7 dias úteis (demais tipos); 15 dias úteis CONSÓRCIO/LOTEAMENTO — confirmado |
+| b | Faixas das Iniciais | "Até 7" e "8 a 20" (cobre todos os casos — diferente do modelo, que deixava 1-4 e 8-9 dias de fora) |
+| c | Armazenamento do resultado mensal | Banco do sistema (Postgres, tabela nova e aditiva) |
+| g | Onde ficam os arquivos gerados | Não ficam — .docx/.pdf/.zip gerados sob demanda a cada download, mesmo padrão de Laudos/Audiências hoje (disco do Render não é persistente entre deploys) |
+| d | Conversor de PDF | LibreOffice headless (recomendação, pelo motivo abaixo) — pendente a Clara confirmar disponibilidade no Render antes da Fase 7; Fases 1-6 não dependem disso |
+| e | Feriados | Biblioteca `holidays`, só nacionais (processos são de vários estados — feriado estadual/municipal ficaria complexo pra pouco ganho) |
+| f | Quem acessa | Só admin por enquanto (`papel_global in PAPEIS_GLOBAIS`) — mesmo padrão de Configuração; resolve "deixar oculta até a liberação" sem precisar de flag separada |
+| h | Cadastro de assessorias | YAML só pra apelidos; nome oficial e lista completa vêm de `EmpresaCliente` (já existe, 48 empresas — evita duas listas da mesma coisa fora de sincronia) |
+
+**Sobre o conversor de PDF (pergunta d):** recomendei LibreOffice headless em vez de uma API
+externa de conversão — enviar documentos com nome/processo/valor de cliente pra um serviço de
+terceiro é mais um ponto de exposição LGPD, na contramão do cuidado que a Clara já pede em todo o
+projeto, além de ter custo por conversão. LibreOffice headless é gratuito e mantém os dados dentro
+do próprio servidor. Meu limite: não tenho como confirmar nem instalar isso no Render sozinho —
+fica como decisão pendente, sem bloquear as Fases 1-6.
+
+### 5.2 Incidente: planilhas reais commitadas e removidas do histórico
+
+Durante a Fase 0, a Clara subiu as 6 planilhas reais (nomes, processos, valores) direto num commit
+("Planilhas utilizadas") na branch — contradizendo a própria regra de LGPD do pedido original
+("NÃO faça commit delas... pasta ignorada pelo Git"). Ver DECISIONS.md 2026-10-08 pro registro
+completo: cópia local preservada em `dados_locais_nao_versionados/` (gitignored) antes de qualquer
+remoção, estrutura das 6 planilhas conferida contra a especificação, commit removido do histórico
+via `git reset --hard` (era a ponta da branch) + `git push --force-with-lease` — com aprovação
+explícita da Clara pra essa operação especificamente. Confirmado via API do GitHub que o commit não
+aparece mais no histórico.
+
+### 5.3 Fase 1 — Estrutura e configuração
+
+Módulo criado em `app/relatorio_assessorias/` (dentro do pacote `app` existente, não como um
+pacote Python separado na raiz — adaptação pra caber na estrutura já usada por
+`services/`/`web/`/`api/`, sem mudar o que a especificação descreve). Árvore igual à especificação:
+`config/`, `leitores/`, `normalizacao/`, `secoes/`, mais `validacao.py`, `mapas.py`, `render.py`,
+`armazenamento.py`, `templates/`, `assets/`. Cada arquivo-módulo tem só um docstring por enquanto,
+descrevendo a responsabilidade dele (a lógica de verdade vem nas Fases 2-7) — nada de
+implementação pela metade.
+
+- **`config/__init__.py`**: `carregar(nome)` — único ponto que lê os YAMLs desta pasta (sem
+  cache: arquivos pequenos, lidos poucas vezes por requisição, e não cachear evita servir versão
+  antiga depois de editar com o servidor no ar).
+- **`config/fontes.yaml`**: as 6 planilhas/7 fontes, transcrito direto da tabela da especificação
+  (arquivo, padrão de leitura, aba, linha do cabeçalho, colunas e sinônimos).
+- **`config/regras.yaml`**: prazos (7/15 dias úteis), faixas das Iniciais ("até 7"/"8 a 20"),
+  status excluídos de Contrárias (ARQUIVADO) — os valores das decisões da Fase 0.
+- **`config/assessorias.yaml`**: só apelidos (decisão "Cadastro de assessorias") — hoje só os 2
+  exemplos que a própria especificação confirma (EWS/SW, WNR/WNR CONSULTORIA); o resto é
+  descoberto empiricamente na Fase 3, rodando os leitores contra as planilhas reais e cruzando com
+  `EmpresaCliente` — tentar adivinhar os 48 agora arriscaria dado errado silencioso.
+- **`config/mapa_rotulos.yaml`**: posição dos rótulos dos 7 estados pequenos (RN, PB, PE, AL, SE,
+  ES, RJ) e paletas de cor — marcado como placeholder explícito; coordenadas reais só dá pra
+  ajustar olhando o PNG de verdade, na Fase 6.
+- **Dependência nova**: `pyyaml` (adicionada a `requirements.txt`) — já estava disponível no
+  ambiente por algum motivo indireto, mas não era uma dependência declarada do projeto; sem
+  declarar, não haveria garantia de estar presente num ambiente novo/produção.
+- **Testado**: `tests/test_relatorio_assessorias_config.py` (4 testes — cada YAML carrega e tem a
+  estrutura esperada). Suíte completa do projeto rodada depois (290 testes, os 286 de antes +
+  esses 4) — nada fora do módulo novo foi tocado. Lint limpo.
+- **Reversível:** sim — módulo 100% novo e isolado; nenhuma rota, menu ou tabela existente foi
+  alterada nesta fase.
+

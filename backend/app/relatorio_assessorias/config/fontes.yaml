@@ -1,0 +1,112 @@
+# Fontes de dados: planilha, abas e colunas esperadas (especificação,
+# seção "Fontes de dados: planilhas, abas e colunas"). 6 arquivos, 7 fontes
+# (Contrárias e Procons têm padrão de leitura igual — aba por assessoria —
+# mas são arquivos e seções diferentes do relatório).
+#
+# campo_na_planilha: lista de sinônimos aceitos pro leitor reconhecer a
+# coluna mesmo com variação de nome entre arquivos/meses — comparação sem
+# acento/maiúscula/espaços extras (ver normalizacao/texto.py). O primeiro
+# item de cada lista é o nome "canônico" usado no resto do código.
+#
+# Abas não listadas em nenhuma fonte (DASHBOARD, DADOS, ALERTAS,
+# METODOLOGIA, _DashData, Central de Alerta, Página2, E-MAIL BANCO,
+# INFORMAÇÕES DE CLIENTE etc.) são sempre ignoradas pelos leitores.
+
+laudos:
+  arquivo_campo_upload: "laudo"
+  padrao_leitura: aba_mensal
+  cabecalho_linha: 1
+  aba_mes:
+    formato: ["mes_abreviado + ano_2_digitos"]  # ex.: AGO26, ABR26
+  colunas:
+    data: ["DATA"]
+    empresa: ["EMPRESA"]
+    tipo_laudo: ["TIPO DE LAUDO"]
+    entrada_laudo: ["ENTRADA DE LAUDO"]
+    laudo_pronto: ["LAUDO PRONTO"]
+    data_pronto: ["DATA"]  # 2ª ocorrência de "DATA" na aba — ver colunas_duplicadas
+    entregue_a_empresa: ["ENTREGUE A EMPRESA"]
+  colunas_duplicadas:
+    # "DATA" aparece duas vezes: 1ª = data de entrada do laudo, 2ª = data
+    # em que ficou pronto. Resolvidas por posição relativa (ordem de
+    # aparição no cabeçalho), não pelo nome.
+    - nome: "DATA"
+      ocorrencias: [data, data_pronto]
+
+iniciais:
+  arquivo_campo_upload: "iniciais"
+  padrao_leitura: aba_mensal
+  cabecalho_linha: 1
+  aba_mes:
+    formato: ["mes_por_extenso + ano_4_digitos"]  # ex.: AGOSTO 2026
+    observacao: >
+      Também lê as abas dos meses anteriores do mesmo ano, pra resolver
+      "aguardando distribuição" de casos recebidos em mês anterior
+      (ver secoes/iniciais.py).
+  colunas:
+    data_recebimento: ["DATA DE RECEBIMENTO"]
+    assessoria: ["ASSESSORIA"]
+    data_distribuicao: ["DATA DE DISTRIBUIÇÃO"]
+    protocolado: ["PROTOCOLADO"]
+    estados: ["ESTADOS", "ESTADO", "UF"]
+    numero_processo: ["NÚMERO DE PROCESSO", "NUMERO DE PROCESSO"]
+
+audiencias_judiciais:
+  arquivo_campo_upload: "agendamento"  # arquivo "PLANILHA 2026"
+  padrao_leitura: aba_unica
+  aba: "JUDICIAL"
+  cabecalho_linha: 1
+  colunas:
+    data: []  # coluna A, sem título no cabeçalho — ver leitores/aba_unica.py
+    nome_cliente: ["NOME DO CLIENTE"]
+    processo: ["PROCESSO"]
+    empresa: ["EMPRESA"]  # 1ª ocorrência, se houver mais de uma
+
+audiencias_contrarias:
+  arquivo_campo_upload: "agendamento"  # arquivo "PLANILHA 2026"
+  padrao_leitura: aba_unica
+  aba: "PAUTA DA SEMANA CONTRARIA"
+  cabecalho_linha: 2  # linha 1 é só o título da aba
+  colunas:
+    data: ["DATA"]
+    nome_cliente: ["NOME DO CLIENTE"]
+    estado: ["ESTADO", "UF"]
+    processo: ["PROCESSO"]
+    empresa: ["EMPRESA"]
+
+extrajudiciais:
+  arquivo_campo_upload: "extrajudicial"  # arquivo "AGENDAMENTO"
+  padrao_leitura: aba_unica
+  aba: "AGENDAMENTO"
+  cabecalho_linha: 1
+  colunas:
+    data_recebimento: ["DATA DE RECEBIMENTO"]
+    empresa: ["EMPRESA"]
+    nome_completo: ["NOME COMPLETO"]
+    data_agendamento: ["DATA DE AGENDAMENTO"]  # texto "dd/mm/aaaa - hh:mm"
+    presenca: ["PRESENÇA", "PRESENCA"]
+
+contrarias:
+  arquivo_campo_upload: "contrarias"  # arquivo "CONTRÁRIAS - NOVO"
+  padrao_leitura: aba_por_assessoria
+  cabecalho_linha: 3  # linhas 1-2: nome da assessoria / título
+  colunas:
+    data_recebimento: ["DATA DE RECEBIMENTO"]
+    nome_autor: ["NOME DO AUTOR"]
+    numero_processo: ["Nº DO PROCESSO", "NUMERO DO PROCESSO", "N DO PROCESSO"]
+    estado: ["ESTADO", "UF"]
+    valor_causa: ["VALOR DA CAUSA"]
+    status_atual: ["STATUS ATUAL"]
+    tipo_acao: ["TIPO AÇÃO", "TIPO DE AÇÃO"]
+
+procons:
+  arquivo_campo_upload: "procon"  # arquivo "PROCON E EXTRAJUDICIAL"
+  padrao_leitura: aba_por_assessoria
+  cabecalho_linha: 2
+  colunas:
+    data_recebimento: ["DATA DE RECEBIMENTO"]
+    nome_autor: ["NOME DO AUTOR"]
+    numero_processo: ["Nº DO PROCESSO", "NUMERO DO PROCESSO", "N DO PROCESSO"]
+    estado: ["ESTADO", "UF"]
+    status_atual: ["STATUS ATUAL"]
+    tipo_acao: ["TIPO AÇÃO", "TIPO DE AÇÃO"]
