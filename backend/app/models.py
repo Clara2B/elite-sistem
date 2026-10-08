@@ -63,7 +63,10 @@ class Laudo(Base):
     __tablename__ = "laudos"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    empresa_cliente_id: Mapped[int] = mapped_column(ForeignKey("empresas_clientes.id"))
+    # index=True (2026-10-08): todo relatório filtra por empresa — sem
+    # índice nessa coluna, em produção (Postgres) isso é uma varredura
+    # completa da tabela a cada relatório gerado. Ver DECISIONS.md.
+    empresa_cliente_id: Mapped[int] = mapped_column(ForeignKey("empresas_clientes.id"), index=True)
     tipo_laudo_nome: Mapped[str] = mapped_column(String(60))  # texto livre — igual à planilha hoje
     data: Mapped[date] = mapped_column(Date, index=True)
     nome_cliente: Mapped[str] = mapped_column(String(200), default="")
@@ -93,7 +96,7 @@ class Correspondencia(Base):
     __tablename__ = "correspondencias"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    empresa_cliente_id: Mapped[int] = mapped_column(ForeignKey("empresas_clientes.id"))
+    empresa_cliente_id: Mapped[int] = mapped_column(ForeignKey("empresas_clientes.id"), index=True)
     mes: Mapped[str] = mapped_column(String(20), index=True)
     advogado: Mapped[str] = mapped_column(Text)
     autor: Mapped[str] = mapped_column(Text)
@@ -119,7 +122,7 @@ class Audiencia(Base):
     __tablename__ = "audiencias"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    empresa_cliente_id: Mapped[int] = mapped_column(ForeignKey("empresas_clientes.id"))
+    empresa_cliente_id: Mapped[int] = mapped_column(ForeignKey("empresas_clientes.id"), index=True)
     # Text (sem limite), não VARCHAR(N): mesmo texto livre da mesma planilha
     # real que já causou StringDataRightTruncation em `processos` (ver
     # DECISIONS.md) — nome_cliente/cpf/data_agendamento/conciliadora/advogada
@@ -148,7 +151,7 @@ class Cobranca(Base):
     __tablename__ = "cobrancas"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    empresa_cliente_id: Mapped[int] = mapped_column(ForeignKey("empresas_clientes.id"))
+    empresa_cliente_id: Mapped[int] = mapped_column(ForeignKey("empresas_clientes.id"), index=True)
     data: Mapped[date] = mapped_column(Date, index=True)
     tipo_cobranca: Mapped[str] = mapped_column(String(200))
     cobrador: Mapped[str] = mapped_column(String(10))  # EXIMIA | ELITE
@@ -283,7 +286,7 @@ class Processo(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     numero_processo: Mapped[str] = mapped_column(String(40), unique=True, index=True)
-    empresa_cliente_id: Mapped[int] = mapped_column(ForeignKey("empresas_clientes.id"))
+    empresa_cliente_id: Mapped[int] = mapped_column(ForeignKey("empresas_clientes.id"), index=True)
     # Text (sem limite), não VARCHAR(N): a planilha real já mostrou texto
     # bem mais longo do que um nome simples nesses campos (ex.: ADVOGADA
     # com "HUNTING - Fulana de Tal (CONTR. Beltrano)", 84+ caracteres) —

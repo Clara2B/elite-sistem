@@ -2009,3 +2009,18 @@ adicionados em `logs_auditoria` (a tabela que mais cresce no sistema).
 **Testado:** 283 testes, lint limpo, verificado com Playwright.
 
 **Reversível:** sim — tudo aditivo.
+
+## 2026-10-08 — Índices em empresa_cliente_id (item 2 da varredura)
+
+Segundo item, seguindo a ordem "mais fácil primeiro" que a Clara pediu: índice em
+`empresa_cliente_id` nas 5 tabelas que têm essa coluna (laudos, correspondencias, audiencias,
+cobrancas, processos) — é a consulta mais comum do sistema e nenhuma tinha índice nela.
+
+**Implementado:** `index=True` nos 5 modelos + migração manual em `db.py` (mesmo padrão já usado
+pros índices anteriores do projeto — `CREATE INDEX IF NOT EXISTS`, só roda no Postgres).
+
+**Testado:** 283 testes (não observável em SQLite). Verificado contra Postgres real local: criação
+do zero, re-execução idempotente, e o cenário real de produção — tabelas já populadas sem o
+índice, migração sozinha recriando corretamente.
+
+**Reversível:** sim — índice não muda dado nem comportamento, só acelera consulta.

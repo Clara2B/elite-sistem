@@ -216,6 +216,28 @@ def _garantir_indices_logs_auditoria(engine) -> None:
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_logs_auditoria_criado_em ON logs_auditoria (criado_em)"))
 
 
+def _garantir_indices_empresa_cliente_id(engine) -> None:
+    """Índice em `empresa_cliente_id` nas 5 tabelas que têm essa coluna
+    (2026-10-08, varredura de otimização a pedido da Clara) — é a consulta
+    mais comum do sistema (todo relatório filtra por empresa, e
+    `contar_vinculos_empresa`/`_ENTIDADES_VINCULADAS` também), e nenhuma das
+    5 tinha índice nela até agora (FK não ganha índice automático no
+    Postgres, diferente da chave primária). Mesmo esquema de
+    `_garantir_indice_prazos_fatais`/`_garantir_indices_logs_auditoria` —
+    `index=True` em models.py só vale pra tabela criada do zero."""
+    if engine.dialect.name != "postgresql":
+        return
+    inspector = inspect(engine)
+    tabelas = ["laudos", "correspondencias", "audiencias", "cobrancas", "processos"]
+    with engine.begin() as conn:
+        for tabela in tabelas:
+            if not inspector.has_table(tabela):
+                continue
+            conn.execute(
+                text(f"CREATE INDEX IF NOT EXISTS ix_{tabela}_empresa_cliente_id ON {tabela} (empresa_cliente_id)")
+            )
+
+
 def init_db() -> None:
     """Cria as tabelas (se não existirem) e semeia valores padrão, igual ao
     comportamento do core/db.py do sistema atual na primeira execução."""
@@ -232,6 +254,7 @@ def init_db() -> None:
     _garantir_texto_ilimitado(engine, "logs_auditoria", "entidade_id")
     _garantir_indice_prazos_fatais(engine)
     _garantir_indices_logs_auditoria(engine)
+    _garantir_indices_empresa_cliente_id(engine)
     session_factory = get_session_factory()
     with session_factory() as db:
         if db.scalar(select(TipoLaudo.id).limit(1)) is None:

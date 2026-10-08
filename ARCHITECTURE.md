@@ -2342,3 +2342,24 @@ pra ela confirmar antes de seguir pra próxima.
 - **Reversível:** sim — tudo aditivo (tabela já existia, só ganhou índice + tela de consulta);
   nenhum comportamento existente foi alterado.
 
+### 4.43 Índices em `empresa_cliente_id` (item 2 da varredura) (2026-10-08)
+
+Segundo item da varredura 4.42, na ordem de dificuldade que a Clara pediu (mais fácil primeiro).
+
+- **O quê:** `index=True` em `empresa_cliente_id` nas 5 tabelas que têm essa coluna — `laudos`,
+  `correspondencias`, `audiencias`, `cobrancas`, `processos`. É a consulta mais comum do sistema
+  (todo relatório filtra por empresa; `contar_vinculos_empresa`/`_ENTIDADES_VINCULADAS` também) e
+  nenhuma das 5 tinha índice nela — FK não ganha índice automático no Postgres (diferente da chave
+  primária).
+- **Migração:** `db.py::_garantir_indices_empresa_cliente_id`, mesmo padrão de
+  `_garantir_indice_prazos_fatais`/`_garantir_indices_logs_auditoria` (`CREATE INDEX IF NOT
+  EXISTS`, só Postgres, roda em todo startup). `index=True` no modelo não retroage sobre uma
+  tabela que já existe em produção — por isso a migração manual.
+- **Testado:** suíte completa sem alteração (283 testes — não é um comportamento observável em
+  SQLite, só em Postgres). Verificado contra um Postgres real local (não só o SQLite dos testes):
+  `init_db()` criando os 5 índices do zero, rodando duas vezes seguidas sem erro (idempotente), e
+  — o cenário que replica produção de verdade — removendo os índices de tabelas já populadas e
+  confirmando que a migração sozinha (sem recriar nada) os recria corretamente.
+- **Reversível:** sim — índice é só um atalho de consulta, não muda nenhum dado nem comportamento
+  visível; pode ser removido a qualquer momento sem perda.
+
