@@ -2389,3 +2389,28 @@ Terceiro item da varredura 4.42, seguindo a ordem de dificuldade que a Clara ped
 - **Reversível:** sim — só uma função de consulta nova + troca de uma chamada; nenhum dado,
   template ou comportamento visível mudou.
 
+### 4.45 Busca por nome/CNPJ em Empresas-clientes (item 4, último da varredura) (2026-10-08)
+
+Último item da varredura 4.42, o mais trabalhoso.
+
+- **O quê:** campo de busca no cabeçalho do card "Cadastradas" em Empresas-clientes — filtra as
+  linhas por nome ou CNPJ enquanto digita, sem ir ao servidor (a lista inteira já está na página;
+  com o volume atual isso é instantâneo). Ignora acento/maiúscula (mesma ideia de
+  `app/utils.py::normalize`, reimplementada em JS). Mostra "Nenhuma empresa encontrada" quando o
+  filtro não bate com nada.
+- **Por que só Empresas por enquanto:** foi a tela que o levantamento (4.42) citou como exemplo
+  concreto (48+ linhas, cresce com o tempo) — o padrão é simples e reaproveitável; dá pra levar
+  pra outras listas (Usuários, por exemplo) depois, se a Clara quiser.
+- **Integração com a seleção em massa (4.38/4.39):** "Selecionar todas" agora só marca as linhas
+  visíveis no momento (mesma ideia já usada em Setores — `iniciarSelecionarTodosModulos`/
+  `caixasVisiveis`) — filtrar por "ABSOLUTA" e clicar em "Selecionar todas" não marca,
+  escondidas, as outras 47 empresas. Já a seleção em si não é desfeita por filtrar: marcar uma
+  empresa, buscar por outro termo (que esconde a primeira) e marcar mais uma mantém as duas
+  selecionadas — só a busca é visual, não mexe no que já foi marcado.
+- **Testado:** suíte completa sem alteração (286 testes — mudança só em JS/CSS/HTML, nenhuma rota
+  ou lógica de serviço tocada). Verificado com Playwright: busca sem acento encontra nome
+  acentuado, busca por CNPJ parcial, mensagem de "nenhuma encontrada", limpar o campo mostra tudo
+  de novo, e "Selecionar todas" com um filtro ativo marca só o que está visível.
+- **Reversível:** sim — aditivo em `app.js`/`style.css`/`empresas.html`; nenhuma rota ou dado
+  tocado.
+

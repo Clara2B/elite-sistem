@@ -16,7 +16,13 @@
   {{ flash.toast('erro', erro) }}
 
   <div class="card">
-    <div class="card-header"><h2>Cadastradas ({{ empresas|length }})</h2></div>
+    <div class="card-header">
+      <h2>Cadastradas ({{ empresas|length }})</h2>
+      {% if empresas %}
+        <input type="text" id="busca-empresas" class="busca-lista" placeholder="Buscar por nome ou CNPJ..."
+               aria-label="Buscar empresa por nome ou CNPJ" autocomplete="off">
+      {% endif %}
+    </div>
     {% if empresas %}
       {% for e in empresas %}
         <form id="empresa-{{ e.id }}" method="post" action="/app/empresas/{{ e.id }}"></form>
@@ -78,6 +84,9 @@
                 </td>
               </tr>
             {% endfor %}
+            <tr id="linha-busca-vazia" style="display:none;">
+              <td colspan="5" class="vazio">Nenhuma empresa encontrada para essa busca.</td>
+            </tr>
           </tbody>
         </table>
       </div>

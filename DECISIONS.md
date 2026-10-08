@@ -2041,3 +2041,27 @@ numa carga da tela (trava contra o padrão N+1 voltar sem que ninguém perceba, 
 na tela fica idêntico, só mais lento). Lint limpo. Verificado com Playwright.
 
 **Reversível:** sim — nenhum dado, template ou comportamento visível mudou.
+
+## 2026-10-08 — Busca em Empresas-clientes (item 4, último da varredura)
+
+Último item, o mais trabalhoso: campo de busca por nome/CNPJ na tela de Empresas-clientes (48+
+linhas, cresce com o tempo) — client-side, instantâneo, ignora acento/maiúscula.
+
+**Decisão de escopo:** implementado só em Empresas por ora (foi o exemplo concreto do levantamento
+4.42) — padrão simples de reaproveitar em outras listas depois, se a Clara quiser.
+
+**Integração com a seleção em massa:** "Selecionar todas" passou a respeitar o filtro ativo (só
+marca linhas visíveis, mesma ideia já usada em Setores) — sem isso, filtrar e clicar em
+"Selecionar todas" marcaria, escondidas, empresas que a pessoa nem está vendo.
+
+**Testado:** 286 testes (mudança só em JS/CSS/HTML). Verificado com Playwright: busca sem acento,
+busca por CNPJ, mensagem de "nenhuma encontrada", limpar busca, e seleção em massa respeitando o
+filtro.
+
+**Reversível:** sim — aditivo, nenhuma rota ou dado tocado.
+
+---
+
+**Varredura de otimização concluída** (4.42-4.45): os 4 itens levantados foram implementados, na
+ordem de dificuldade que a Clara pediu — tela de Auditoria, índices no banco, fim das consultas
+repetidas em Empresas, e busca em Empresas-clientes.

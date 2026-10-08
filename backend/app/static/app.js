@@ -423,6 +423,16 @@ function iniciarSelecaoEmMassaDeEmpresas() {
     return caixas.filter(function (caixa) { return caixa.checked; });
   }
 
+  // Igual ao "Marcar todas" de Setores (`iniciarSelecionarTodosModulos`) —
+  // só mexe/considera nas caixas visíveis no momento, pra "Selecionar
+  // todas" não marcar (sem a pessoa ver) empresas escondidas pela busca
+  // (`iniciarBuscaDeEmpresas`). A seleção em si (`selecionadas()`) continua
+  // contando tudo marcado, visível ou não — filtrar a lista não deve
+  // desmarcar nada escondido por engano.
+  function caixasVisiveis() {
+    return caixas.filter(function (caixa) { return caixa.offsetParent !== null; });
+  }
+
   // Causa real do bug "seleciono várias mas só apaga uma" (2026-10-06, 3ª
   // rodada — a própria Clara encontrou): com várias caixinhas marcadas, o
   // hábito antigo (de antes dessa seleção em massa existir) é clicar no
@@ -437,8 +447,10 @@ function iniciarSelecaoEmMassaDeEmpresas() {
     barra.style.display = sel.length ? "" : "none";
     if (contador) contador.textContent = sel.length + " selecionada(s)";
     if (caixaTodas) {
-      caixaTodas.checked = sel.length > 0 && sel.length === caixas.length;
-      caixaTodas.indeterminate = sel.length > 0 && sel.length < caixas.length;
+      var visiveis = caixasVisiveis();
+      var selVisiveis = visiveis.filter(function (c) { return c.checked; });
+      caixaTodas.checked = visiveis.length > 0 && selVisiveis.length === visiveis.length;
+      caixaTodas.indeterminate = selVisiveis.length > 0 && selVisiveis.length < visiveis.length;
     }
     botoesExcluirLinha.forEach(function (botao) {
       botao.disabled = sel.length > 0;
@@ -451,9 +463,10 @@ function iniciarSelecaoEmMassaDeEmpresas() {
   caixas.forEach(function (caixa) {
     caixa.addEventListener("change", atualizarBarra);
   });
+  document.addEventListener("empresas:busca-atualizada", atualizarBarra);
   if (caixaTodas) {
     caixaTodas.addEventListener("change", function () {
-      caixas.forEach(function (caixa) { caixa.checked = caixaTodas.checked; });
+      caixasVisiveis().forEach(function (caixa) { caixa.checked = caixaTodas.checked; });
       atualizarBarra();
     });
   }
@@ -556,6 +569,51 @@ function iniciarCliqueNaLinhaParaSelecionar() {
   });
 }
 
+// Busca por nome/CNPJ na tela de Empresas-clientes (2026-10-08, varredura de
+// otimização/produtividade — nenhuma lista do sistema tinha busca; com 48+
+// empresas cadastradas, achar uma específica era rolar a página toda). Só
+// client-side (sem ida ao servidor) — a lista já está inteira na página e é
+// pequena o bastante pra filtrar instantaneamente a cada tecla digitada.
+// Ignora acentos/maiúsculas (mesma ideia de `app/utils.py::normalize`, só
+// que em JS). Não mexe na seleção em massa — só esconde linhas; ver
+// `caixasVisiveis()`/`empresas:busca-atualizada` em
+// `iniciarSelecaoEmMassaDeEmpresas` pra como as duas features convivem.
+function _normalizarTextoBusca(texto) {
+  return (texto || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function iniciarBuscaDeEmpresas() {
+  var campo = document.getElementById("busca-empresas");
+  var linhaVazia = document.getElementById("linha-busca-vazia");
+  var linhas = Array.prototype.slice.call(document.querySelectorAll("tbody tr")).filter(function (linha) {
+    return linha !== linhaVazia;
+  });
+  if (!campo || !linhas.length) return;
+
+  var dados = linhas.map(function (linha) {
+    var nome = linha.querySelector("input[name=nome]");
+    var cnpj = linha.querySelector("input[name=cnpj]");
+    var texto = _normalizarTextoBusca((nome ? nome.value : "") + " " + (cnpj ? cnpj.value : ""));
+    return { linha: linha, texto: texto };
+  });
+
+  campo.addEventListener("input", function () {
+    var termo = _normalizarTextoBusca(campo.value);
+    var algumaVisivel = false;
+    dados.forEach(function (item) {
+      var bate = !termo || item.texto.indexOf(termo) !== -1;
+      item.linha.style.display = bate ? "" : "none";
+      if (bate) algumaVisivel = true;
+    });
+    if (linhaVazia) linhaVazia.style.display = algumaVisivel ? "none" : "";
+    document.dispatchEvent(new Event("empresas:busca-atualizada"));
+  });
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   iniciarZonasDeUpload();
   iniciarValidacaoDeUpload();
@@ -571,4 +629,5 @@ document.addEventListener("DOMContentLoaded", function () {
   iniciarPopupSuporte();
   iniciarSelecaoEmMassaDeEmpresas();
   iniciarCliqueNaLinhaParaSelecionar();
+  iniciarBuscaDeEmpresas();
 });
