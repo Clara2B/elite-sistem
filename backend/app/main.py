@@ -22,6 +22,7 @@ from app.config import settings
 from app.db import init_db
 from app.web.auth import PrecisaLogin, SemPermissao
 from app.web.routes_audiencias import router as web_audiencias_router
+from app.web.routes_auditoria import router as web_auditoria_router
 from app.web.routes_auth import router as web_auth_router
 from app.web.routes_cartas import router as web_cartas_router
 from app.web.routes_chamados import router as web_chamados_router
@@ -162,3 +163,4 @@ app.include_router(web_configuracao_router)
 app.include_router(web_suporte_router)
 app.include_router(web_chamados_router)
 app.include_router(web_correspondencias_router)
+app.include_router(web_auditoria_router)

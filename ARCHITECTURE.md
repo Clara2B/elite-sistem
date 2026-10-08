@@ -2301,3 +2301,44 @@ registrado como possível acompanhamento futuro se ela notar lentidão de novo.
 - **Reversível:** sim — mudança isolada em `static/app.js` + uma classe nova no botão existente
   em `empresas.html`; nenhuma rota ou lógica de serviço foi tocada.
 
+### 4.42 Varredura de otimização/produtividade + tela de Auditoria (2026-10-08)
+
+A Clara pediu uma varredura geral ("elevar o nível do sistema com foco em otimização e
+produtividade"). Levantamento (sem mexer em nada ainda) encontrou 4 pontos: (1) `_contexto_base`
+de Empresas roda 5 consultas por empresa cadastrada a cada carga de página (até 240 consultas só
+pra calcular vínculos); (2) nenhuma das 5 tabelas com `empresa_cliente_id` tem índice nessa
+coluna; (3) o log de auditoria (`LogAuditoria`/`services/auditoria.py::registrar`) é gravado desde
+o início do projeto pra praticamente toda ação, mas não existe tela nenhuma pra consultar; (4)
+nenhuma tela do sistema tem campo de busca/filtro de texto. Ela escolheu priorizar a (3) primeiro,
+depois pediu pra fazer as 4 em ordem de dificuldade (mais fácil → mais difícil), parando uma a uma
+pra ela confirmar antes de seguir pra próxima.
+
+- **Tela nova: Auditoria** (`web/routes_auditoria.py`, `templates/auditoria.html`,
+  `services/auditoria.py`) — área de Configuração, admin-only (mesmo padrão de Usuários/Empresas-
+  clientes/Assistentes/Setores/Chamados, adicionada em `AREAS_CONFIGURACAO`). Lista paginada
+  (50/página), mais recente primeiro, com filtro por usuário, ação (dropdown com as ações que já
+  aconteceram de verdade — `acoes_distintas`, sem lista fixa pra não desatualizar) e período.
+  `humanizar_acao()` converte o código interno (`EXCLUIU_EMPRESAS_EM_MASSA`) pro texto exibido
+  ("Excluiu empresas em massa") com uma regra genérica (troca `_` por espaço, só a primeira letra
+  maiúscula) — funciona pra qualquer uma das ~50 ações existentes ou futuras, sem precisar manter
+  um dicionário de tradução.
+- **`LogAuditoria` ganhou `index=True`** em `usuario_id`/`acao`/`criado_em` — é a tabela que mais
+  cresce no sistema (toda ação grava uma linha, inclusive cada download de PDF/Excel), então os
+  índices entraram já na primeira versão da tela, não só se ela ficasse lenta depois. Migração
+  manual em `db.py::_garantir_indices_logs_auditoria` (mesmo padrão de
+  `_garantir_indice_prazos_fatais`) — `index=True` no modelo só vale pra tabela criada do zero,
+  produção já tem a tabela.
+- **Bug real encontrado e corrigido antes de entregar:** o formulário de filtro é um GET normal —
+  campos de usuário/data deixados em branco mandam string vazia (`usuario_id=&data_inicio=`) em
+  vez de omitir o parâmetro, e o FastAPI recusava (422 `Method Not Allowed`-like, na verdade
+  erro de validação) converter `""` direto pra `int`/`date` nos parâmetros da rota. Corrigido
+  recebendo os 4 filtros como `str | None` e convertendo manualmente (string vazia = sem filtro).
+  Pego durante a verificação com Playwright, antes de qualquer entrega — não chegou a acontecer
+  em produção.
+- **Testado:** `tests/test_auditoria.py` (16 testes — listar com cada filtro, paginação, página
+  além do fim, `humanizar_acao`, `acoes_distintas`, tela exige admin, filtros pela URL, campos de
+  filtro vazios). 283 testes no total, lint limpo. Verificado com Playwright: card novo aparece em
+  Configuração, ações aparecem humanizadas com detalhes, filtro por usuário funciona.
+- **Reversível:** sim — tudo aditivo (tabela já existia, só ganhou índice + tela de consulta);
+  nenhum comportamento existente foi alterado.
+

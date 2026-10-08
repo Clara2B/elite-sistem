@@ -25,4 +25,8 @@ AREAS_CONFIGURACAO = [
         "url": "/app/chamados", "rotulo": "Chamados", "icone": "suporte",
         "descricao": "Chamados de suporte abertos pelo pop-up, em qualquer tela.",
     },
+    {
+        "url": "/app/auditoria", "rotulo": "Auditoria", "icone": "auditoria",
+        "descricao": "Histórico de ações no sistema — quem fez o quê e quando.",
+    },
 ]

@@ -1984,3 +1984,28 @@ engano, em vez de só confiar que a pessoa vai notar a barra de seleção.
 todas as linhas assim que qualquer seleção fica ativa, reabilitada ao desmarcar tudo.
 
 **Reversível:** sim — mudança isolada em JS + uma classe no HTML existente.
+
+## 2026-10-08 — Varredura de otimização/produtividade
+
+**Pedido da Clara:** "quero elevar o nível do sistema com foco em otimização e produtividade, pode
+fazer uma varredura e me passar o que podemos melhorar?"
+
+**Achados (sem mexer em nada, só levantamento):**
+1. Tela de Empresas roda ~5 consultas por empresa cadastrada a cada carga de página (até 240
+   consultas) só pra calcular vínculos.
+2. Nenhuma das 5 tabelas com `empresa_cliente_id` tem índice nessa coluna.
+3. O log de auditoria é gravado desde o início do projeto, mas não existe tela pra consultar.
+4. Nenhuma tela do sistema tem busca/filtro de texto.
+
+**Decisão da Clara:** primeiro perguntei por onde começar — ela escolheu a tela de Auditoria (item
+3). Depois, no meio dessa implementação, pediu pra fazer as 4 em ordem de dificuldade (mais fácil
+primeiro), parando uma a uma pra confirmar antes de seguir.
+
+**Implementado nesta entrada:** tela de Auditoria (admin, em Configuração) com filtro por usuário/
+ação/período e paginação — ver ARCHITECTURE.md 4.42 pros detalhes técnicos, incluindo um bug real
+de validação (campos de filtro vazios) encontrado e corrigido antes da entrega, e os índices
+adicionados em `logs_auditoria` (a tabela que mais cresce no sistema).
+
+**Testado:** 283 testes, lint limpo, verificado com Playwright.
+
+**Reversível:** sim — tudo aditivo.

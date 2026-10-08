@@ -232,8 +232,14 @@ class LogAuditoria(Base):
     __tablename__ = "logs_auditoria"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
-    acao: Mapped[str] = mapped_column(String(60))
+    # index=True nos 3 (2026-10-08): essa tabela cresce mais rápido que
+    # qualquer outra do sistema (toda ação registra uma linha aqui, inclusive
+    # cada download de PDF/Excel) — sem índice, a tela de Auditoria
+    # (web/routes_auditoria.py) filtrando/ordenando por qualquer um desses
+    # campos viraria uma varredura completa da tabela toda conforme ela
+    # cresce. Ver DECISIONS.md 2026-10-08.
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True, index=True)
+    acao: Mapped[str] = mapped_column(String(60), index=True)
     entidade: Mapped[str | None] = mapped_column(String(40), nullable=True)
     # Text, não VARCHAR(40): Cartas passa nome de autor/réu/titular em texto
     # livre (não raro nomes empresariais compridos) como entidade_id — mesmo
@@ -241,7 +247,9 @@ class LogAuditoria(Base):
     # produção, 2026-09-30, a Clara reportou a tela de erro ao gerar o PDF).
     entidade_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     detalhes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+    usuario: Mapped[Usuario | None] = relationship()
 
 
 class Chamado(Base):

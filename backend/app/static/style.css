@@ -833,6 +833,14 @@ details.modulos-setor .modulos-setor-painel {
   gap: 8px;
 }
 
+.paginacao {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 18px;
+}
+
 .barra-selecao {
   display: flex;
   align-items: center;

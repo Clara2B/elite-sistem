@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block titulo %}Auditoria — Elite Sistem{% endblock %}
+{% block voltar %}
+  {% import "_icones.html" as icones %}
+  {% from "_config_subnav.html" import subnav %}
+  <a href="/app/configuracao" class="link-voltar">{{ icones.icone('voltar') }} Voltar à Configuração</a>
+  {{ subnav(areas_configuracao, request.url.path) }}
+{% endblock %}
+{% block conteudo %}
+  <h1>Auditoria</h1>
+  <p class="subtitulo">Histórico de ações no sistema — quem fez o quê e quando.</p>
+
+  <div class="card">
+    <h2>Filtrar</h2>
+    <form class="formulario" method="get" action="/app/auditoria">
+      <div class="campo">
+        <label for="usuario_id">Usuário</label>
+        <select id="usuario_id" name="usuario_id">
+          <option value="">Todos</option>
+          {% for u in usuarios %}
+            <option value="{{ u.id }}" {{ "selected" if filtro.usuario_id == u.id else "" }}>{{ u.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="campo">
+        <label for="acao">Ação</label>
+        <select id="acao" name="acao">
+          <option value="">Todas</option>
+          {% for a in acoes %}
+            <option value="{{ a }}" {{ "selected" if filtro.acao == a else "" }}>{{ humanizar_acao(a) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="campo">
+        <label for="data_inicio">De</label>
+        <input type="date" id="data_inicio" name="data_inicio" value="{{ filtro.data_inicio or '' }}">
+      </div>
+      <div class="campo">
+        <label for="data_fim">Até</label>
+        <input type="date" id="data_fim" name="data_fim" value="{{ filtro.data_fim or '' }}">
+      </div>
+      <button type="submit">Filtrar</button>
+      {% if filtro.usuario_id or filtro.acao or filtro.data_inicio or filtro.data_fim %}
+        <a href="/app/auditoria" class="botao secundario">Limpar filtros</a>
+      {% endif %}
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Registros ({{ resultado.total_registros }})</h2></div>
+    {% if resultado.registros %}
+      <div class="tabela-wrap">
+        <table>
+          <thead>
+            <tr><th>Data/Hora</th><th>Usuário</th><th>Ação</th><th>Entidade</th><th>Detalhes</th></tr>
+          </thead>
+          <tbody>
+            {% for r in resultado.registros %}
+              <tr>
+                <td style="white-space:nowrap;">{{ r.criado_em.strftime("%d/%m/%Y %H:%M") }}</td>
+                <td>{{ r.usuario.nome if r.usuario else "—" }}</td>
+                <td>{{ humanizar_acao(r.acao) }}</td>
+                <td>
+                  {% if r.entidade %}
+                    {{ r.entidade }}{% if r.entidade_id %} #{{ r.entidade_id }}{% endif %}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td style="max-width:420px; white-space:pre-wrap;">{{ r.detalhes or "—" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if resultado.total_paginas > 1 %}
+        {% set base_qs = "usuario_id=%s&acao=%s&data_inicio=%s&data_fim=%s" % (
+          filtro.usuario_id or '', filtro.acao or '', filtro.data_inicio or '', filtro.data_fim or ''
+        ) %}
+        <div class="paginacao">
+          {% if resultado.pagina > 1 %}
+            <a class="botao secundario" href="/app/auditoria?{{ base_qs }}&pagina={{ resultado.pagina - 1 }}">Anterior</a>
+          {% endif %}
+          <span class="subtitulo">Página {{ resultado.pagina }} de {{ resultado.total_paginas }}</span>
+          {% if resultado.pagina < resultado.total_paginas %}
+            <a class="botao secundario" href="/app/auditoria?{{ base_qs }}&pagina={{ resultado.pagina + 1 }}">Próxima</a>
+          {% endif %}
+        </div>
+      {% endif %}
+    {% else %}
+      <p class="vazio">Nenhum registro encontrado com esses filtros.</p>
+    {% endif %}
+  </div>
+{% endblock %}

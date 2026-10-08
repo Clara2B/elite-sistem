@@ -199,6 +199,23 @@ def _garantir_indice_prazos_fatais(engine) -> None:
         )
 
 
+def _garantir_indices_logs_auditoria(engine) -> None:
+    """Índices pra `usuario_id`/`acao`/`criado_em` de `logs_auditoria`
+    (2026-10-08, tela de Auditoria nova — `web/routes_auditoria.py`) —
+    `index=True` em models.py só vale pra tabelas criadas do zero pelo
+    `create_all` acima; quem já tem a tabela em produção (todo ambiente
+    hoje) precisa desse `CREATE INDEX` manual, mesmo esquema de
+    `_garantir_indice_prazos_fatais`. Essa é a tabela que mais cresce no
+    sistema (toda ação grava uma linha aqui), por isso os índices são
+    criados já na primeira versão da tela, não só se ela ficar lenta depois."""
+    if engine.dialect.name != "postgresql" or not inspect(engine).has_table("logs_auditoria"):
+        return
+    with engine.begin() as conn:
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_logs_auditoria_usuario_id ON logs_auditoria (usuario_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_logs_auditoria_acao ON logs_auditoria (acao)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_logs_auditoria_criado_em ON logs_auditoria (criado_em)"))
+
+
 def init_db() -> None:
     """Cria as tabelas (se não existirem) e semeia valores padrão, igual ao
     comportamento do core/db.py do sistema atual na primeira execução."""
@@ -214,6 +231,7 @@ def init_db() -> None:
     )
     _garantir_texto_ilimitado(engine, "logs_auditoria", "entidade_id")
     _garantir_indice_prazos_fatais(engine)
+    _garantir_indices_logs_auditoria(engine)
     session_factory = get_session_factory()
     with session_factory() as db:
         if db.scalar(select(TipoLaudo.id).limit(1)) is None:
