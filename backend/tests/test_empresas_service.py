@@ -11,6 +11,7 @@ from app.models import (
 from app.services.empresas import (
     LISTA_OFICIAL_EMPRESAS,
     contar_vinculos_empresa,
+    contar_vinculos_todas_empresas,
     excluir_empresa,
     excluir_empresas_em_massa,
     excluir_empresas_inativas,
@@ -225,6 +226,35 @@ def test_contar_vinculos_empresa(db):
     vinculos = contar_vinculos_empresa(db, empresa.id)
     assert vinculos["laudos"] == 1
     assert vinculos["processos"] == 0
+
+
+def test_contar_vinculos_todas_empresas_bate_com_a_versao_individual(db):
+    """2026-10-08, varredura de otimização: `contar_vinculos_todas_empresas`
+    substitui N chamadas de `contar_vinculos_empresa` (uma por empresa) por
+    5 consultas agregadas no total — o resultado tem que ser idêntico."""
+    com_laudo = get_or_create_empresa(db, "LOTE COM LAUDO")
+    com_dois_tipos = get_or_create_empresa(db, "LOTE COM DOIS TIPOS")
+    sem_vinculo = get_or_create_empresa(db, "LOTE SEM VINCULO")
+    db.add(Laudo(empresa_cliente_id=com_laudo.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 1), status="SOLICITAÇÃO"))
+    db.add(
+        Audiencia(empresa_cliente_id=com_dois_tipos.id, nome_cliente="Fulano", data_recebimento=date(2026, 1, 1))
+    )
+    db.add(Processo(numero_processo="LOTE-0001", empresa_cliente_id=com_dois_tipos.id))
+    db.commit()
+
+    totais = contar_vinculos_todas_empresas(db)
+
+    assert totais.get(com_laudo.id, 0) == 1
+    assert totais.get(com_dois_tipos.id, 0) == 2
+    # empresa sem nenhum vínculo não aparece no dict — quem usa trata com .get(id, 0)
+    assert sem_vinculo.id not in totais
+
+
+def test_contar_vinculos_todas_empresas_sem_nenhuma_empresa_vinculada(db):
+    get_or_create_empresa(db, "LOTE VAZIO")
+    db.commit()
+
+    assert contar_vinculos_todas_empresas(db) == {}
 
 
 def test_excluir_em_massa_sem_vinculo_exclui_todas_direto(db):

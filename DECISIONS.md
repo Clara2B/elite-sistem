@@ -2024,3 +2024,20 @@ do zero, re-execução idempotente, e o cenário real de produção — tabelas 
 índice, migração sozinha recriando corretamente.
 
 **Reversível:** sim — índice não muda dado nem comportamento, só acelera consulta.
+
+## 2026-10-08 — Fim das consultas repetidas na tela de Empresas (item 1 da varredura)
+
+Terceiro item, seguindo a ordem "mais fácil primeiro": a tela de Empresas-clientes rodava 5
+consultas por empresa cadastrada a cada carga de página (até 240 consultas com as 48 da lista
+oficial), só pra calcular quantas têm laudo/audiência/cobrança/processo/correspondência vinculado.
+
+**Implementado:** `contar_vinculos_todas_empresas` (nova, em `services/empresas.py`) — 5 consultas
+agregadas no total, cobrindo todas as empresas de uma vez, em vez de uma consulta por empresa. A
+versão antiga (`contar_vinculos_empresa`, de uma empresa só) continua intacta, ainda é a certa
+pros outros usos (excluir/realocar uma empresa específica).
+
+**Testado:** 286 testes, incluindo um teste novo que conta de verdade quantas consultas SQL rodam
+numa carga da tela (trava contra o padrão N+1 voltar sem que ninguém perceba, já que o resultado
+na tela fica idêntico, só mais lento). Lint limpo. Verificado com Playwright.
+
+**Reversível:** sim — nenhum dado, template ou comportamento visível mudou.

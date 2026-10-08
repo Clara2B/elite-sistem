@@ -12,7 +12,7 @@ from app.services.auditoria import registrar
 from app.services.empresas import (
     alterar_ativo_empresa,
     atualizar_empresa,
-    contar_vinculos_empresa,
+    contar_vinculos_todas_empresas,
     criar_empresa,
     excluir_empresa,
     excluir_empresas_em_massa,
@@ -36,7 +36,7 @@ def _contexto_base(db: Session, usuario: Usuario) -> dict:
         "menu": itens_menu(db, usuario),
         "areas_configuracao": AREAS_CONFIGURACAO,
         "empresas": empresas,
-        "vinculos_por_empresa": {e.id: sum(contar_vinculos_empresa(db, e.id).values()) for e in empresas},
+        "vinculos_por_empresa": contar_vinculos_todas_empresas(db),
         "mensagem": None,
         "erro": None,
     }

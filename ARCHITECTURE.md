@@ -2363,3 +2363,29 @@ Segundo item da varredura 4.42, na ordem de dificuldade que a Clara pediu (mais 
 - **Reversível:** sim — índice é só um atalho de consulta, não muda nenhum dado nem comportamento
   visível; pode ser removido a qualquer momento sem perda.
 
+### 4.44 Fim das consultas repetidas na tela de Empresas (item 1 da varredura) (2026-10-08)
+
+Terceiro item da varredura 4.42, seguindo a ordem de dificuldade que a Clara pediu.
+
+- **O quê:** `_contexto_base` (routes_empresas.py) montava `vinculos_por_empresa` chamando
+  `contar_vinculos_empresa` uma vez PRA CADA empresa cadastrada (5 consultas por empresa — uma por
+  tipo de vínculo) — com as 48 da lista oficial, até 240 consultas numa única carga de página,
+  repetido a cada ação (editar, excluir, importar redireciona de volta pra essa mesma tela).
+- **Correção — `services/empresas.py::contar_vinculos_todas_empresas`:** nova função que faz 5
+  consultas agregadas (`GROUP BY empresa_cliente_id`), uma por tipo de vínculo, cobrindo TODAS as
+  empresas de uma vez — sempre 5 consultas no total, não importa se há 1 ou 500 empresas
+  cadastradas. `contar_vinculos_empresa` (a versão de uma empresa só) continua existindo sem
+  alteração — ainda é a certa pra `excluir_empresa`/`realocar_empresas_em_massa`, que só
+  precisam do total de UMA empresa por vez. `routes_empresas.py` trocou de uma pra outra; nenhuma
+  mudança em `empresas.html` foi necessária (o template já tratava empresa ausente do dict como 0
+  vínculos, que é exatamente o que a nova função também faz).
+- **Testado:** 2 testes novos de serviço confirmando que o resultado da versão em lote bate com a
+  soma da versão individual, e 1 teste novo que efetivamente conta quantas consultas SQL rodam
+  numa carga de `/app/empresas` com 10 empresas cadastradas (usando o hook `before_cursor_execute`
+  do SQLAlchemy) — garante abaixo de 15 consultas, bem longe do antigo "10 × 5 = 50", e serve de
+  trava: se o padrão N+1 voltar algum dia, esse teste quebra mesmo que o resultado da tela
+  continue visualmente idêntico. 286 testes no total, lint limpo. Verificado com Playwright que o
+  aviso de "X registro(s) vinculado(s)" ao tentar excluir uma empresa continua exatamente igual.
+- **Reversível:** sim — só uma função de consulta nova + troca de uma chamada; nenhum dado,
+  template ou comportamento visível mudou.
+

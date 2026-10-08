@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from datetime import date
 
+from sqlalchemy import event
+
 from app.auth import hash_senha
 from app.models import Audiencia, EmpresaCliente, Laudo, Usuario
 from app.services.empresas import get_or_create_empresa
@@ -122,3 +124,40 @@ def test_realocar_em_massa_exige_admin(client, db):
         follow_redirects=False,
     )
     assert resposta.status_code != 303
+
+
+def test_tela_nao_faz_uma_consulta_por_empresa(client, db):
+    """2026-10-08, varredura de otimização: `_contexto_base` rodava 5
+    consultas (uma por tipo de vínculo) PRA CADA empresa cadastrada —
+    `contar_vinculos_todas_empresas` reduz isso a 5 no total, não importa
+    quantas empresas existam. Sem esse teste, uma mudança futura poderia
+    reintroduzir o padrão N+1 sem que nenhum teste existente percebesse
+    (o resultado fica igual, só fica lento)."""
+    _logar_admin(db, client)
+    for i in range(10):
+        empresa = get_or_create_empresa(db, f"WEB MASSA QUERY COUNT {i}")
+        if i % 2 == 0:
+            db.add(
+                Laudo(
+                    empresa_cliente_id=empresa.id, tipo_laudo_nome="AUTO",
+                    data=date(2026, 1, 1), status="SOLICITAÇÃO",
+                )
+            )
+    db.commit()
+
+    consultas = []
+    engine = db.get_bind()
+
+    def _contar(conn, cursor, statement, parameters, context, executemany):
+        consultas.append(statement)
+
+    event.listen(engine, "before_cursor_execute", _contar)
+    try:
+        resposta = client.get("/app/empresas")
+    finally:
+        event.remove(engine, "before_cursor_execute", _contar)
+
+    assert resposta.status_code == 200
+    # bem abaixo de "10 empresas × 5 consultas" (50) — um número pequeno e
+    # fixo, que não cresce com a quantidade de empresas cadastradas.
+    assert len(consultas) < 15, f"consultas demais ({len(consultas)}) — voltou o padrão N+1?"

@@ -46,6 +46,26 @@ def contar_vinculos_empresa(db: Session, empresa_id: int) -> dict[str, int]:
         for nome, modelo in _ENTIDADES_VINCULADAS.items()
     }
 
+
+def contar_vinculos_todas_empresas(db: Session) -> dict[int, int]:
+    """Versão em lote de `contar_vinculos_empresa` pra telas que precisam do
+    total de TODAS as empresas de uma vez (2026-10-08, varredura de
+    otimização — a tela de Empresas-clientes rodava `contar_vinculos_
+    empresa` uma vez por empresa cadastrada, ou seja 5 consultas × N
+    empresas a cada carga de página: com as 48 da lista oficial, até 240
+    consultas só pra montar a coluna de "quantas são excluídas direto").
+    Aqui é uma consulta agregada por tipo de vínculo — 5 no total, sempre,
+    não importa quantas empresas existam. Resultado: {empresa_id: total de
+    vínculos somando os 5 tipos}; empresa sem nenhum vínculo simplesmente
+    não aparece no dict (quem usa trata ausência como 0, ex.: `.get(id, 0)`
+    em empresas.html — nenhuma mudança de template foi necessária)."""
+    totais: dict[int, int] = {}
+    for modelo in _ENTIDADES_VINCULADAS.values():
+        linhas = db.execute(select(modelo.empresa_cliente_id, func.count()).group_by(modelo.empresa_cliente_id))
+        for empresa_id, quantidade in linhas:
+            totais[empresa_id] = totais.get(empresa_id, 0) + quantidade
+    return totais
+
 # Lista oficial de empresas-clientes (nome curto usado em todo o sistema —
 # não a razão social) + CNPJ, a partir do PDF "INFOS ASSESSORIAS" que a
 # Clara mandou (2026-09-24). Usada só por `sincronizar_lista_oficial`, uma
