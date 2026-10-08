@@ -2065,3 +2065,29 @@ filtro.
 **Varredura de otimização concluída** (4.42-4.45): os 4 itens levantados foram implementados, na
 ordem de dificuldade que a Clara pediu — tela de Auditoria, índices no banco, fim das consultas
 repetidas em Empresas, e busca em Empresas-clientes.
+
+## 2026-10-08 — Planilhas reais de assessorias commitadas por engano e removidas do histórico
+
+No início do trabalho do "Gerador de Relatórios Mensais das Assessorias" (novo módulo, ver
+contexto abaixo), a Clara subiu as 6 planilhas reais (nomes, processos, valores) direto num commit
+("Planilhas utilizadas") na branch — contradizendo a própria regra dela de LGPD do pedido
+("NÃO faça commit delas... pasta ignorada pelo Git").
+
+**Ação, com aprovação explícita dela:**
+1. Cópia local das 6 planilhas pra `dados_locais_nao_versionados/` (fora do Git) antes de
+   qualquer remoção, pra não perder acesso aos dados precisados pro teste de ponta a ponta.
+2. Conferida a estrutura (abas) de cada planilha contra a especificação, confirmando que bate.
+3. Commit removido do histórico via `git reset --hard` pro commit anterior (ele era a ponta da
+   branch, sem nada construído em cima — não precisou de rebase/filter-repo) + `git push
+   --force-with-lease`.
+4. `.gitignore` atualizado (`dados_locais_nao_versionados/`, `Planilhas utilizadas/`) pra isso não
+   se repetir.
+5. Confirmado via API do GitHub (`list_commits`) que o commit não aparece mais no histórico da
+   branch. Ressalva: o GitHub pode reter objetos não referenciados internamente por um tempo antes
+   da coleta de lixo — não ficam mais visíveis/acessíveis pela UI ou API, mas a remoção não é uma
+   garantia absoluta e imediata do lado do GitHub.
+6. Suíte completa rodada depois da reescrita (286 testes) — nada quebrou.
+
+**Reversível:** não — é uma reescrita de histórico (irreversível por natureza), feita só com
+autorização explícita da Clara pra esse commit específico, fora do padrão normal do projeto de
+nunca reescrever histórico.
