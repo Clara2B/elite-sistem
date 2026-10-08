@@ -2144,3 +2144,25 @@ testes) sem nenhuma quebra fora do módulo novo. Lint limpo.
 
 **Reversível:** sim — módulo 100% novo e isolado; nenhuma rota, menu, tabela ou comportamento
 existente foi tocado.
+
+## 2026-10-08 — Relatórios das Assessorias, Fase 2: leitores
+
+Os três padrões de leitura (aba por mês, aba única, aba por assessoria), localização flexível de
+cabeçalho, colunas duplicadas resolvidas por posição (sem código especial — só listar o mesmo
+sinônimo pras duas colunas canônicas em `fontes.yaml`), origem de cada linha (planilha/aba/linha).
+Ver ARCHITECTURE.md seção 5.4 pros detalhes técnicos.
+
+**Achado real ao validar contra as 6 planilhas (não só fixtures pequenas):** a aba EWS de
+`CONTRÁRIAS - NOVO.xlsx` usa "N° DO PROCESSO" com o símbolo de grau (°), não "Nº DO PROCESSO" com
+o indicador ordinal (º) — visualmente iguais, Unicode diferente. `fontes.yaml` corrigido com os
+dois sinônimos. Também confirmado: o leitor de Laudos, sozinho, já devolve 14 linhas pra EWS/SW em
+agosto/2026 — batendo exatamente com o critério de aceite, mesmo sem nenhuma regra de negócio
+aplicada ainda (Laudos não precisa de filtro de período além da aba certa). As outras fontes
+(Iniciais, Judicial, Contrárias) ainda não batem com o critério nesta fase — esperado, falta o
+filtro de período da Fase 4.
+
+**Testado:** 29 testes novos (cada regra de `base.py` isolada + um teste de ponta a ponta por
+padrão). Validação manual (não committada) contra as 6 planilhas reais, sem erro em nenhuma.
+Suíte completa: 319 testes, lint limpo.
+
+**Reversível:** sim — módulo 100% novo e isolado.

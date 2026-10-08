@@ -2521,3 +2521,60 @@ implementação pela metade.
 - **Reversível:** sim — módulo 100% novo e isolado; nenhuma rota, menu ou tabela existente foi
   alterada nesta fase.
 
+### 5.4 Fase 2 — Leitores
+
+Os três padrões de leitura da especificação, todos devolvendo `leitores/base.py::LinhaBruta`
+(valores crus + `Origem(planilha, aba, linha)`) — nenhuma normalização ainda (Fase 3).
+
+- **`leitores/base.py`** — núcleo compartilhado pelos três padrões:
+  - `localizar_cabecalho`: procura, nas primeiras 10 linhas, a que contém todas as colunas
+    esperadas (por sinônimo, via `app.utils.normalize` reaproveitado — mesma função já usada no
+    resto do sistema pra comparar nome de empresa/tipo, sem reescrever a mesma lógica).
+  - **Colunas duplicadas resolvidas sem código especial**: basta listar o mesmo sinônimo pras duas
+    colunas canônicas em `fontes.yaml` (ex.: Laudos tem `data: ["DATA"]` e
+    `data_pronto: ["DATA"]`) — `_achar_coluna` nunca reusa um índice de coluna já atribuído, então
+    a 1ª ocorrência de "DATA" cai pra primeira canônica (na ordem em que aparecem no YAML) e a 2ª
+    pra segunda. O mesmo mecanismo também resolve "usa a 1ª ocorrência" quando só UMA canônica
+    aponta pra um nome que se repete (ex.: "EMPRESA" duas vezes em Judicial).
+  - Coluna sem título (ex.: coluna A em JUDICIAL) via `colunas_fixas` no `fontes.yaml` — fica de
+    fora da busca por cabeçalho, mapeada direto pro índice configurado.
+  - Linha vazia e linha de título repetida no meio da aba são descartadas em `ler_linhas`.
+  - Erros bloqueantes (`AbaNaoEncontrada`, `CabecalhoNaoEncontrado`) — vocabulário usado pelos 3
+    padrões.
+- **`leitores/aba_mensal.py`** (Laudos, Iniciais) — `encontrar_aba_do_mes` reconhece nome por
+  extenso/abreviado + ano 2 ou 4 dígitos, com ou sem espaço; `encontrar_todas_abas_do_ano` (usado
+  pela Fase 4, Iniciais, pra resolver "aguardando distribuição" cruzando meses).
+- **`leitores/aba_unica.py`** (Judicial, Pauta da Semana Contrária, Agendamento) — sem código
+  especial pras particularidades (coluna sem título, cabeçalho fora da linha 1, coluna duplicada
+  usando a 1ª ocorrência): tudo já resolvido genericamente por `base.py` a partir do `fontes.yaml`.
+- **`leitores/aba_por_assessoria.py`** (Contrárias, Procons) — lê toda aba cujo nome bate com
+  algum apelido conhecido (recebe `{apelido: nome oficial}` já pronto — não acessa
+  `EmpresaCliente`/banco diretamente, mantendo a camada de leitura independente); soma as linhas
+  de abas diferentes que apontam pra mesma assessoria (EWS + SW). Aba de assessoria conhecida mas
+  com coluna faltando levanta erro de verdade (não é silenciado) — só abas que não batem com
+  nenhum apelido são ignoradas (não são abas de assessoria).
+
+**Achado real ao validar contra as 6 planilhas (não só as fixtures pequenas dos testes):** a aba
+EWS de `CONTRÁRIAS - NOVO.xlsx` usa `"N° DO PROCESSO"` com o símbolo de **grau** (°, U+00B0), não
+`"Nº DO PROCESSO"` com o indicador **ordinal masculino** (º, U+00BA) que eu tinha posto em
+`fontes.yaml` — visualmente quase idênticos, caracteres Unicode diferentes, então a normalização
+de acento não unifica os dois. `fontes.yaml` corrigido com os dois sinônimos. Confirmado também:
+o leitor de Laudos, rodado contra a planilha real de agosto/2026, já devolve **14 linhas para
+EWS/SW sem nenhum cancelamento** — batendo exatamente com "Laudos elaborados no mês: 14" do
+critério de aceite, mesmo sem nenhuma regra de negócio aplicada ainda (Fase 4) — é a leitura crua
+já correta pra esse caso específico (Laudos não precisa de filtro de data além de "está na aba do
+mês certo", diferente de Iniciais/Judicial/Contrárias, que ainda precisam de filtro de período —
+por isso os números brutos dessas outras fontes ainda não batem com o critério, como esperado
+nesta fase).
+
+**Testado:** `tests/test_relatorio_assessorias_leitores.py`, 29 testes — cada regra de
+`base.py` isolada (cabeçalho em várias posições, sinônimo, colunas duplicadas por posição, coluna
+fixa, linha vazia, título repetido, origem), reconhecimento flexível de aba do mês (todos os
+formatos, com/sem acento), e um teste de ponta a ponta por padrão com planilha pequena construída
+em memória. Além disso, validação manual (não committada — só local) rodando os 4 leitores contra
+as 6 planilhas reais de agosto/2026, confirmando leitura sem erro em todas e o achado do símbolo
+de grau acima. Suíte completa do projeto: 319 testes (290 de antes + 29 novos), lint limpo.
+
+**Reversível:** sim — módulo 100% novo e isolado; nenhuma rota, menu, tabela ou comportamento
+existente foi tocado.
+

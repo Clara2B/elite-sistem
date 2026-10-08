@@ -57,10 +57,11 @@ audiencias_judiciais:
   aba: "JUDICIAL"
   cabecalho_linha: 1
   colunas:
-    data: []  # coluna A, sem título no cabeçalho — ver leitores/aba_unica.py
     nome_cliente: ["NOME DO CLIENTE"]
     processo: ["PROCESSO"]
     empresa: ["EMPRESA"]  # 1ª ocorrência, se houver mais de uma
+  colunas_fixas:
+    data: 0  # coluna A (índice 0), sem título no cabeçalho
 
 audiencias_contrarias:
   arquivo_campo_upload: "agendamento"  # arquivo "PLANILHA 2026"
@@ -93,7 +94,7 @@ contrarias:
   colunas:
     data_recebimento: ["DATA DE RECEBIMENTO"]
     nome_autor: ["NOME DO AUTOR"]
-    numero_processo: ["Nº DO PROCESSO", "NUMERO DO PROCESSO", "N DO PROCESSO"]
+    numero_processo: ["Nº DO PROCESSO", "N° DO PROCESSO", "NUMERO DO PROCESSO", "N DO PROCESSO"]  # "N° " (grau) é o que a planilha real usa, não "Nº " (ordinal) — visualmente iguais, caracteres Unicode diferentes
     estado: ["ESTADO", "UF"]
     valor_causa: ["VALOR DA CAUSA"]
     status_atual: ["STATUS ATUAL"]
@@ -106,7 +107,7 @@ procons:
   colunas:
     data_recebimento: ["DATA DE RECEBIMENTO"]
     nome_autor: ["NOME DO AUTOR"]
-    numero_processo: ["Nº DO PROCESSO", "NUMERO DO PROCESSO", "N DO PROCESSO"]
+    numero_processo: ["Nº DO PROCESSO", "N° DO PROCESSO", "NUMERO DO PROCESSO", "N DO PROCESSO"]  # "N° " (grau) é o que a planilha real usa, não "Nº " (ordinal) — visualmente iguais, caracteres Unicode diferentes
     estado: ["ESTADO", "UF"]
     status_atual: ["STATUS ATUAL"]
     tipo_acao: ["TIPO AÇÃO", "TIPO DE AÇÃO"]
