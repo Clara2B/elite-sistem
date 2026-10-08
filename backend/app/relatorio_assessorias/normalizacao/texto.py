@@ -2,12 +2,51 @@
 
 Nomes de pessoas (especificação): tabs e espaços no início, caixa alta e
 baixa misturadas. Tratamento: remove espaços extras; mantém a grafia
-original (sem mudar caixa) — diferente da normalização usada pra comparar
-nomes de assessoria/coluna, que ignora caixa.
+original (sem mudar caixa) — diferente da normalização ESTRUTURAL usada
+pra comparar nome de coluna/aba/assessoria (`app.utils.normalize`, usada
+direto por `leitores/base.py` e `normalizacao/assessoria.py`), que ignora
+acento e caixa pra fins de COMPARAÇÃO, não de exibição.
 
 UF (especificação): vazia, minúscula. Tratamento: maiúscula; valida contra
-as 27 UFs; inválida vira aviso e fica fora do mapa.
+as 27 UFs; inválida vira aviso e fica fora do mapa (Fase 6)."""
+from __future__ import annotations
 
-Também usado por `leitores/base.py` pra comparar nome de coluna/aba sem
-acento, sem espaço extra e em maiúsculas (mesma função, uso diferente).
-"""
+from dataclasses import dataclass
+
+_UFS = {
+    "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
+    "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC",
+    "SP", "SE", "TO",
+}
+
+
+@dataclass
+class NomeNormalizado:
+    valor: str
+    aviso: str | None = None
+
+
+@dataclass
+class UfNormalizada:
+    valor: str | None
+    aviso: str | None = None
+
+
+def normalizar_nome(bruto: object) -> NomeNormalizado:
+    if bruto is None:
+        return NomeNormalizado("", "nome vazio")
+    texto = " ".join(str(bruto).split())
+    if not texto:
+        return NomeNormalizado("", "nome vazio")
+    return NomeNormalizado(texto)
+
+
+def normalizar_uf(bruto: object) -> UfNormalizada:
+    if bruto is None:
+        return UfNormalizada(None, "UF vazia")
+    texto = str(bruto).strip().upper()
+    if not texto:
+        return UfNormalizada(None, "UF vazia")
+    if texto not in _UFS:
+        return UfNormalizada(None, f"UF inválida: '{texto}'")
+    return UfNormalizada(texto)

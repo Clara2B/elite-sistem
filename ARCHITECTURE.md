@@ -2578,3 +2578,60 @@ de grau acima. Suíte completa do projeto: 319 testes (290 de antes + 29 novos),
 **Reversível:** sim — módulo 100% novo e isolado; nenhuma rota, menu, tabela ou comportamento
 existente foi tocado.
 
+### 5.5 Fase 3 — Normalização
+
+Cinco funções puras `bruto → dataclass(valor, aviso?)`, cada uma num módulo próprio de
+`normalizacao/`, consumindo `LinhaBruta.valores` da Fase 2 — nenhuma delas acessa planilha ou
+`Origem` diretamente (isso é responsabilidade de quem chama, nas Fases 4+, que já tem a origem
+pra anexar ao aviso).
+
+- **`normalizacao/datas.py`** — aceita `datetime`/`date`, serial do Excel (base `1899-12-30`, por
+  causa do bug de ano bissexto de 1900 que o Lotus 1-2-3 tinha e o Excel manteve por
+  compatibilidade) e texto `dd/mm/aaaa` (com ou sem `- hh:mm`, hora descartada). Antes de
+  escrever o parser, confirmei direto no openpyxl que uma célula com "serial fora do limite pra
+  data" chega como a **string `"#VALUE!"`** (erro do próprio Excel), não como um número fora do
+  intervalo — então o parser cobre os dois jeitos de dar errado (texto não reconhecido E serial
+  numérico inválido) em vez de só um. Data fora de 2020-2030 fica com **aviso mas mantém o
+  valor** (sinaliza pra conferência, não zera nem bloqueia — leitura literal da especificação).
+- **`normalizacao/valores.py`** — formato brasileiro (1.234,56) vs americano (1,234.56) decidido
+  pela posição do ÚLTIMO separador; texto não numérico (ex.: "NÃO INFORMADO", ou "TRABALHISTA"
+  vazado de outra coluna, visto em dado real) vira `nao_informado=True` **sem aviso** — é caso de
+  negócio esperado, não erro. Valor devolvido como `float` (não `Decimal`), pra bater com a
+  convenção já usada no resto do sistema (`Laudo.valor`, `Cobranca.valor` etc. são `Float`);
+  `app.utils.format_brl`, que já existe, é reaproveitado na renderização (Fase 7) em vez de
+  duplicar formatação aqui.
+- **`normalizacao/processo.py`** — chave de comparação = só os dígitos (usada pela deduplicação
+  por CNJ entre Contrárias e Procon, Fase 4); com exatamente 20 dígitos, reformata no padrão CNJ
+  (`NNNNNNN-DD.AAAA.J.TR.OOOO`); diferente de 20, mantém o texto original e avisa quantos dígitos
+  encontrou, sem tentar adivinhar o que falta.
+- **`normalizacao/texto.py`** — `normalizar_nome` só colapsa espaço, mantém grafia (diferente da
+  normalização ESTRUTURAL de `app.utils.normalize`, que ignora acento/caixa e serve pra COMPARAR
+  nome de coluna/aba/assessoria, não pra exibir); `normalizar_uf` maiusculiza e valida contra as
+  27 UFs.
+- **`normalizacao/assessoria.py`** — único módulo desta fase que acessa banco:
+  `construir_nomes_por_apelido(db)` combina `EmpresaCliente.nome` (lista oficial, decisão da Fase
+  0) com os apelidos de `config/assessorias.yaml`, usando a mesma normalização estrutural de
+  `app.utils.normalize`; `resolver(bruto, nomes_por_apelido)` separa célula com mais de uma
+  empresa (`/`, `,` ou ` E `) e devolve os nomes oficiais resolvidos + os fragmentos não
+  reconhecidos (vira aviso global agregado na Fase 4, não aqui — este módulo só resolve uma
+  célula por vez).
+
+**Validado contra as 6 planilhas reais** (local, não committado): Laudos de agosto/2026 geraram
+só 7 avisos de data em 780 linhas — todos problemas reais e esperados ("14/O8/2026" com letra O
+no lugar de zero, "3108/2026" sem separador, "25/08/0202" ano trocado, célula malformada que
+chega como `"#VALUE!"`) — nenhum crash, nenhum valor silenciosamente errado. Contrárias EWS/SW:
+confirmado que "TRABALHISTA" vazado na coluna de valor (dado real) vira `nao_informado=True` sem
+aviso, como projetado. Procons: números de protocolo administrativo (não-CNJ, ex.: "MP",
+"11110/2025") corretamente avisados com a contagem de dígitos, sem tentar forçar formato CNJ.
+
+**Testado:** `tests/test_relatorio_assessorias_normalizacao.py`, 42 testes — um por função,
+cobrindo os valores problemáticos literais da especificação ("R$ 53.128,60\t", "$64,000.00",
+"21800.0", "R$15.295,68.", "NÃO INFORMADO", "TRABALHISTA", "2026.0", "--", processo com ponto no
+lugar de hífen/dígito faltando/espaço-tab no início, nome com tab, UF vazia/minúscula/inválida) +
+casos de `assessoria.py` (apelido batendo com `EmpresaCliente` cadastrada via fixture `db`,
+apelido órfão ignorado, célula multi-empresa nos 3 separadores). Suíte completa do projeto: 361
+testes (319 de antes + 42 novos), lint limpo.
+
+**Reversível:** sim — módulo 100% novo e isolado; nenhuma rota, menu, tabela ou comportamento
+existente foi tocado.
+

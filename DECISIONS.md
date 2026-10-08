@@ -2166,3 +2166,28 @@ padrão). Validação manual (não committada) contra as 6 planilhas reais, sem 
 Suíte completa: 319 testes, lint limpo.
 
 **Reversível:** sim — módulo 100% novo e isolado.
+
+## 2026-10-08 — Relatórios das Assessorias, Fase 3: normalização
+
+5 funções puras `bruto → dataclass(valor, aviso?)`: datas (serial do Excel, texto dd/mm/aaaa,
+confirmado que célula com ano fora do limite chega como a string `"#VALUE!"`, não como número),
+valores (formato BR/US pela posição do último separador, texto não numérico vira
+`nao_informado=True` sem aviso — caso de negócio, não erro), processo (padrão CNJ a partir de 20
+dígitos, mantém original + avisa a contagem quando é diferente), nome (só colapsa espaço, mantém
+grafia) e UF (valida contra as 27). `normalizacao/assessoria.py` é a única que acessa banco:
+combina `EmpresaCliente.nome` (lista oficial, decisão da Fase 0) com os apelidos de
+`assessorias.yaml`, e resolve célula com mais de uma empresa (`/`, `,`, ` E `). Ver
+ARCHITECTURE.md seção 5.5 pros detalhes técnicos.
+
+**Validado contra as 6 planilhas reais** (não committado): Laudos de agosto/2026 — só 7 avisos
+de data em 780 linhas, todos problemas reais esperados (letra no lugar de número, ano trocado,
+célula malformada), nenhum crash. Contrárias — "TRABALHISTA" vazado na coluna de valor (dado
+real, já citado na especificação) confirmado virando `nao_informado=True` sem aviso, como
+projetado. Procons — números de protocolo administrativo (não-CNJ) corretamente avisados com a
+contagem de dígitos, sem forçar formato CNJ.
+
+**Testado:** 42 testes novos (um por função, com os valores problemáticos literais da
+especificação + os de `assessoria.py` usando a fixture `db` de banco em memória). Suíte completa:
+361 testes, lint limpo.
+
+**Reversível:** sim — módulo 100% novo e isolado.
