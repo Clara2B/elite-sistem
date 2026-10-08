@@ -11,6 +11,13 @@ venv/
 .env
 backend/.env
 
+# Dados reais com informação pessoal (LGPD) — nunca versionar (ver
+# DECISIONS.md 2026-10-08: planilhas reais de assessorias comitadas por
+# engano e removidas do histórico). Usar só localmente para o teste de
+# ponta a ponta de relatorio_assessorias/.
+dados_locais_nao_versionados/
+Planilhas utilizadas/
+
 # Frontend (Fase 2+)
 node_modules/
 dist/
