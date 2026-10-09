@@ -44,7 +44,11 @@ iniciais:
       "aguardando distribuição" de casos recebidos em mês anterior
       (ver secoes/iniciais.py).
   colunas:
-    data_recebimento: ["DATA DE RECEBIMENTO"]
+    # "DATA DE RECEBIMENTO" só na aba de agosto/2026; a maioria das outras
+    # abas do ano usa "DATA RECEBIDO"; junho/2026 usa só "DATA". Precisa
+    # dos três sinônimos porque Iniciais lê todas as abas do ano, não só a
+    # do mês de referência (achado real, conferido mês a mês, Fase 4).
+    data_recebimento: ["DATA DE RECEBIMENTO", "DATA RECEBIDO", "DATA"]
     assessoria: ["ASSESSORIA"]
     data_distribuicao: ["DATA DE DISTRIBUIÇÃO"]
     protocolado: ["PROTOCOLADO"]

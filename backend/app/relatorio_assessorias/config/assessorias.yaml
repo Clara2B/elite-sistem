@@ -16,6 +16,12 @@
 # adicionar como apelido na hora — não precisa estar tudo mapeado de
 # antemão pra v1 funcionar, só pra não gerar avisos repetidos todo mês.
 EWS:
-  apelidos: ["EWS", "SW"]  # troca de nome em agosto/2026 (confirmado) — relatório sai como EWS
+  # troca de nome em agosto/2026 (confirmado) — relatório sai como EWS.
+  # "SW EWS" é um achado real (Fase 4, Pauta da Semana Contrária linha 40):
+  # célula com as duas grafias juntas, SEM separador (nem "/", "," nem
+  # " E " — ver normalizacao/assessoria.py) — tratado como um apelido
+  # literal em vez de mexer na lógica geral de separação (que quebraria
+  # nomes com espaço de verdade, tipo "WN FAST").
+  apelidos: ["EWS", "SW", "SW EWS"]
 WNR:
   apelidos: ["WNR", "WNR CONSULTORIA"]

@@ -9,7 +9,7 @@ from app.relatorio_assessorias.config import carregar
 def test_carrega_assessorias():
     dados = carregar("assessorias")
     assert "EWS" in dados
-    assert dados["EWS"]["apelidos"] == ["EWS", "SW"]
+    assert dados["EWS"]["apelidos"] == ["EWS", "SW", "SW EWS"]
     assert "WNR" in dados
 
 

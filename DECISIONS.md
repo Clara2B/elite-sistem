@@ -2191,3 +2191,35 @@ especificação + os de `assessoria.py` usando a fixture `db` de banco em memór
 361 testes, lint limpo.
 
 **Reversível:** sim — módulo 100% novo e isolado.
+
+## 2026-10-09 — Relatórios das Assessorias, Fase 4: seções
+
+Os 7 módulos de `secoes/` (laudos, iniciais, extrajudiciais, judiciais, contrarias, procons,
+manuais), cada um com `calcular(linhas, ...)` recebendo `LinhaBruta` já filtradas pra uma
+assessoria. Nova dependência: `holidays` (dias úteis, só feriados nacionais — decisão já tomada
+na Fase 0). Ver ARCHITECTURE.md seção 5.6 pros detalhes técnicos, incluindo a convenção de
+contagem de dias úteis adotada (sem número do critério de aceite pra testar diretamente —
+sinalizada pra confirmação).
+
+**Validado contra o critério de aceite (EWS, agosto/2026, corte 04/09/2026):** 11 de 12 números
+bateram exatamente (laudos 14, extrajudiciais enviadas/realizadas/pendentes 16/10/19, ausente 1,
+audiências contrárias 5, contrárias judiciais/trabalhistas/ativos/RJ 27/2/29/3, distribuídos no
+mês 2). Dois ajustes reais corrigidos na validação (não forçados — achados de dado, não de
+regra): `fontes.yaml` ganhou mais 2 sinônimos pra coluna de recebimento de Iniciais (ela muda de
+nome entre as abas mensais do mesmo arquivo: "DATA DE RECEBIMENTO" só em agosto, "DATA RECEBIDO"
+na maioria, "DATA" em junho); `assessorias.yaml` ganhou o apelido literal `"SW EWS"` (célula real
+da Pauta da Semana Contrária com as duas grafias juntas, sem separador dos três documentados na
+especificação — resolvido como apelido em vez de mexer na lógica geral de separação, que
+quebraria nomes com espaço de verdade como "WN FAST").
+
+**Não bate, investigado, não forçado:** audiências judiciais deu 10 em vez de 11. As 12 linhas
+da aba JUDICIAL com empresa "SW" (nenhuma variação de nome) foram conferidas uma a uma — 10 têm
+data até 04/09/2026, as duas de fora são 22/09 e 01/10. Testado contra duas cópias do arquivo
+(mesmo resultado nas duas); sem 13ª linha, célula composta ou padrão de herança que explicasse a
+diferença. Reportado à Clara pra decisão, sem alterar a regra pra forçar o número.
+
+**Testado:** 27 testes novos (um conjunto por seção, `LinhaBruta` construídas diretamente).
+Validação manual (não committada) contra as 6 planilhas reais, como acima. Suíte completa: 384
+testes, lint limpo.
+
+**Reversível:** sim — módulo 100% novo e isolado.

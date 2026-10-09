@@ -2635,3 +2635,81 @@ testes (319 de antes + 42 novos), lint limpo.
 **Reversível:** sim — módulo 100% novo e isolado; nenhuma rota, menu, tabela ou comportamento
 existente foi tocado.
 
+### 5.6 Fase 4 — Seções
+
+Os 7 módulos de `secoes/` (laudos, iniciais, extrajudiciais, judiciais — serve as duas fontes de
+audiência, judicial e contrária —, contrarias, procons, manuais), cada um com uma função
+`calcular(linhas, ...)` que recebe `LinhaBruta` já filtradas pra uma assessoria (e, no caso de
+Iniciais, de todas as abas do ano) e devolve um dataclass com os números, listas e avisos daquela
+seção. `manuais.py` não tem `calcular` — só define o formato dos campos digitados na tela de
+revisão (Fase 8).
+
+Peças novas de apoio, compartilhadas entre seções:
+- **`dias_uteis.py`** — conta dias úteis via `holidays.Brazil` (nova dependência, só feriados
+  nacionais, decisão da Fase 0). Convenção adotada (sem número do critério de aceite pra testar
+  diretamente): dias úteis "entre" duas datas = estritamente depois do início, até o fim
+  inclusive — `início == fim` conta 0. **Sinalizado pra confirmação da Clara.**
+- **`avisos.py`** — `Aviso(origem, mensagem)`, o tipo usado por todo `secoes/` pra marcar linha
+  com problema sem bloquear a seção.
+- **`datas_utilitarias.py`** — limites de mês (`primeiro_dia_do_mes`, `ultimo_dia_do_mes`,
+  `dentro_do_mes`), evitando repetir a conta em cada seção.
+- **`normalizacao/assessoria.py::filtrar_linhas`** — novo (Fase 4): filtra uma lista de
+  `LinhaBruta` pras que pertencem a uma assessoria, resolvendo o campo de empresa de cada linha
+  (usa `resolver`, já existente da Fase 3). Usado pelas fontes de `aba_mensal`/`aba_unica`
+  (Contrárias/Procons não precisam, porque `aba_por_assessoria.ler` já agrupa por assessoria).
+- **Dedup entre arquivos (Contrárias × Procon):** `secoes/contrarias.py::calcular` aceita
+  `chaves_cnj_de_outras_fontes` opcional — quem orquestra as seções (Fase 8) pode passar as
+  chaves CNJ já vistas no Procon, pra um processo TRABALHISTA listado nos dois arquivos não contar
+  duas vezes. Testado isoladamente; não teve efeito nos dados de agosto/2026 (sem sobreposição
+  real nas 6 planilhas), mas o parâmetro existe pro caso geral.
+
+**Validado contra as 6 planilhas reais (EWS, agosto/2026, corte 04/09/2026) — comparação direta
+com a tabela de critérios de aceite da especificação:**
+
+| Campo | Esperado | Obtido |
+|---|---|---|
+| Laudos elaborados no mês | 14 | **14** ✅ |
+| Extrajudiciais enviadas no mês | 16 | **16** ✅ |
+| Extrajudiciais realizadas no mês | 10 | **10** ✅ |
+| Extrajudiciais pendentes | 19 | **19** ✅ |
+| Clientes ausentes | 1 (Antonio Beserra da Costa) | **1 (Antonio Beserra da Costa)** ✅ |
+| Audiências judiciais (acumulado no ano) | 11 | **10** ❌ — ver abaixo |
+| Audiências contrárias (acumulado no ano) | 5 | **5** ✅ |
+| Contrárias judiciais (ativos) | 27 | **27** ✅ |
+| Contrárias trabalhistas (ativos) | 2 | **2** ✅ |
+| Contrárias ativos total | 29 | **29** ✅ |
+| Contrárias ativos RJ (mapa) | 3 | **3** ✅ |
+| Processos distribuídos no mês (Iniciais) | 2 | **2** ✅ |
+
+11 de 12 números batem exatamente. Dois ajustes reais encontrados na validação (corrigidos, não
+forçados):
+- **`fontes.yaml`, Iniciais:** a coluna de recebimento muda de nome entre abas do mesmo arquivo —
+  "DATA DE RECEBIMENTO" só em agosto/2026, "DATA RECEBIDO" na maioria dos outros meses, "DATA" em
+  junho/2026. Como Iniciais lê todas as abas do ano (não só a do mês de referência), os três
+  sinônimos precisaram entrar.
+- **`assessorias.yaml`:** a Pauta da Semana Contrária tem uma célula `"SW EWS"` (linha 40) — as
+  duas grafias juntas, sem separador (nem `/`, `,` nem ` E `, os três documentados na
+  especificação). Em vez de alargar a lógica geral de separação de células com múltiplas empresas
+  (arriscado: um espaço como separador quebraria nomes com espaço de verdade, tipo "WN FAST"),
+  `"SW EWS"` virou um apelido literal de EWS — mesmo mecanismo já usado pra outras variações de
+  nome, sem tocar em `normalizacao/assessoria.py`. Resolveu Audiências contrárias (4 → 5) sem
+  afetar nada mais.
+
+**Não bate, investigado, não forçado:** Audiências judiciais deu 10, não 11. As 12 linhas da aba
+JUDICIAL com empresa "SW" (nenhuma com "EWS" nem variação composta) foram conferidas uma a uma:
+10 têm data entre 01/01/2026 e 04/09/2026 (as duas de fora: 22/09 e 01/10, depois da data de
+corte). Testado contra as duas cópias disponíveis do arquivo (a de `dados_locais_nao_versionados`
+e a enviada antes, com 3 linhas de diferença no total da aba) — mesmo resultado nas duas. Não
+achei nenhuma 13ª linha, célula composta tipo "SW EWS" (conferido também na 2ª coluna "EMPRESA"
+da aba, que na verdade guarda o nome da(o) advogada(o), não uma 2ª empresa) nem padrão de
+herança de linha em branco que explicasse a diferença. Fica pra Clara decidir — talvez a
+planilha tenha mudado desde que ela validou os números originalmente.
+
+**Testado:** `tests/test_relatorio_assessorias_secoes.py`, 27 testes — um conjunto por seção,
+com `LinhaBruta` construídas diretamente (equivalente a fixtures pequenas: o que entra numa seção
+é sempre essa lista de linhas já lidas, não um arquivo .xlsx). Validação manual (não committada)
+contra as 6 planilhas reais, como acima. Suíte completa: 384 testes, lint limpo.
+
+**Reversível:** sim — módulo 100% novo e isolado; nenhuma rota, menu, tabela ou comportamento
+existente foi tocado. Nova dependência: `holidays` (adicionada a `requirements.txt`), puro Python,
+sem acesso à rede em produção (cálculo de feriados é local).

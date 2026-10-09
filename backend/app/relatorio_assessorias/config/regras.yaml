@@ -43,3 +43,4 @@ contrarias:
 
 procons:
   tipos_acao_incluidos: ["PROCON", "EXTRAJUDICIAL", "MP"]
+  status_encerrados_padrao: ["ARQUIVADO"]  # mesma lista padrão de contrarias — nada na especificação diferencia os dois

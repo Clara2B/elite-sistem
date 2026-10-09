@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.models import EmpresaCliente
 from app.relatorio_assessorias.config import carregar
+from app.relatorio_assessorias.leitores.base import LinhaBruta
 from app.utils import normalize as normalizar_estrutural
 
 _SEPARADOR_MULTIPLAS_EMPRESAS = re.compile(r"\s*(?:/|,|\sE\s)\s*", re.IGNORECASE)
@@ -78,3 +79,27 @@ def resolver(bruto: object, nomes_por_apelido: dict[str, str]) -> AssessoriaReso
         else:
             resolvida.nomes.append(nome_oficial)
     return resolvida
+
+
+def filtrar_linhas(
+    linhas: list[LinhaBruta],
+    campo: str,
+    assessoria_oficial: str,
+    nomes_por_apelido: dict[str, str],
+) -> list[LinhaBruta]:
+    """Filtra `linhas` (lidas por `aba_mensal`/`aba_unica`, com todas as
+    assessorias misturadas numa coluna) pras que pertencem a
+    `assessoria_oficial` — resolvendo o campo de empresa/assessoria de
+    cada linha via `resolver` (célula com mais de uma empresa conta pra
+    cada uma, então uma linha pode entrar pra mais de uma assessoria).
+    Usado pelas fontes de `aba_mensal`/`aba_unica` (Laudos, Iniciais,
+    Judicial, Pauta Contrária, Extrajudicial) antes de chamar o módulo de
+    `secoes/` correspondente — Contrárias e Procons não precisam disso,
+    porque `aba_por_assessoria.ler` já devolve as linhas agrupadas por
+    assessoria."""
+    resultado = []
+    for linha in linhas:
+        resolvida = resolver(linha.valores.get(campo), nomes_por_apelido)
+        if assessoria_oficial in resolvida.nomes:
+            resultado.append(linha)
+    return resultado
