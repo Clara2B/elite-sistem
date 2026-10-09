@@ -2225,3 +2225,21 @@ Validação manual (não committada) contra as 6 planilhas reais, como acima. Su
 testes, lint limpo.
 
 **Reversível:** sim — módulo 100% novo e isolado.
+
+## 2026-10-09 — Relatórios das Assessorias, Fase 5: validação
+
+`validacao.py` com as conferências cruzadas que faltavam (empresa desconhecida agrupada por
+nome, soma da tabela por UF vs total de ativos, cronologia de datas em Laudos/Iniciais, campos
+essenciais vazios em Iniciais/Audiências). Corrigido também: `secoes/procons.py` não deduplicava
+processo repetido dentro da mesma lista (Contrárias já fazia isso desde a Fase 4) — agora os dois
+tratam igual. Ver ARCHITECTURE.md seção 5.7 pros detalhes técnicos.
+
+**Validado contra as 6 planilhas reais:** sem crash rodando contra todas as assessorias (não só
+EWS) e todos os meses do ano; achados reais e sensatos (8 casos de distribuição antes do
+recebimento em Iniciais, 13 linhas sem UF/processo) — não são bugs do sistema, são os dados
+reais que a conferência existe pra pegar.
+
+**Testado:** 13 testes novos (um conjunto por função) + 1 teste de dedup em Procons. Suíte
+completa: 397 testes, lint limpo.
+
+**Reversível:** sim — módulo 100% novo e isolado.

@@ -372,6 +372,26 @@ def test_procons_recebido_depois_do_fim_do_mes_fica_fora():
     assert resultado.lista == []
 
 
+def test_procons_duplicata_por_cnj_mantem_a_primeira():
+    linhas = [
+        LinhaBruta(
+            {"data_recebimento": date(2026, 8, 1), "nome_autor": "Fulano",
+             "numero_processo": "0813055-21.2026.8.10.0001", "estado": "RJ",
+             "status_atual": "EM ANDAMENTO", "tipo_acao": "PROCON"},
+            Origem("procon", "SW", 10),
+        ),
+        LinhaBruta(
+            {"data_recebimento": date(2026, 8, 1), "nome_autor": "Fulano",
+             "numero_processo": "0813055-21.2026.8.10.0001", "estado": "RJ",
+             "status_atual": "EM ANDAMENTO", "tipo_acao": "PROCON"},
+            Origem("procon", "EWS", 25),
+        ),
+    ]
+    resultado = procons.calcular(linhas, mes=8, ano=2026, regras=REGRAS["procons"])
+    assert len(resultado.lista) == 1
+    assert any("duplicado" in a.mensagem for a in resultado.avisos)
+
+
 # ---------- manuais.py ----------
 
 

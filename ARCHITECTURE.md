@@ -2721,3 +2721,52 @@ contra as 6 planilhas reais, como acima. Suíte completa: 384 testes, lint limpo
 **Reversível:** sim — módulo 100% novo e isolado; nenhuma rota, menu, tabela ou comportamento
 existente foi tocado. Nova dependência: `holidays` (adicionada a `requirements.txt`), puro Python,
 sem acesso à rede em produção (cálculo de feriados é local).
+
+### 5.7 Fase 5 — Validação
+
+`validacao.py` traz as conferências cruzadas da especificação que não entraram na Fase 4 — cada
+uma, uma função pura testável isoladamente, igual às seções:
+
+- **`detectar_empresas_desconhecidas(linhas, campo, nomes_por_apelido)`** — nome que não bate com
+  nenhum apelido cadastrado vira aviso global agrupado por nome ("empresa desconhecida: ANGITU,
+  83 linhas"), reaproveitando `normalizacao.assessoria.resolver` (célula com mais de uma empresa
+  conta cada fragmento separadamente).
+- **`conferir_soma_uf(resultado: ResultadoContrarias)`** — compara `sum(ativos_por_uf.values())`
+  com `ativos_total`; diferença só acontece quando há UF inválida (entra no total, mas fica fora
+  do mapa por UF).
+- **`conferir_cronologia_laudos` / `conferir_cronologia_iniciais`** — data de pronto anterior à
+  de entrada; distribuição anterior ao recebimento. Precisam dos dados crus de novo (não só do
+  `ResultadoLaudos`/`ResultadoIniciais` agregado da Fase 4, que não guarda data por linha) —
+  chamadas com as mesmas `LinhaBruta` já filtradas pra assessoria que alimentaram a seção.
+- **`conferir_campos_essenciais(linhas, campos)`** — genérica, pra Iniciais e Audiências
+  judiciais/contrárias (que não checam processo/UF durante o cálculo da seção, só usam essas
+  colunas aqui). Contrárias e Procons já verificam isso dentro do próprio `secoes/*.py::calcular`
+  (processo/UF entram no cálculo de quem é ativo e do mapa), então não é chamada de novo lá —
+  duplicaria o aviso pra mesma linha.
+
+**Duplicata de processo dentro da mesma lista** (ex.: Dirceu de Oliveira Pires nas abas SW e EWS)
+já estava resolvida em `secoes/contrarias.py` desde a Fase 4 (afeta a contagem da seção, não é só
+um aviso solto). Faltava o mesmo em Procons — **corrigido nesta fase**: `secoes/procons.py`
+ganhou a mesma dedup por chave CNJ (mantém a 1ª ocorrência, avisa as demais). Não tinha efeito nos
+dados reais de agosto/2026 (sem duplicata na lista de Procons da EWS), mas fecha a simetria com
+Contrárias pro caso geral.
+
+**Erros bloqueantes** (arquivo errado, aba obrigatória ausente, coluna obrigatória não
+encontrada) já estavam implementados desde a Fase 2 (`leitores/base.py::AbaNaoEncontrada`,
+`CabecalhoNaoEncontrado`) — nada novo aqui.
+
+**Validado contra as 6 planilhas reais:** rodando `detectar_empresas_desconhecidas` em Laudos
+(todas as assessorias, não só EWS) encontrou 31 nomes fora do cadastro de teste (FLY: 71 linhas,
+MARTAN: 66, etc.) — esperado, já que o cadastro local só tem EWS/WNR; confirma que a agregação por
+nome e a contagem funcionam em dado real e volumoso sem travar. `conferir_cronologia_iniciais`
+achou 8 casos reais de distribuição um dia antes do recebimento (erro de digitação típico, não
+bug do sistema). `conferir_campos_essenciais` achou 13 linhas reais de Iniciais sem UF e/ou sem
+número de processo. `conferir_soma_uf` não gerou aviso pra EWS/agosto — bate com o RJ=3/total=29
+já confirmado na Fase 4.
+
+**Testado:** `tests/test_relatorio_assessorias_validacao.py`, 13 testes novos (um conjunto por
+função) + 1 teste novo de dedup em `secoes/procons.py`. Validação manual (não committada) contra
+as 6 planilhas reais, como acima. Suíte completa: 397 testes, lint limpo.
+
+**Reversível:** sim — módulo 100% novo e isolado; nenhuma rota, menu, tabela ou comportamento
+existente foi tocado.
