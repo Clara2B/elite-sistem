@@ -2291,3 +2291,30 @@ especificação ficam documentados como pendência conhecida, não implementados
 vazia, 2 imagens, valor `None`). Suíte completa: 412 testes, lint limpo.
 
 **Reversível:** sim — módulo 100% novo e isolado.
+
+## 2026-10-09 — Relatórios das Assessorias, Fase 8: armazenamento e telas
+
+Tabela nova e aditiva (`relatorio_assessorias_resultados`, em `app/relatorio_assessorias/
+models.py`, não em `app/models.py`), armazenamento/processamento e as telas (upload, painel,
+revisão). Área admin-only, sem item próprio no menu — só dentro de Configuração, mesmo padrão já
+usado pela Auditoria, o que cobre o pedido da Clara de manter a área fora de vista até o
+lançamento sem precisar de uma flag separada. Ver ARCHITECTURE.md seção 5.10 pros detalhes
+técnicos, incluindo a lista fechada de campos que podem ser sobrescritos na revisão e as duas
+simplificações de escopo decididas (botão de "adicionar apelido na hora" não implementado;
+detalhamento por UF/sentenças dos campos manuais ainda sem tela própria).
+
+Arquivos compartilhados tocados, todos aditivos e no mesmo padrão da Auditoria: `app/db.py` (1
+linha de import), `app/main.py` (1 router), `app/web/areas_configuracao.py` (1 entrada),
+`app/web/menu.py` (1 item), `app/templates/_icones.html` (1 ícone).
+
+**Validado de ponta a ponta no navegador** (Playwright, servidor local com SQLite) com as 6
+planilhas reais da EWS: todos os números na tela de revisão batem com os já confirmados nas Fases
+4/5; os 36 avisos mostrados são reais (processo duplicado com origem das duas linhas, datas
+malformadas, campos vazios); os dois mapas renderizam corretamente na prévia.
+
+**Testado:** 13 testes novos (9 de armazenamento, 2 de processamento com planilhas fictícias em
+memória, 2 do fluxo web completo via TestClient — incluindo acesso negado pra quem não é admin).
+Suíte completa: 425 testes, lint limpo.
+
+**Reversível:** sim — tabela nova e aditiva; rotas/templates novos; os poucos arquivos
+compartilhados tocados seguem o padrão já usado pela Auditoria.

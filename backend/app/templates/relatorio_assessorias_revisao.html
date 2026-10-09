@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block titulo %}Revisão — {{ assessoria }} — Elite Sistem{% endblock %}
+{% block voltar %}
+  {% import "_icones.html" as icones %}
+  <a href="/app/relatorios-assessorias/painel?mes={{ mes }}&ano={{ ano }}" class="link-voltar">
+    {{ icones.icone('voltar') }} Voltar ao painel
+  </a>
+{% endblock %}
+{% block conteudo %}
+  <h1>{{ assessoria }} — {{ mes }}/{{ ano }}</h1>
+  <p class="subtitulo">
+    Data de corte: {{ dados.data_corte.strftime("%d/%m/%Y") }} ·
+    <a href="/app/relatorios-assessorias/docx/{{ assessoria | urlencode }}?mes={{ mes }}&ano={{ ano }}">Baixar .docx</a>
+  </p>
+
+  {% if dados.avisos %}
+    <div class="card">
+      <h2>Avisos ({{ dados.avisos | length }})</h2>
+      <div class="tabela-wrap">
+        <table>
+          <thead><tr><th>Origem</th><th>Mensagem</th></tr></thead>
+          <tbody>
+            {% for aviso in dados.avisos %}
+              <tr>
+                <td style="white-space:nowrap;">
+                  {% if aviso.origem %}{{ aviso.origem.planilha }} / {{ aviso.origem.aba }} / linha {{ aviso.origem.linha }}{% else %}—{% endif %}
+                </td>
+                <td>{{ aviso.mensagem }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <h2>Números calculados</h2>
+    <div class="tabela-wrap">
+      <table>
+        <thead><tr><th>Campo</th><th>Valor efetivo</th><th>Calculado</th></tr></thead>
+        <tbody>
+          <tr><td>Laudos elaborados</td><td>{{ dados.laudos.elaborados }}</td><td>{{ numeros_calculados["laudos.elaborados"] }}</td></tr>
+          <tr><td>Laudos entregues dentro do prazo</td><td>{{ dados.laudos.entregues_dentro_prazo }}</td><td>{{ numeros_calculados["laudos.entregues_dentro_prazo"] }}</td></tr>
+          <tr><td>Laudos pendentes</td><td>{{ dados.laudos.pendentes }}</td><td>{{ numeros_calculados["laudos.pendentes"] }}</td></tr>
+          <tr><td>Laudos pendentes atrasados</td><td>{{ dados.laudos.pendentes_atrasados }}</td><td>{{ numeros_calculados["laudos.pendentes_atrasados"] }}</td></tr>
+          <tr><td>Iniciais distribuídos no mês</td><td>{{ dados.iniciais.distribuidos_no_mes }}</td><td>{{ numeros_calculados["iniciais.distribuidos_no_mes"] }}</td></tr>
+          <tr><td>Iniciais aguardando distribuição</td><td>{{ dados.iniciais.aguardando_distribuicao }}</td><td>{{ numeros_calculados["iniciais.aguardando_distribuicao"] }}</td></tr>
+          {% for rotulo, quantidade in dados.iniciais.faixas.items() %}
+            <tr><td>{{ rotulo }}</td><td colspan="2">{{ quantidade }}</td></tr>
+          {% endfor %}
+          <tr><td>Extrajudiciais enviadas</td><td>{{ dados.extrajudiciais.enviadas }}</td><td>{{ numeros_calculados["extrajudiciais.enviadas"] }}</td></tr>
+          <tr><td>Extrajudiciais realizadas</td><td>{{ dados.extrajudiciais.realizadas }}</td><td>{{ numeros_calculados["extrajudiciais.realizadas"] }}</td></tr>
+          <tr><td>Extrajudiciais pendentes p/ próximos meses</td><td>{{ dados.extrajudiciais.pendentes_proximos_meses }}</td><td>{{ numeros_calculados["extrajudiciais.pendentes_proximos_meses"] }}</td></tr>
+          <tr><td>Audiências judiciais (acumulado no ano)</td><td>{{ dados.audiencias_judiciais.quantidade }}</td><td>{{ numeros_calculados["audiencias_judiciais.quantidade"] }}</td></tr>
+          <tr><td>Audiências de processos contrários (acumulado no ano)</td><td>{{ dados.audiencias_contrarias.quantidade }}</td><td>{{ numeros_calculados["audiencias_contrarias.quantidade"] }}</td></tr>
+          <tr><td>Contrárias incluídos no mês</td><td>{{ dados.contrarias.incluidos_no_mes }}</td><td>{{ numeros_calculados["contrarias.incluidos_no_mes"] }}</td></tr>
+          <tr><td>Contrárias ativos (total)</td><td>{{ dados.contrarias.ativos_total }}</td><td>{{ numeros_calculados["contrarias.ativos_total"] }}</td></tr>
+          <tr><td>Contrárias — lista judiciais</td><td colspan="2">{{ dados.contrarias.lista_judiciais | length }}</td></tr>
+          <tr><td>Contrárias — lista trabalhistas</td><td colspan="2">{{ dados.contrarias.lista_trabalhistas | length }}</td></tr>
+          <tr><td>Procons</td><td colspan="2">{{ dados.procons.lista | length }}</td></tr>
+          <tr><td>Clientes ausentes</td><td colspan="2">{{ dados.extrajudiciais.clientes_ausentes | length }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Sobrescrever um número</h2>
+    <p class="subtitulo">
+      O valor sobrescrito fica registrado no histórico de auditoria (quem, quando, de quanto pra quanto).
+    </p>
+    <form class="formulario" method="post" action="/app/relatorios-assessorias/revisao/{{ assessoria | urlencode }}/sobrescrever">
+      <input type="hidden" name="mes" value="{{ mes }}">
+      <input type="hidden" name="ano" value="{{ ano }}">
+      <div class="campo">
+        <label for="campo">Campo</label>
+        <select id="campo" name="campo">
+          {% for c in campos_sobrescreviveis %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="campo">
+        <label for="valor">Novo valor</label>
+        <input type="number" id="valor" name="valor" required>
+      </div>
+      <button type="submit">Sobrescrever</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Mapas (prévia)</h2>
+    <div class="mapas-preview">
+      <div>
+        <h3>Revisional</h3>
+        <img src="data:image/png;base64,{{ mapa_revisional_b64 }}" alt="Mapa revisional" style="max-width:100%;">
+      </div>
+      <div>
+        <h3>Contrárias</h3>
+        <img src="data:image/png;base64,{{ mapa_contrarias_b64 }}" alt="Mapa contrárias" style="max-width:100%;">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Campos manuais</h2>
+    <p class="subtitulo">Nenhuma planilha preenche estes campos — digite os valores do mês.</p>
+    <form class="formulario" method="post" action="/app/relatorios-assessorias/revisao/{{ assessoria | urlencode }}/manuais">
+      <input type="hidden" name="mes" value="{{ mes }}">
+      <input type="hidden" name="ano" value="{{ ano }}">
+      <div class="campo">
+        <label for="pastas_recebidas">Pastas revisionais recebidas no mês</label>
+        <input type="number" id="pastas_recebidas" name="pastas_recebidas" value="{{ dados.manuais.pastas_revisionais.recebidas_no_mes }}">
+      </div>
+      <div class="campo">
+        <label for="pastas_aprovadas">Pastas aprovadas</label>
+        <input type="number" id="pastas_aprovadas" name="pastas_aprovadas" value="{{ dados.manuais.pastas_revisionais.aprovadas }}">
+      </div>
+      <div class="campo">
+        <label for="pastas_aguardando_analise">Pastas aguardando análise</label>
+        <input type="number" id="pastas_aguardando_analise" name="pastas_aguardando_analise" value="{{ dados.manuais.pastas_revisionais.aguardando_analise }}">
+      </div>
+      <div class="campo">
+        <label for="pastas_aguardando_correcao">Pastas aguardando correção no mês</label>
+        <input type="number" id="pastas_aguardando_correcao" name="pastas_aguardando_correcao" value="{{ dados.manuais.pastas_revisionais.aguardando_correcao_no_mes }}">
+      </div>
+      <div class="campo">
+        <label for="pastas_acumulado_crm">Pastas aguardando correção (acumulado CRM)</label>
+        <input type="number" id="pastas_acumulado_crm" name="pastas_acumulado_crm" value="{{ dados.manuais.pastas_revisionais.acumulado_crm }}">
+      </div>
+      <div class="campo">
+        <label for="processos_ativos_revisionais_total">Processos ativos revisionais</label>
+        <input type="number" id="processos_ativos_revisionais_total" name="processos_ativos_revisionais_total" value="{{ dados.manuais.processos_ativos_revisionais_total }}">
+      </div>
+      <div class="campo">
+        <label for="extrajudiciais_pendentes_correcao">Solicitações extrajudiciais pendentes de correção</label>
+        <input type="number" id="extrajudiciais_pendentes_correcao" name="extrajudiciais_pendentes_correcao" value="{{ dados.manuais.extrajudiciais_solicitacoes_pendentes_correcao }}">
+      </div>
+      <button type="submit">Salvar campos manuais</button>
+    </form>
+    <p class="subtitulo">
+      Mapa por UF do revisional, processos ganhos por estado, sentenças procedentes e sentenças
+      favoráveis da assessoria ainda não têm campo nesta tela (pendência pra uma versão futura) —
+      entram no relatório como vazios/zero até lá.
+    </p>
+  </div>
+{% endblock %}

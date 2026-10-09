@@ -2883,3 +2883,82 @@ planilhas reais, como acima. Suíte completa: 412 testes, lint limpo. Novas depe
 
 **Reversível:** sim — módulo 100% novo e isolado; nenhuma rota, menu, tabela ou comportamento
 existente foi tocado.
+
+### 5.10 Fase 8 — Armazenamento e telas
+
+**`app/relatorio_assessorias/models.py`** (novo arquivo, não `app/models.py`, pra manter a área
+isolada) — `RelatorioAssessoriaResultado`: um registro por (assessoria, mês, ano), `dados_json`
+(o `DadosRelatorio` inteiro serializado) + `sobrescritas_json` (só os números editados na
+revisão). Tabela nova e aditiva — nenhum schema existente foi alterado. Único arquivo
+compartilhado tocado por isso: `app/db.py` ganhou 1 linha de import (registra a tabela nova em
+`Base.metadata` antes do `create_all`; comentada no próprio arquivo).
+
+**`armazenamento.py`** — (de)serialização EXPLÍCITA (sem reflexão): `from __future__ import
+annotations` deixa os tipos dos campos como string em tempo de execução, o que quebraria qualquer
+reconstrução automática via `dataclasses.fields()` — então cada dataclass do módulo tem sua
+função `_serializar_x`/`_desserializar_x` própria, verboso mas sem mágica. Sobrescrita de número
+(especificação: "Qualquer número pode ser sobrescrito; o valor sobrescrito fica marcado e
+registrado"): `CAMPOS_NUMERICOS_SOBRESCREVIVEIS` é uma lista FECHADA de caminhos tipo atributo
+(`"laudos.elaborados"`, `"manuais.pastas_revisionais.recebidas_no_mes"`) — só os totais agregados,
+não os detalhamentos por UF/faixa nem itens de lista (ex.: não dá pra editar um nome dentro da
+lista de judiciais por essa tela). O registro de quem/quando/de-quanto-pra-quanto reaproveita o
+`LogAuditoria` que já existe (`app.services.auditoria.registrar`), em vez de duplicar um mecanismo
+de histórico. Reprocessar um mês (novo upload) preserva `sobrescritas_json` e os campos manuais já
+preenchidos — não tem como recalculá-los a partir de uma planilha nova.
+
+**`processamento.py`** — lê as 6 fontes UMA VEZ (não uma vez por assessoria) e filtra por
+assessoria em memória (`normalizacao.assessoria.filtrar_linhas`); roda as 6 seções + as
+conferências cruzadas da Fase 5 pra cada `EmpresaCliente` ativa do cadastro, salva cada resultado.
+Erro bloqueante de leitura (arquivo errado, aba/coluna faltando) sobe pra rota de upload, que
+mostra a mensagem e não salva nada parcial.
+
+**Telas** (`app/web/routes_relatorio_assessorias.py` + 3 templates) — área admin-only, SEM item
+próprio no menu lateral (mesmo padrão de Auditoria: só dentro de Configuração, `admin_logado_web`
+em toda rota) — isso, junto com a decisão já tomada na Fase 0 ("só admin por enquanto"), cobre o
+pedido da Clara de manter a área fora de vista até o lançamento, sem precisar de uma flag
+separada. Arquivos compartilhados tocados, todos de forma aditiva e no mesmo padrão já usado pela
+Auditoria: `app/web/areas_configuracao.py` (+1 entrada), `app/web/menu.py` (+1 item em
+`tambem_ativo_em`), `app/templates/_icones.html` (+1 ícone), `app/main.py` (+1 router).
+
+- Upload: parâmetros (mês/ano/data de corte) + 6 arquivos num formulário só →
+  `processamento.processar_upload` → painel.
+- Painel: uma linha por assessoria processada no mês, com indicador de avisos e "sem movimento"
+  (todas as seções automáticas zeradas — contagem simples, não uma coluna no banco) + checkbox
+  (pré-marcado pras COM movimento) pro lote.
+- Revisão: avisos (origem + mensagem), números calculados (valor efetivo + calculado lado a
+  lado), os dois mapas em prévia (PNG embutido como base64, não salvo em disco), formulário de
+  sobrescrita (um campo por vez, da lista fechada) e formulário dos campos manuais com totais
+  (pastas revisionais, processos ativos revisionais, solicitações pendentes de correção).
+- Geração: `.docx` individual (botão no painel e na revisão) e `.zip` em lote das assessorias
+  marcadas no painel (spec: "não entram no lote, a menos que o usuário marque" — por isso o
+  checkbox começa desmarcado pras "sem movimento"). PDF não entra (adiado, Fase 7).
+
+**Simplificações de escopo, decididas e documentadas aqui (não pedi aprovação prévia por serem
+detalhes de implementação, não requisitos da especificação cortados):**
+- "Empresa desconhecida" (nome que não bate com nenhum apelido) aparece na mensagem do painel com
+  a contagem total, sem o botão de "adicionar como apelido na hora" que a especificação descreve
+  — pra isso, hoje, usa-se a tela de Empresas-clientes/editar `assessorias.yaml` diretamente.
+- A tela de campos manuais cobre os totais (pastas revisionais, processos ativos revisionais,
+  solicitações pendentes de correção); o detalhamento por UF do mapa revisional, processos
+  ganhos por estado, sentenças procedentes e sentenças favoráveis da assessoria ainda não têm
+  campo — entram vazios/zero no relatório até ganharem tela (a Clara pode editar manualmente no
+  Word depois de gerar, como já era possível antes desta fase).
+
+**Validado de ponta a ponta no navegador (Playwright, servidor local com SQLite), com as 6
+planilhas reais da EWS:** login → cadastro da assessoria EWS → upload das 6 planilhas → painel →
+revisão. Todos os números na tela batem exatamente com os já confirmados nas Fases 4/5 (laudos
+14/14/0/0, iniciais 2/3, extrajudiciais 16/10/19, audiências 10/5, contrárias 3/29/27/2, procons
+7, ausentes 1) — os 36 avisos mostrados são reais e informativos (processo duplicado identificado
+com a origem das duas linhas, datas malformadas, campos vazios). Os dois mapas renderizam
+corretamente na prévia.
+
+**Testado:** `tests/test_relatorio_assessorias_armazenamento.py` (9), `tests/
+test_relatorio_assessorias_processamento.py` (2, com planilhas pequenas fictícias em memória),
+`tests/test_web_relatorio_assessorias.py` (2, fluxo completo via TestClient — upload, painel,
+revisão, sobrescrita, campos manuais, download .docx, download .zip — e acesso negado pra
+colaborador sem papel admin). Suíte completa: 425 testes, lint limpo.
+
+**Reversível:** sim — tabela nova e aditiva, rotas/templates novos, e os poucos arquivos
+compartilhados tocados (listados acima) seguem exatamente o padrão já usado pela Auditoria
+(Thread 1 desta mesma sessão) — reverter é remover essas poucas linhas aditivas + os arquivos
+novos.

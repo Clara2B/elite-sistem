@@ -29,4 +29,8 @@ AREAS_CONFIGURACAO = [
         "url": "/app/auditoria", "rotulo": "Auditoria", "icone": "auditoria",
         "descricao": "Histórico de ações no sistema — quem fez o quê e quando.",
     },
+    {
+        "url": "/app/relatorios-assessorias", "rotulo": "Relatórios das Assessorias", "icone": "relatorios",
+        "descricao": "Gerador de relatórios mensais por assessoria (EWS, WNR...).",
+    },
 ]

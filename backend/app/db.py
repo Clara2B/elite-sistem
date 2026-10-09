@@ -17,6 +17,14 @@ from app.models import (
     Usuario,
 )
 
+# Import só para registrar a tabela nova (Fase 8, Gerador de Relatórios
+# Mensais das Assessorias) em Base.metadata antes do create_all abaixo —
+# o módulo não é usado diretamente aqui. Tabela isolada e aditiva, não
+# mexe em nenhum schema existente (ver app/relatorio_assessorias/models.py).
+from app.relatorio_assessorias import (
+    models as _relatorio_assessorias_models,  # noqa: F401
+)
+
 DEFAULT_TIPOS_LAUDO = {
     "AUTO": 40.0,
     "AUTO-BALÃO": 60.0,

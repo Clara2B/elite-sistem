@@ -32,7 +32,7 @@ def itens_menu(db: Session, usuario: Usuario) -> list[dict]:
             "descricao": "Usuários, empresas-clientes, assistentes, setores e chamados.",
             "tambem_ativo_em": [
                 "/app/usuarios", "/app/empresas", "/app/funcionarios", "/app/setores", "/app/chamados",
-                "/app/auditoria",
+                "/app/auditoria", "/app/relatorios-assessorias",
             ],
         })
     return itens

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block titulo %}Painel de Assessorias — Elite Sistem{% endblock %}
+{% block voltar %}
+  {% import "_icones.html" as icones %}
+  {% from "_config_subnav.html" import subnav %}
+  <a href="/app/configuracao" class="link-voltar">{{ icones.icone('voltar') }} Voltar à Configuração</a>
+  {{ subnav(areas_configuracao, request.url.path) }}
+{% endblock %}
+{% block conteudo %}
+  {% from "_flash.html" import toast %}
+  <h1>Painel de Assessorias — {{ mes }}/{{ ano }}</h1>
+  <p class="subtitulo">
+    <a href="/app/relatorios-assessorias">Processar outro mês ou reenviar planilhas</a>
+  </p>
+  {{ toast('sucesso', mensagem) }}
+
+  {% if not linhas %}
+    <div class="card">
+      <p>Nenhum relatório processado pra {{ mes }}/{{ ano }} ainda.</p>
+      <a class="botao" href="/app/relatorios-assessorias">Processar planilhas</a>
+    </div>
+  {% else %}
+    <div class="card">
+      <form method="post" action="/app/relatorios-assessorias/lote">
+        <input type="hidden" name="mes" value="{{ mes }}">
+        <input type="hidden" name="ano" value="{{ ano }}">
+        <div class="tabela-wrap">
+          <table>
+            <thead>
+              <tr><th></th><th>Assessoria</th><th>Movimento</th><th>Avisos</th><th></th></tr>
+            </thead>
+            <tbody>
+              {% for linha in linhas %}
+                <tr>
+                  <td>
+                    <input type="checkbox" name="assessorias" value="{{ linha.assessoria }}" {{ "checked" if linha.tem_movimento else "" }}>
+                  </td>
+                  <td>{{ linha.assessoria }}</td>
+                  <td>{{ "Com movimento" if linha.tem_movimento else "Sem movimento" }}</td>
+                  <td>{{ linha.qtd_avisos }} aviso(s)</td>
+                  <td>
+                    <a class="botao secundario" href="/app/relatorios-assessorias/revisao/{{ linha.assessoria | urlencode }}?mes={{ mes }}&ano={{ ano }}">Revisar</a>
+                    <a class="botao secundario" href="/app/relatorios-assessorias/docx/{{ linha.assessoria | urlencode }}?mes={{ mes }}&ano={{ ano }}">Baixar .docx</a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <button type="submit">Gerar .zip das marcadas</button>
+      </form>
+    </div>
+  {% endif %}
+{% endblock %}

@@ -34,6 +34,9 @@ from app.web.routes_funcionarios import router as web_funcionarios_router
 from app.web.routes_laudos import router as web_laudos_router
 from app.web.routes_pendencias import router as web_pendencias_router
 from app.web.routes_processos import router as web_processos_router
+from app.web.routes_relatorio_assessorias import (
+    router as web_relatorio_assessorias_router,
+)
 from app.web.routes_setores import router as web_setores_router
 from app.web.routes_suporte import router as web_suporte_router
 from app.web.routes_usuarios import router as web_usuarios_router
@@ -164,3 +167,4 @@ app.include_router(web_suporte_router)
 app.include_router(web_chamados_router)
 app.include_router(web_correspondencias_router)
 app.include_router(web_auditoria_router)
+app.include_router(web_relatorio_assessorias_router)

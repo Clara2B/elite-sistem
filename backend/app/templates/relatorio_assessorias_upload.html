@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block titulo %}Relatórios das Assessorias — Elite Sistem{% endblock %}
+{% block voltar %}
+  {% import "_icones.html" as icones %}
+  {% from "_config_subnav.html" import subnav %}
+  <a href="/app/configuracao" class="link-voltar">{{ icones.icone('voltar') }} Voltar à Configuração</a>
+  {{ subnav(areas_configuracao, request.url.path) }}
+{% endblock %}
+{% block conteudo %}
+  {% from "_flash.html" import toast %}
+  <h1>Relatórios das Assessorias</h1>
+  <p class="subtitulo">
+    Envie as 6 planilhas do mês uma vez — o sistema calcula o relatório de todas as assessorias
+    cadastradas de uma vez só.
+  </p>
+
+  {{ toast('erro', erro) }}
+
+  <div class="card">
+    <h2>Parâmetros e upload</h2>
+    <form class="formulario" method="post" action="/app/relatorios-assessorias/processar" enctype="multipart/form-data">
+      <div class="campo">
+        <label for="mes">Mês de referência</label>
+        <select id="mes" name="mes" required>
+          {% for n, nome in [(1,"Janeiro"),(2,"Fevereiro"),(3,"Março"),(4,"Abril"),(5,"Maio"),(6,"Junho"),(7,"Julho"),(8,"Agosto"),(9,"Setembro"),(10,"Outubro"),(11,"Novembro"),(12,"Dezembro")] %}
+            <option value="{{ n }}" {{ "selected" if n == mes else "" }}>{{ nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="campo">
+        <label for="ano">Ano</label>
+        <input type="number" id="ano" name="ano" value="{{ ano }}" required>
+      </div>
+      <div class="campo">
+        <label for="data_corte">Data de corte</label>
+        <input type="date" id="data_corte" name="data_corte" value="{{ data_corte }}" required>
+      </div>
+
+      <div class="campo">
+        <label for="laudo">Planilha de Laudos</label>
+        <input type="file" id="laudo" name="laudo" accept=".xlsx" required>
+      </div>
+      <div class="campo">
+        <label for="iniciais">Planilha de Iniciais</label>
+        <input type="file" id="iniciais" name="iniciais" accept=".xlsx" required>
+      </div>
+      <div class="campo">
+        <label for="agendamento">Planilha 2026 (Judicial + Pauta da Semana Contrária)</label>
+        <input type="file" id="agendamento" name="agendamento" accept=".xlsx" required>
+      </div>
+      <div class="campo">
+        <label for="extrajudicial">Planilha de Agendamento (Extrajudicial)</label>
+        <input type="file" id="extrajudicial" name="extrajudicial" accept=".xlsx" required>
+      </div>
+      <div class="campo">
+        <label for="contrarias">Planilha Contrárias - Novo</label>
+        <input type="file" id="contrarias" name="contrarias" accept=".xlsx" required>
+      </div>
+      <div class="campo">
+        <label for="procon">Planilha Procon e Extrajudicial</label>
+        <input type="file" id="procon" name="procon" accept=".xlsx" required>
+      </div>
+
+      <button type="submit">Processar</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Já processado este mês?</h2>
+    <p class="subtitulo">Veja o painel sem subir as planilhas de novo.</p>
+    <a class="botao secundario" href="/app/relatorios-assessorias/painel?mes={{ mes }}&ano={{ ano }}">Ver painel de {{ mes }}/{{ ano }}</a>
+  </div>
+{% endblock %}
