@@ -14,11 +14,11 @@ arquivo `Relatório_<ASSESSORIA>_<MM>-<AAAA>.docx`; erros de digitação do
 modelo ("REFRÊNCIA", "ASSESSSORIA", "QUATIDADE", "distribuidos")
 corrigidos no template.
 
-Conversão pra PDF: PENDENTE — não existe hoje nenhum conversor docx→pdf no
-sistema (o `pdf_export.py` atual desenha PDF do zero com reportlab, não
-converte um documento existente). Recomendação dada à Clara, 2026-10-08:
-LibreOffice headless — precisa dela confirmar disponibilidade no servidor
-(Render) antes desta parte da fase."""
+Conversão pra PDF: ADIADA (decisão da Clara, 2026-10-09) — não existe hoje
+nenhum conversor docx→pdf no sistema (o `pdf_export.py` atual desenha PDF
+do zero com reportlab, não converte um documento existente); minha
+recomendação foi LibreOffice headless, mas Clara optou por gerar só o
+`.docx` por enquanto, deixando a conversão pra uma versão futura."""
 from __future__ import annotations
 
 from dataclasses import dataclass

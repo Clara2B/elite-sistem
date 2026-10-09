@@ -2281,11 +2281,11 @@ texto fixo.
 **Validado de ponta a ponta com as 6 planilhas reais:** o `.docx` final bate com todos os números
 já confirmados nas Fases 4/5. Novas dependências: `python-docx`, `docxtpl`.
 
-**Pendente — não é bloqueio de código, é decisão/verificação da Clara:** a conversão pra PDF.
-Perguntei na Fase 0 qual conversor ela recomendava e ela devolveu a pergunta pra mim; minha
-recomendação (LibreOffice headless, pelo motivo de fidelidade de layout) e a pergunta sobre o
-Render estarem disponíveis pra LibreOffice ficaram pendentes de resposta dela antes de eu
-implementar essa parte — ver DECISIONS.md, entrada específica após a resposta dela.
+**Decidido (2026-10-09): conversão pra PDF adiada.** Dei minha recomendação (LibreOffice headless,
+pela fidelidade de layout) e levantei a pergunta sobre disponibilidade no Render; Clara escolheu
+"gerar só o .docx por enquanto" — a geração de PDF fica pra uma versão futura, não bloqueia a v1
+nem as fases seguintes (Fase 8 gera/baixa só o .docx; o botão de PDF e o .zip em lote da
+especificação ficam documentados como pendência conhecida, não implementados agora).
 
 **Testado:** 6 testes novos com dados fictícios (abre sem marcador sobrando, 2 dígitos, lista
 vazia, 2 imagens, valor `None`). Suíte completa: 412 testes, lint limpo.

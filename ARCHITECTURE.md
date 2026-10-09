@@ -2866,14 +2866,14 @@ ausente "ANTONIO BESERRA DA COSTA", audiências judiciais 10 — o número certo
 relatório original —, contrárias 27 judiciais/02 trabalhistas/29 ativos, distribuídos no mês 02).
 Nenhum `{{`/`{%` sobrou, as 2 imagens de mapa aparecem no documento.
 
-**Pendente (não é bloqueio de código, é uma decisão/verificação da Clara — ver próxima seção):**
-conversão do `.docx` pra PDF. Tentei confirmar LibreOffice headless funcionando neste ambiente de
-desenvolvimento (só pra visualizar, não como parte do que vai pro sistema) e não consegui — o
-`soffice` está instalado aqui, mas falha com "source file could not be loaded" mesmo pro modelo
-original sem nenhuma edição minha, provavelmente uma limitação do sandbox deste ambiente (não
-necessariamente do servidor de produção). Como ainda não tenho a confirmação da Clara sobre qual
-conversor usar nem se o LibreOffice está disponível no Render, não implementei essa parte —
-`render.py` já está com um `TODO` documentado no lugar certo pra isso.
+**Decidido (2026-10-09): conversão pra PDF adiada.** Dei minha recomendação (LibreOffice headless,
+pela fidelidade de layout — tentei confirmar que funciona neste ambiente de desenvolvimento só
+pra visualizar, mas o `soffice` instalado aqui falha com "source file could not be loaded" mesmo
+pro modelo original sem edição nenhuma, provavelmente uma limitação deste sandbox, não
+necessariamente do servidor de produção) e levantei a pergunta sobre o Render ter LibreOffice
+disponível. Clara decidiu gerar só o `.docx` por enquanto — a geração de PDF e o .zip em lote da
+especificação (seção "Template docx e geração de PDF") ficam como pendência conhecida pra uma
+versão futura, documentada aqui, e não bloqueiam a Fase 8.
 
 **Testado:** `tests/test_relatorio_assessorias_render.py`, 6 testes com dados fictícios (abre sem
 marcador sobrando, números com 2 dígitos, lista vazia mostra só cabeçalho, as 2 imagens de mapa
