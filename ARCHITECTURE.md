@@ -2814,3 +2814,72 @@ limpo. Nova dependência: `matplotlib` (adicionada a `requirements.txt`).
 
 **Reversível:** sim — módulo 100% novo e isolado; nenhuma rota, menu, tabela ou comportamento
 existente foi tocado.
+
+### 5.9 Fase 7 — Template e renderização (parcial: falta a conversão pra PDF)
+
+**`scripts/preparar_template_relatorio.py`** (roda uma vez, migração do modelo → template; depois
+de gerado, `templates/relatorio.docx` é editado direto no Word, o script não roda de novo) — abre
+`Relatório_EWS_8.docx` e troca só o TEXTO de parágrafos/células específicas pelo marcador Jinja
+correspondente (por correspondência exata com o texto atual — se o modelo mudasse, o script falha
+alto em vez de gerar um template errado), preservando fonte/cor/borda/logo originais. Resolvido
+olhando a estrutura real do modelo (16 tabelas, não só as descritas na especificação):
+- As 2 imagens de mapa já existentes no modelo (identificadas pelo elemento `pic:pic` de verdade,
+  não qualquer `w:drawing` — o modelo também tem 2 outras figuras pequenas, logo/cabeçalho, sem
+  `pic:pic`) viram `{{ mapa_revisional }}` / `{{ mapa_contrarias }}`.
+- Tabelas de lista (sentenças procedentes, as 2 de UF por mapa, clientes ausentes, lista
+  judiciais/trabalhistas, procons, sentenças favoráveis) viram um bloco de 3 linhas
+  (`{%tr for x in lista %}` / linha-modelo com `{{ x.campo }}` / `{%tr endfor %}`) — a sintaxe
+  real do docxtpl pro loop de linha é o for e o endfor em LINHAS PRÓPRIAS (não na mesma linha da
+  última coluna, como eu tinha testado primeiro e dava erro de Jinja) — confirmado com um teste
+  isolado antes de editar o modelo de verdade.
+- Rótulos de faixa de Iniciais não ficam mais fixos no texto: viram um loop sobre
+  `iniciais.faixas.items()`, porque a especificação diz que esses rótulos são configuráveis
+  (`config/regras.yaml`) — fixar o texto "05 a 07"/"10 a 20" no Word de novo reproduziria o mesmo
+  problema que a Clara pediu pra corrigir na Fase 0.
+- "(acumulado no ano)" adicionado nos 2 campos acumulados (Audiências judiciais/contrárias) — a
+  especificação pede esse rótulo, o modelo não tinha.
+- Todo número isolado (não monetário) ganha o filtro `dois_digitos` (2 dígitos, zero à esquerda),
+  uniforme — o modelo tinha isso só às vezes ("01", "28") e não outras ("0", "8"), inconsistência
+  de digitação manual da pessoa que preencheu o modelo, não uma regra; a especificação pede um
+  filtro único.
+- Erros de digitação corrigidos: "REFRÊNCIA"→"REFERÊNCIA", "ASSESSSORIA"→"ASSESSORIA",
+  "QUATIDADE"→"QUANTIDADE", "distribuidos"→"distribuídos".
+- Rodapé "Dados extraídos em {{ data_corte }}" adicionado (o modelo não tinha rodapé nenhum).
+- 2 campos manuais a mais achados ao mapear o modelo, que a especificação já previa mas sem
+  detalhar onde entravam: "Sentenças favoráveis para a assessoria" (lista própria da seção de
+  Contrárias, com valor da causa — `manuais.sentencas_favoraveis_contrarias`, dataclass
+  `SentencaFavoravel`) e "solicitações pendentes de correção" (contagem, dentro da mesma tabela
+  das audiências extrajudiciais —
+  `manuais.extrajudiciais_solicitacoes_pendentes_correcao`) — `secoes/manuais.py` atualizado.
+
+**`render.py`** — `renderizar_docx(DadosRelatorio) -> bytes`: monta o contexto (seções + manuais +
+as 2 tabelas por UF, via `mapas.tabela_por_uf`, + as 2 `InlineImage` dos mapas, via
+`mapas.desenhar`), registra os filtros Jinja `dois_digitos` e `valor_brl` (`None` vira "Não
+informado", reaproveita `app.utils.format_brl`) e renderiza. Nada salvo em disco — devolve bytes,
+mesmo padrão do resto do sistema. `nome_arquivo_docx(assessoria, mes, ano)` no padrão
+`Relatório_<ASSESSORIA>_<MM>-<AAAA>.docx`.
+
+**Validado de ponta a ponta com as 6 planilhas reais** (EWS, agosto/2026): rodei o pipeline
+completo (leitura → normalização → cálculo das 6 seções automáticas → render) e o `.docx` gerado
+bate exatamente com os números já confirmados nas Fases 4/5 (laudos 14, extrajudiciais 16/10/19,
+ausente "ANTONIO BESERRA DA COSTA", audiências judiciais 10 — o número certo, não o 11 do
+relatório original —, contrárias 27 judiciais/02 trabalhistas/29 ativos, distribuídos no mês 02).
+Nenhum `{{`/`{%` sobrou, as 2 imagens de mapa aparecem no documento.
+
+**Pendente (não é bloqueio de código, é uma decisão/verificação da Clara — ver próxima seção):**
+conversão do `.docx` pra PDF. Tentei confirmar LibreOffice headless funcionando neste ambiente de
+desenvolvimento (só pra visualizar, não como parte do que vai pro sistema) e não consegui — o
+`soffice` está instalado aqui, mas falha com "source file could not be loaded" mesmo pro modelo
+original sem nenhuma edição minha, provavelmente uma limitação do sandbox deste ambiente (não
+necessariamente do servidor de produção). Como ainda não tenho a confirmação da Clara sobre qual
+conversor usar nem se o LibreOffice está disponível no Render, não implementei essa parte —
+`render.py` já está com um `TODO` documentado no lugar certo pra isso.
+
+**Testado:** `tests/test_relatorio_assessorias_render.py`, 6 testes com dados fictícios (abre sem
+marcador sobrando, números com 2 dígitos, lista vazia mostra só cabeçalho, as 2 imagens de mapa
+presentes, valor da causa `None` vira "Não informado"). Validação manual de ponta a ponta com as 6
+planilhas reais, como acima. Suíte completa: 412 testes, lint limpo. Novas dependências:
+`python-docx`, `docxtpl`.
+
+**Reversível:** sim — módulo 100% novo e isolado; nenhuma rota, menu, tabela ou comportamento
+existente foi tocado.

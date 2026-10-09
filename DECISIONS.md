@@ -2267,3 +2267,27 @@ amplamente usada, sem acesso à rede em tempo de execução).
 vazio/só estados pequenos). Suíte completa: 406 testes, lint limpo.
 
 **Reversível:** sim — módulo 100% novo e isolado.
+
+## 2026-10-09 — Relatórios das Assessorias, Fase 7: template e renderização (parcial)
+
+`scripts/preparar_template_relatorio.py` (migração única do modelo pro template) gerou
+`templates/relatorio.docx` com os marcadores Jinja (docxtpl); `render.py::renderizar_docx` monta
+o contexto e renderiza. Ver ARCHITECTURE.md seção 5.9 pros detalhes técnicos — inclui a sintaxe
+real do `{%tr for/endfor %}` do docxtpl (linhas próprias, não a mesma linha), 2 campos manuais
+novos achados ao mapear o modelo (sentenças favoráveis da seção Contrárias, solicitações
+pendentes de correção), e o rótulo de faixas de Iniciais virando um loop configurável em vez de
+texto fixo.
+
+**Validado de ponta a ponta com as 6 planilhas reais:** o `.docx` final bate com todos os números
+já confirmados nas Fases 4/5. Novas dependências: `python-docx`, `docxtpl`.
+
+**Pendente — não é bloqueio de código, é decisão/verificação da Clara:** a conversão pra PDF.
+Perguntei na Fase 0 qual conversor ela recomendava e ela devolveu a pergunta pra mim; minha
+recomendação (LibreOffice headless, pelo motivo de fidelidade de layout) e a pergunta sobre o
+Render estarem disponíveis pra LibreOffice ficaram pendentes de resposta dela antes de eu
+implementar essa parte — ver DECISIONS.md, entrada específica após a resposta dela.
+
+**Testado:** 6 testes novos com dados fictícios (abre sem marcador sobrando, 2 dígitos, lista
+vazia, 2 imagens, valor `None`). Suíte completa: 412 testes, lint limpo.
+
+**Reversível:** sim — módulo 100% novo e isolado.

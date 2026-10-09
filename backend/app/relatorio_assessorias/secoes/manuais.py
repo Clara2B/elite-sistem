@@ -7,8 +7,18 @@ quem preenche os valores é a tela de revisão (Fase 8).
   aguardando correção no mês e acumulado CRM.
 - Processos ativos revisionais: total e quantidade por UF — alimenta o
   mapa revisional (ver mapas.py).
-- Sentenças procedentes: lista com nome, processo e UF.
+- Sentenças procedentes (revisional): lista com nome, processo e UF.
 - Processos ganhos por estado: tabela por UF.
+- Sentenças favoráveis para a assessoria (ações contrárias): lista com
+  nome, processo, UF e valor da causa — achada ao mapear o modelo contra
+  o resto da especificação na Fase 7 (tabela "SENTENÇAS FAVORÁVEIS PARA
+  ASSESSORIA" do `Relatório_EWS_8.docx`, seção de Ações Contrárias — mesma
+  ideia das sentenças procedentes do Revisional, mas uma lista separada,
+  com mais uma coluna).
+- Solicitações pendentes de correção (extrajudicial): contagem — a
+  especificação já citava esse campo como manual ("fonte não
+  identificada"), achado no modelo dentro da mesma tabela das audiências
+  extrajudiciais (Fase 7).
 
 Evolução futura (fora do escopo da v1): leitor via API do Google Drive
 (sentenças) e leitor do CRM, substituindo esses campos manuais sem mudar a
@@ -35,9 +45,19 @@ class SentencaProcedente:
 
 
 @dataclass
+class SentencaFavoravel:
+    nome: str
+    processo: str
+    uf: str
+    valor_causa: float | None
+
+
+@dataclass
 class CamposManuais:
     pastas_revisionais: PastasRevisionais = field(default_factory=PastasRevisionais)
     processos_ativos_revisionais_total: int = 0
     processos_ativos_revisionais_por_uf: dict[str, int] = field(default_factory=dict)
     sentencas_procedentes: list[SentencaProcedente] = field(default_factory=list)
     processos_ganhos_por_uf: dict[str, int] = field(default_factory=dict)
+    sentencas_favoraveis_contrarias: list[SentencaFavoravel] = field(default_factory=list)
+    extrajudiciais_solicitacoes_pendentes_correcao: int = 0
