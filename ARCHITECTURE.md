@@ -2815,7 +2815,7 @@ limpo. Nova dependência: `matplotlib` (adicionada a `requirements.txt`).
 **Reversível:** sim — módulo 100% novo e isolado; nenhuma rota, menu, tabela ou comportamento
 existente foi tocado.
 
-### 5.9 Fase 7 — Template e renderização (parcial: falta a conversão pra PDF)
+### 5.9 Fase 7 — Template e renderização (conversão pra PDF adiada, ver 5.10)
 
 **`scripts/preparar_template_relatorio.py`** (roda uma vez, migração do modelo → template; depois
 de gerado, `templates/relatorio.docx` é editado direto no Word, o script não roda de novo) — abre
@@ -2962,3 +2962,29 @@ colaborador sem papel admin). Suíte completa: 425 testes, lint limpo.
 compartilhados tocados (listados acima) seguem exatamente o padrão já usado pela Auditoria
 (Thread 1 desta mesma sessão) — reverter é remover essas poucas linhas aditivas + os arquivos
 novos.
+
+### 5.11 Fase 9 — Teste de ponta a ponta e polimento
+
+**`tests/test_relatorio_assessorias_e2e.py`** — o teste de ponta a ponta que a especificação pede
+("Teste de ponta a ponta com as planilhas reais e a tabela [de critérios de aceite]"), agora como
+teste automatizado de verdade (até aqui, cada fase validava manualmente com um script solto em
+`/tmp`, não committado). Roda `processamento.processar_upload` com as 6 planilhas reais e
+confere, num teste só, TODOS os campos da tabela de critérios de aceite da especificação (página
+11) de uma vez — `pytest.mark.skipif` quando `dados_locais_nao_versionados/` não existe (qualquer
+ambiente fora desta sessão, já que as planilhas reais nunca são committadas, LGPD). Confirma
+também que o `.docx` final renderiza sem marcador `{{`/`{%` sobrando.
+
+Único valor testado DIFERENTE do que a tabela da especificação diz: Audiências judiciais
+(acumulado no ano) — a especificação lista 11, o teste confere 10, com a decisão documentada na
+própria docstring do arquivo (ver seção 5.6 acima e DECISIONS.md 2026-10-09: investigado a fundo,
+Clara confirmou que a 11ª do relatório original provavelmente foi um acréscimo manual, não algo
+reproduzível a partir da planilha).
+
+**Polimento:** nenhum TODO/FIXME pendente encontrado no módulo; `.mapas-preview` (classe usada na
+tela de revisão desde a Fase 8) ganhou a regra CSS que faltava (`app/static/style.css`); seções
+5.1-5.10 deste documento conferidas em sequência, sem numeração duplicada.
+
+**Testado:** suíte completa do projeto (426 testes, incluindo o novo teste de ponta a ponta — que
+só roda aqui, local, com as planilhas reais; em qualquer outro ambiente são 425), lint limpo.
+
+**Reversível:** sim — só testes novos e uma regra de CSS.

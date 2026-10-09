@@ -2318,3 +2318,19 @@ Suíte completa: 425 testes, lint limpo.
 
 **Reversível:** sim — tabela nova e aditiva; rotas/templates novos; os poucos arquivos
 compartilhados tocados seguem o padrão já usado pela Auditoria.
+
+## 2026-10-09 — Relatórios das Assessorias, Fase 9: ponta a ponta e polimento
+
+`tests/test_relatorio_assessorias_e2e.py`: o teste automatizado de ponta a ponta contra a tabela
+de critérios de aceite da especificação (antes, cada fase só validava com script solto, não
+committado). Pulado automaticamente fora desta sessão (planilhas reais nunca são committadas).
+Um valor testado é diferente do que a especificação lista (audiências judiciais: 10, não 11) —
+decisão já tomada e documentada na Fase 4 (ver entrada 2026-10-09 acima), não um erro novo.
+
+Polimento: nenhum TODO pendente no módulo; 1 regra de CSS que faltava
+(`.mapas-preview`, usada desde a Fase 8). Ver ARCHITECTURE.md seção 5.11.
+
+**Testado:** suíte completa, 426 testes nesta sessão (425 em qualquer ambiente sem as planilhas
+reais), lint limpo.
+
+**Reversível:** sim.

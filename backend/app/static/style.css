@@ -503,6 +503,18 @@ button.perigo:disabled:hover {
   border: 1px solid var(--border);
 }
 
+/* Prévia dos 2 mapas na tela de revisão das Assessorias — lado a lado em
+   telas largas, empilhados no celular (mesmo breakpoint já usado pelo
+   resto do layout). */
+.mapas-preview {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.mapas-preview > div {
+  flex: 1 1 320px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
