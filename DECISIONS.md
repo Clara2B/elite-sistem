@@ -2212,11 +2212,13 @@ da Pauta da Semana Contrária com as duas grafias juntas, sem separador dos trê
 especificação — resolvido como apelido em vez de mexer na lógica geral de separação, que
 quebraria nomes com espaço de verdade como "WN FAST").
 
-**Não bate, investigado, não forçado:** audiências judiciais deu 10 em vez de 11. As 12 linhas
-da aba JUDICIAL com empresa "SW" (nenhuma variação de nome) foram conferidas uma a uma — 10 têm
-data até 04/09/2026, as duas de fora são 22/09 e 01/10. Testado contra duas cópias do arquivo
-(mesmo resultado nas duas); sem 13ª linha, célula composta ou padrão de herança que explicasse a
-diferença. Reportado à Clara pra decisão, sem alterar a regra pra forçar o número.
+**Investigado e resolvido (2026-10-09):** audiências judiciais dá 10 em vez de 11 — e está
+correto. Além da conferência linha a linha (10 das 12 linhas "SW" da aba JUDICIAL têm data até
+04/09/2026), também descartados: merged cells (só separadores de mês), linhas em branco com dado
+oculto (nenhuma), 2ª coluna "EMPRESA" (é nome de advogada(o), não 2ª empresa), outras abas do
+arquivo. Perguntei à Clara: confirmou que é a mesma planilha (nenhuma nova) e que a 11ª audiência
+pode ter sido um acréscimo manual no relatório final, fora da planilha. Cálculo mecânico
+confirmado correto pros dados disponíveis — sem mudança de código.
 
 **Testado:** 27 testes novos (um conjunto por seção, `LinhaBruta` construídas diretamente).
 Validação manual (não committada) contra as 6 planilhas reais, como acima. Suíte completa: 384

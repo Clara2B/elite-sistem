@@ -2695,15 +2695,23 @@ forçados):
   nome, sem tocar em `normalizacao/assessoria.py`. Resolveu Audiências contrárias (4 → 5) sem
   afetar nada mais.
 
-**Não bate, investigado, não forçado:** Audiências judiciais deu 10, não 11. As 12 linhas da aba
-JUDICIAL com empresa "SW" (nenhuma com "EWS" nem variação composta) foram conferidas uma a uma:
-10 têm data entre 01/01/2026 e 04/09/2026 (as duas de fora: 22/09 e 01/10, depois da data de
-corte). Testado contra as duas cópias disponíveis do arquivo (a de `dados_locais_nao_versionados`
-e a enviada antes, com 3 linhas de diferença no total da aba) — mesmo resultado nas duas. Não
-achei nenhuma 13ª linha, célula composta tipo "SW EWS" (conferido também na 2ª coluna "EMPRESA"
-da aba, que na verdade guarda o nome da(o) advogada(o), não uma 2ª empresa) nem padrão de
-herança de linha em branco que explicasse a diferença. Fica pra Clara decidir — talvez a
-planilha tenha mudado desde que ela validou os números originalmente.
+**Investigado e resolvido (2026-10-09): Audiências judiciais dá 10, não 11 — e está certo.**
+Além da conferência linha a linha (as 12 linhas da aba JUDICIAL com empresa "SW", nenhuma com
+"EWS" nem variação composta — 10 com data entre 01/01/2026 e 04/09/2026, as duas de fora são
+22/09 e 01/10, depois da data de corte), também investigados sem achar nada: merged cells na
+coluna EMPRESA (só 9, todas linhas inteiras de separador de mês, tipo "OUTUBRO", não agrupamento
+de empresa), as 778 linhas com EMPRESA em branco (nenhuma tem dado real sem empresa — são linhas
+vazias de espaçamento + os 9 separadores de mês), a 2ª coluna "EMPRESA" da aba (na verdade é o
+nome da(o) advogada(o), não uma 2ª empresa), e as outras abas do arquivo (ex.: "TERMO
+CONCILIATORIO", que não tem coluna de empresa nem de data, não dá pra atribuir a uma assessoria).
+Testado contra as duas cópias disponíveis do arquivo — mesmo resultado nas duas.
+
+Perguntado à Clara (2026-10-09): confirmou que a planilha usada é a mesma enviada (nenhuma nova)
+e que é possível que a 11ª audiência tenha sido adicionada manualmente no relatório final, fora
+da planilha — ou seja, o cálculo mecânico está correto para os dados disponíveis; a diferença é
+uma edição manual que não tem como ser reproduzida a partir da fonte. Nenhuma mudança de código
+necessária — documentado aqui como exemplo conhecido de "número do critério de aceite não bate
+porque o relatório de referência teve um ajuste manual", não como bug do sistema.
 
 **Testado:** `tests/test_relatorio_assessorias_secoes.py`, 27 testes — um conjunto por seção,
 com `LinhaBruta` construídas diretamente (equivalente a fixtures pequenas: o que entra numa seção
