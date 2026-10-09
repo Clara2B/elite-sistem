@@ -2770,3 +2770,47 @@ as 6 planilhas reais, como acima. Suíte completa: 397 testes, lint limpo.
 
 **Reversível:** sim — módulo 100% novo e isolado; nenhuma rota, menu, tabela ou comportamento
 existente foi tocado.
+
+### 5.8 Fase 6 — Mapas
+
+**Preparação (`scripts/preparar_mapa_brasil.py`, roda uma vez, fora do sistema — não é importado
+por nada em `app/`):** gera `app/relatorio_assessorias/assets/brasil_uf.json` (129 KB, os
+contornos das 27 UFs + o centroide de cada uma).
+
+**Desvio da especificação, decidido e reportado:** a especificação pedia baixar a malha do IBGE
+(API `servicodados.ibge.gov.br` ou pacote `geobr`). A política de rede deste ambiente de
+desenvolvimento bloqueia esse domínio especificamente (`curl` devolve 403 do proxy da
+organização — "connect_rejected... organization policy"). Em vez de travar a fase inteira nisso,
+usei uma fonte alternativa de malha estadual já pública, derivada do IBGE, do repositório
+`codeforamerica/click_that_hood` (GeoJSON com as 27 UFs, propriedade `sigla` = UF, mesma malha
+político-administrativa) — `raw.githubusercontent.com` não está bloqueado pela política. Simplifica
+os contornos com `shapely.simplify` (tolerância 0.02°, preservando topologia) — descartando
+também, por UF, todas as ilhas minúsculas da costa que a simplificação reduzia a polígonos de 4-5
+vértices (achado real: o Rio de Janeiro tinha 1 polígono principal + 35 ilhotas assim) — mantém só
+o maior polígono por UF, porque o mapa é pra um relatório, não uma carta náutica. `shapely` é
+dependência SÓ deste script (`pip install shapely` manual, não entra em `requirements.txt` —
+produção nunca roda esse arquivo, só lê o JSON já pronto).
+
+**`mapas.py`** — matplotlib puro, sem geopandas/shapely/internet:
+- `desenhar(contagem_por_uf, paleta, rotulos_config) -> bytes` — `PolyCollection` com borda branca
+  fina; cor interpolada linearmente entre `cor_base` (0) e `cor_maximo` (o maior valor do mapa),
+  paletas de `config/mapa_rotulos.yaml`; rótulo "UF\nquantidade" no centroide de cada estado,
+  exceto os 7 pequenos demais (`estados_com_rotulo_externo`, mesmo arquivo), que ficam fora do
+  mapa ligados por uma linha de chamada. PNG 200 dpi, fundo transparente.
+- `tabela_por_uf(contagem_por_uf) -> dict[str, int]` — garante as 27 UFs em ordem alfabética (UF
+  sem dado = 0), reaproveitando `normalizacao.texto.UFS` (tornada pública nesta fase — antes era
+  `_UFS`, interna só de `texto.py`) — mapa e tabela sempre saem do mesmo dict, nunca divergem.
+
+**Validado visualmente:** desenhei os dois mapas (revisional e contrárias) com a contagem real de
+"ativos por UF" da EWS (Fase 4: RJ=3, SP=12, MG=2 etc.) e com um conjunto maior fictício cobrindo
+todos os 7 estados de rótulo externo de uma vez. Os deslocamentos escritos como ponto de partida
+na Fase 1 (`mapa_rotulos.yaml`) já ficaram legíveis e sem linha de chamada cruzando o mapa — não
+precisaram de ajuste.
+
+**Testado:** `tests/test_relatorio_assessorias_mapas.py`, 9 testes (`tabela_por_uf` preenche as
+27 UFs; interpolação de cor no 0, no máximo, no meio, e sem nenhum ativo; `desenhar` devolve PNG
+válido com dado normal, vazio, e só com os 7 estados pequenos). Suíte completa: 406 testes, lint
+limpo. Nova dependência: `matplotlib` (adicionada a `requirements.txt`).
+
+**Reversível:** sim — módulo 100% novo e isolado; nenhuma rota, menu, tabela ou comportamento
+existente foi tocado.

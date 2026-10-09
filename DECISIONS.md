@@ -2243,3 +2243,27 @@ reais que a conferência existe pra pegar.
 completa: 397 testes, lint limpo.
 
 **Reversível:** sim — módulo 100% novo e isolado.
+
+## 2026-10-09 — Relatórios das Assessorias, Fase 6: mapas
+
+Preparação (`scripts/preparar_mapa_brasil.py`, roda uma vez, fora do sistema, não entra em
+produção) + `mapas.py` (matplotlib puro, lê o JSON já pronto). Ver ARCHITECTURE.md seção 5.8 pros
+detalhes técnicos.
+
+**Desvio da especificação, decidido sozinho e reportado aqui:** a especificação pedia a API de
+malhas do IBGE ou o pacote `geobr`. A política de rede deste ambiente bloqueia
+`servicodados.ibge.gov.br` especificamente (confirmado via `curl`: 403 do proxy da organização).
+Usei uma fonte alternativa já pública e derivada do IBGE (GeoJSON de
+`codeforamerica/click_that_hood`, mesma malha das 27 UFs) em vez de travar a fase — `shapely` pra
+simplificar os contornos, dependência só do script de preparação, nunca entra em
+`requirements.txt`. Conferido visualmente (desenhei os dois mapas com dado real da Fase 4 e um
+conjunto fictício maior): malha reconhecível, legível, sem precisar ajustar os deslocamentos dos
+7 estados pequenos que já estavam no `mapa_rotulos.yaml` desde a Fase 1.
+
+Nova dependência: `matplotlib` (adicionada a `requirements.txt`, reportado — biblioteca madura e
+amplamente usada, sem acesso à rede em tempo de execução).
+
+**Testado:** 9 testes novos (`tabela_por_uf`, interpolação de cor, `desenhar` com dado normal/
+vazio/só estados pequenos). Suíte completa: 406 testes, lint limpo.
+
+**Reversível:** sim — módulo 100% novo e isolado.

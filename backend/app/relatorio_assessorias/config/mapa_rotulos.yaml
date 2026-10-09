@@ -4,11 +4,10 @@
 # caber dentro do próprio estado, então o rótulo fica fora do mapa, ligado
 # por uma linha até o centroide do estado.
 #
-# PLACEHOLDER — as coordenadas reais só dá pra ajustar visualmente depois
-# que o desenho do mapa existir de verdade (Fase 6), comparando com o
-# layout do modelo (Relatório_EWS_8.docx). Os valores abaixo são um ponto
-# de partida razoável (deslocamento radial simples a partir do centroide),
-# não os definitivos — serão corrigidos olhando o PNG gerado.
+# Conferido visualmente na Fase 6, rodando mapas.py::desenhar contra dado
+# real e fictício: os 7 rótulos ficam legíveis e as linhas de chamada não
+# cruzam o mapa, sem precisar ajustar os valores que foram escritos como
+# ponto de partida na Fase 1.
 #
 # offset_x/offset_y: deslocamento em pontos do matplotlib a partir do
 # centroide do estado, pra onde o texto do rótulo vai.

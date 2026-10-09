@@ -13,11 +13,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-_UFS = {
+UFS = frozenset({
     "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
     "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC",
     "SP", "SE", "TO",
-}
+})  # pública — reaproveitada por mapas.py (Fase 6) pra garantir as 27 UFs na tabela
 
 
 @dataclass
@@ -47,6 +47,6 @@ def normalizar_uf(bruto: object) -> UfNormalizada:
     texto = str(bruto).strip().upper()
     if not texto:
         return UfNormalizada(None, "UF vazia")
-    if texto not in _UFS:
+    if texto not in UFS:
         return UfNormalizada(None, f"UF inválida: '{texto}'")
     return UfNormalizada(texto)
