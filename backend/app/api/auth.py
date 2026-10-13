@@ -7,13 +7,14 @@ from sqlalchemy.orm import Session
 
 from app.auth import (
     _extrair_token,
+    buscar_sessao,
     criar_sessao,
     get_current_user,
     hash_senha,
     verificar_senha,
 )
 from app.db import get_db
-from app.models import Sessao, Usuario
+from app.models import Usuario
 from app.services.auditoria import registrar
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -49,9 +50,9 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         registrar(db, usuario, "LOGIN_FALHOU", entidade="usuario", entidade_id=payload.email)
         raise HTTPException(status_code=401, detail="E-mail ou senha incorretos.")
 
-    sessao = criar_sessao(db, usuario)
+    sessao, token = criar_sessao(db, usuario)
     registrar(db, usuario, "LOGIN", entidade="usuario", entidade_id=usuario.id)
-    return {"token": sessao.token, "expira_em": sessao.expira_em, "usuario": _perfil(usuario)}
+    return {"token": token, "expira_em": sessao.expira_em, "usuario": _perfil(usuario)}
 
 
 @router.post("/logout")
@@ -60,7 +61,7 @@ def logout(
     usuario: Usuario = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    sessao = db.get(Sessao, token)
+    sessao = buscar_sessao(db, token)
     if sessao is not None:
         db.delete(sessao)
         db.commit()

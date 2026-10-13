@@ -22,6 +22,7 @@ quanto para quem chama a API direto com o cabeçalho.
 """
 from __future__ import annotations
 
+import hashlib
 import secrets
 from datetime import datetime, timedelta
 
@@ -88,15 +89,35 @@ def verificar_senha(senha: str, senha_hash: str) -> bool:
         return False  # hash malformado/vazio — nunca deveria acontecer, mas não derruba o login
 
 
-def criar_sessao(db: Session, usuario: Usuario) -> Sessao:
+def _hash_token(token: str) -> str:
+    """SHA-256 do token de sessão (2026-10-13, auditoria M07) — `Sessao.
+    token` nunca guarda o token de verdade, só esse hash: um dump/backup do
+    banco, ou qualquer leitura indevida da tabela, não entrega mais um
+    token pronto pra uso. O token em si continua opaco e com boa entropia
+    (`secrets.token_hex(32)`, 256 bits) — isso protege o ARMAZENAMENTO, não
+    substitui a entropia que já evita força bruta."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def buscar_sessao(db: Session, token: str) -> Sessao | None:
+    """Busca a `Sessao` a partir do token recebido (cookie ou Bearer) — só
+    pelo hash dele, nunca pelo valor em texto puro (ver `_hash_token`)."""
+    return db.get(Sessao, _hash_token(token))
+
+
+def criar_sessao(db: Session, usuario: Usuario) -> tuple[Sessao, str]:
+    """Devolve a `Sessao` criada (salva com o HASH do token) e o token de
+    verdade — ele só existe aqui, nunca é gravado no banco; quem chama
+    precisa dele pra devolver no cookie ou na resposta de login."""
+    token_bruto = secrets.token_hex(32)
     sessao = Sessao(
-        token=secrets.token_hex(32),
+        token=_hash_token(token_bruto),
         usuario_id=usuario.id,
         expira_em=datetime.utcnow() + timedelta(hours=SESSAO_DURACAO_HORAS),
     )
     db.add(sessao)
     db.commit()
-    return sessao
+    return sessao, token_bruto
 
 
 def _extrair_token(
@@ -115,7 +136,7 @@ def get_current_user(
     token: str = Depends(_extrair_token),
     db: Session = Depends(get_db),
 ) -> Usuario:
-    sessao = db.get(Sessao, token)
+    sessao = buscar_sessao(db, token)
     if sessao is None or sessao.expira_em < datetime.utcnow():
         raise HTTPException(status_code=401, detail="Sessão inválida ou expirada. Faça login novamente.")
     usuario = db.get(Usuario, sessao.usuario_id)
