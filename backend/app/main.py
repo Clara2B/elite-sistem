@@ -80,6 +80,50 @@ async def _medir_tempo_de_requisicao(request: Request, call_next):
     return resposta
 
 
+# Cabeçalhos de segurança básicos (2026-10-13, auditoria M09) — o sistema
+# não tinha nenhum: sem CORS explícito (não há risco óbvio hoje, já que
+# não existe frontend separado chamando de outra origem — ver Pergunta
+# correspondente da auditoria), e sem nenhum cabeçalho de defesa em
+# profundidade contra clickjacking/sniffing de tipo de conteúdo.
+#
+# O CSP mantém 'unsafe-inline' em script-src/style-src porque os templates
+# já usam `style="..."` em várias linhas e um pequeno script inline
+# (_tema_inline.html, troca de tema antes da primeira pintura da página) —
+# trocar isso por nonce por requisição ou mover tudo pra app.js/style.css
+# é um refactor maior, fora do escopo deste item (ver Pergunta
+# correspondente). As outras diretivas (frame-ancestors, object-src,
+# form-action, default-src) não dependem disso e já cobrem os vetores mais
+# comuns (clickjacking, carregar recurso de origem externa, hijack de
+# formulário) mesmo com unsafe-inline nessas duas.
+_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; "
+    "font-src 'self'; "
+    "connect-src 'self'; "
+    "object-src 'none'; "
+    "base-uri 'none'; "
+    "form-action 'self'; "
+    "frame-ancestors 'none'"
+)
+
+
+@app.middleware("http")
+async def _cabecalhos_de_seguranca(request: Request, call_next):
+    resposta = await call_next(request)
+    resposta.headers["X-Content-Type-Options"] = "nosniff"
+    resposta.headers["X-Frame-Options"] = "DENY"
+    resposta.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    resposta.headers["Content-Security-Policy"] = _CSP
+    if request.url.scheme == "https":
+        # Só em HTTPS (mesmo critério já usado pro cookie de sessão em
+        # app/web/auth.py::definir_cookie_sessao) — em HTTP puro (dev
+        # local) esse cabeçalho não faz sentido e o navegador o ignora.
+        resposta.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return resposta
+
+
 @app.exception_handler(PrecisaLogin)
 async def _precisa_login(request: Request, exc: PrecisaLogin):
     return RedirectResponse("/login", status_code=303)
