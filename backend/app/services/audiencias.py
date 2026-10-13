@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.excel_reader import load_data_sheets
 from app.models import Audiencia, EmpresaCliente, FaixaAudiencia
+from app.services.cartas import cnpj_valido
 from app.services.empresas import get_or_create_empresa
 from app.utils import cell_text, normalize, parse_date_cell
 
@@ -179,6 +180,14 @@ def gerar_relatorio(
             break
     if empresa is None:
         raise ValueError(f"A empresa '{empresa_nome}' não foi encontrada.")
+
+    # Validação do CNPJ sobrescrito via parâmetro (2026-10-13, auditoria
+    # M12) — antes, um CNPJ qualquer passado por query param aparecia no
+    # PDF/Excel/JSON oficial no lugar do CNPJ cadastrado, sem nenhuma
+    # checagem de formato (quem chama decide registrar a sobrescrita no
+    # log de auditoria — ver app/api/audiencias.py).
+    if cnpj and not cnpj_valido(cnpj):
+        raise ValueError(f"CNPJ '{cnpj}' inválido.")
 
     clientes = _clientes_no_periodo(db, empresa.id, periodo_ini, periodo_fim)
 
