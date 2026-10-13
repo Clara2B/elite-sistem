@@ -32,7 +32,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Sessao, SetorModulo, Usuario, UsuarioSetor
+from app.models import Operadora, Sessao, Setor, SetorModulo, Usuario, UsuarioSetor
 
 SESSAO_DURACAO_HORAS = 12
 PAPEIS_GLOBAIS = {"ADMIN_SUPERIOR", "ADMIN_TI"}
@@ -133,11 +133,22 @@ def require_admin(usuario: Usuario = Depends(get_current_user)) -> Usuario:
 def operadoras_acessiveis(db: Session, usuario: Usuario) -> set[str]:
     """Nomes das operadoras que o usuário pode enxergar. Admin Superior/T.I.
     veem as duas; qualquer outro usuário só as operadoras dos setores a que
-    pertence (regra dura — ver ARCHITECTURE.md 1.9 item 3)."""
+    pertence (regra dura — ver ARCHITECTURE.md 1.9 item 3).
+
+    Uma consulta só (join direto), não um lazy-load de `setor`/`operadora`
+    por vínculo (2026-10-13, auditoria M04) — ver docstring de
+    `modulos_acessiveis` abaixo pelo mesmo motivo, que afeta essa função em
+    toda navegação web de usuário não-admin."""
     if usuario.papel_global in PAPEIS_GLOBAIS:
         return {"EXIMIA", "ELITE"}
-    vinculos = db.scalars(select(UsuarioSetor).where(UsuarioSetor.usuario_id == usuario.id))
-    return {v.setor.operadora.nome for v in vinculos}
+    nomes = db.scalars(
+        select(Operadora.nome)
+        .join(Setor, Setor.operadora_id == Operadora.id)
+        .join(UsuarioSetor, UsuarioSetor.setor_id == Setor.id)
+        .where(UsuarioSetor.usuario_id == usuario.id)
+        .distinct()
+    )
+    return set(nomes)
 
 
 def restaria_sem_admin(db: Session, usuario_id: int, novo_papel_global: str | None) -> bool:
@@ -179,22 +190,40 @@ def modulos_acessiveis(db: Session, usuario: Usuario) -> set[str]:
     `SetorModulo` libera todos os módulos válidos pra sua operadora (estado
     padrão/retrocompatível — nenhum setor existente perde acesso só por essa
     feature ter sido adicionada); um setor COM linhas em `SetorModulo` fica
-    restrito exatamente a elas (2026-09-28, a pedido da Clara)."""
+    restrito exatamente a elas (2026-09-28, a pedido da Clara).
+
+    Duas consultas no total, não 1 + 3 por setor do usuário (2026-10-13,
+    auditoria M04): a versão original percorria `vinculos` em Python e, pra
+    cada setor, fazia um lazy-load de `setor` + um lazy-load de
+    `setor.operadora` + uma consulta própria em `SetorModulo` — chamada em
+    toda página web (via `itens_menu`), isso significava ~10 consultas por
+    carregamento de tela pra um usuário com 3 setores. Mesmo tipo de
+    problema já corrigido uma vez em `services/empresas.py::
+    contar_vinculos_todas_empresas` (240→5 consultas)."""
     if usuario.papel_global in PAPEIS_GLOBAIS:
         return set(MODULOS_OPERADORA.keys())
 
-    vinculos = db.scalars(select(UsuarioSetor).where(UsuarioSetor.usuario_id == usuario.id))
+    setores_do_usuario = db.execute(
+        select(Setor.id, Operadora.nome)
+        .join(Operadora, Setor.operadora_id == Operadora.id)
+        .join(UsuarioSetor, UsuarioSetor.setor_id == Setor.id)
+        .where(UsuarioSetor.usuario_id == usuario.id)
+        .distinct()
+    ).all()
+    if not setores_do_usuario:
+        return set()
+
+    setor_ids = [setor_id for setor_id, _ in setores_do_usuario]
+    configurados_por_setor: dict[int, set[str]] = {}
+    for setor_id, modulo in db.execute(
+        select(SetorModulo.setor_id, SetorModulo.modulo).where(SetorModulo.setor_id.in_(setor_ids))
+    ):
+        configurados_por_setor.setdefault(setor_id, set()).add(modulo)
+
     resultado: set[str] = set()
-    setores_vistos: set[int] = set()
-    for vinculo in vinculos:
-        setor = vinculo.setor
-        if setor.id in setores_vistos:
-            continue
-        setores_vistos.add(setor.id)
-        validos = modulos_validos_para_operadora(setor.operadora.nome)
-        configurados = {
-            sm.modulo for sm in db.scalars(select(SetorModulo).where(SetorModulo.setor_id == setor.id))
-        }
+    for setor_id, nome_operadora in setores_do_usuario:
+        validos = modulos_validos_para_operadora(nome_operadora)
+        configurados = configurados_por_setor.get(setor_id, set())
         resultado |= (configurados & validos) if configurados else validos
     return resultado
 
