@@ -33,4 +33,8 @@ AREAS_CONFIGURACAO = [
         "url": "/app/relatorios-assessorias", "rotulo": "Relatórios das Assessorias", "icone": "relatorios",
         "descricao": "Gerador de relatórios mensais por assessoria (EWS, WNR...).",
     },
+    {
+        "url": "/app/faixas-audiencia", "rotulo": "Faixas de Audiências", "icone": "audiencias",
+        "descricao": "Faixas de preço por quantidade de audiências no mês.",
+    },
 ]
