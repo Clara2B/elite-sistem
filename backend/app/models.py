@@ -67,9 +67,14 @@ class Laudo(Base):
     # índice nessa coluna, em produção (Postgres) isso é uma varredura
     # completa da tabela a cada relatório gerado. Ver DECISIONS.md.
     empresa_cliente_id: Mapped[int] = mapped_column(ForeignKey("empresas_clientes.id"), index=True)
-    tipo_laudo_nome: Mapped[str] = mapped_column(String(60))  # texto livre — igual à planilha hoje
+    # Text, não VARCHAR (2026-10-13, auditoria M02): mesma classe de bug já
+    # corrigida em Processo/Audiencia/LogAuditoria — texto livre vindo da
+    # planilha ("NOME DO CLIENTE"/"TIPO DE LAUDO") pode exceder um limite
+    # fixo e derrubar a importação com StringDataRightTruncation. Ver
+    # DECISIONS.md e `_garantir_texto_ilimitado` em app/db.py.
+    tipo_laudo_nome: Mapped[str] = mapped_column(Text)
     data: Mapped[date] = mapped_column(Date, index=True)
-    nome_cliente: Mapped[str] = mapped_column(String(200), default="")
+    nome_cliente: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(20))  # SOLICITACAO | CORRECAO | CANCELADO
     valor: Mapped[float] = mapped_column(Float, default=0.0)
     origem: Mapped[str] = mapped_column(String(20), default="IMPORT_PLANILHA")
@@ -153,7 +158,9 @@ class Cobranca(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     empresa_cliente_id: Mapped[int] = mapped_column(ForeignKey("empresas_clientes.id"), index=True)
     data: Mapped[date] = mapped_column(Date, index=True)
-    tipo_cobranca: Mapped[str] = mapped_column(String(200))
+    # Text, não VARCHAR (2026-10-13, auditoria M02) — mesmo motivo de
+    # Laudo.tipo_laudo_nome/nome_cliente acima.
+    tipo_cobranca: Mapped[str] = mapped_column(Text)
     cobrador: Mapped[str] = mapped_column(String(10))  # EXIMIA | ELITE
     valor: Mapped[float] = mapped_column(Float)
     status_pagamento: Mapped[str | None] = mapped_column(String(30), nullable=True)
