@@ -3,6 +3,7 @@ from datetime import date
 from pathlib import Path
 
 import openpyxl
+import pytest
 from sqlalchemy import Text
 
 from app.models import Audiencia
@@ -71,6 +72,19 @@ def test_mes_anterior_nao_entra_no_acumulado(db):
     ini, fim = periodo_quinzenal(2026, 10, 2)
     result = gerar_relatorio(db, "ALFA", ini, fim)
     assert (result.quantidade_mes, result.valor_unitario, result.total) == (1, 400.0, 400.0)
+
+
+def test_periodo_quinzenal_aceita_1_e_2():
+    assert periodo_quinzenal(2026, 9, 1) == (date(2026, 9, 1), date(2026, 9, 15))
+    assert periodo_quinzenal(2026, 9, 2) == (date(2026, 9, 16), date(2026, 9, 30))
+
+
+@pytest.mark.parametrize("quinzena", [0, 3, -1, 99])
+def test_periodo_quinzenal_rejeita_valor_invalido(quinzena):
+    """Auditoria M13: antes, qualquer valor != 1 caía no else e devolvia o
+    período da 2ª quinzena silenciosamente, sem erro."""
+    with pytest.raises(ValueError, match="Quinzena inválida"):
+        periodo_quinzenal(2026, 9, quinzena)
 
 
 def test_empresa_normalizada_sem_acento_e_caixa(db):

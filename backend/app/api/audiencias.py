@@ -55,8 +55,8 @@ def relatorio(
     usuario: Usuario = Depends(_acesso_eximia),
     db: Session = Depends(get_db),
 ):
-    periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
     try:
+        periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
         resultado = audiencias_service.gerar_relatorio(db, empresa, periodo_ini, periodo_fim, cnpj)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -86,8 +86,8 @@ def relatorio_pdf(
     usuario: Usuario = Depends(_acesso_eximia),
     db: Session = Depends(get_db),
 ):
-    periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
     try:
+        periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
         resultado = audiencias_service.gerar_relatorio(db, empresa, periodo_ini, periodo_fim, cnpj)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -110,8 +110,8 @@ def relatorio_xlsx(
     usuario: Usuario = Depends(_acesso_eximia),
     db: Session = Depends(get_db),
 ):
-    periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
     try:
+        periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
         resultado = audiencias_service.gerar_relatorio(db, empresa, periodo_ini, periodo_fim, cnpj)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

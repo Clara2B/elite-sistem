@@ -52,8 +52,8 @@ def tela(
     contexto["mensagem"] = mensagem
     contexto["filtro"] = {"empresa": empresa, "ano": ano, "mes": mes, "quinzena": quinzena}
     if empresa and ano and mes and quinzena:
-        periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
         try:
+            periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
             resultado = audiencias_service.gerar_relatorio(db, empresa, periodo_ini, periodo_fim)
         except ValueError as e:
             contexto["erro"] = str(e)
