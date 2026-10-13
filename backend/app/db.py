@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from datetime import datetime
 
-from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy import create_engine, delete, inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import settings
@@ -11,6 +12,7 @@ from app.models import (
     FaixaAudiencia,
     Funcionario,
     Operadora,
+    Sessao,
     Setor,
     TipoEvento,
     TipoLaudo,
@@ -295,6 +297,19 @@ def init_db() -> None:
 
         db.commit()
         _bootstrap_admin(db)
+        _limpar_sessoes_expiradas(db)
+
+
+def _limpar_sessoes_expiradas(db: Session) -> None:
+    """Remove sessões já expiradas (2026-10-13, auditoria M11) — antes,
+    `Sessao` nunca era podada: toda sessão criada (uma por login, válida
+    por `SESSAO_DURACAO_HORAS`) ficava pra sempre, mesmo expirada. Rodar no
+    início do servidor (mesmo gatilho dos `_garantir_*`/seeds acima, não um
+    agendador novo) já cobre o caso real — o processo reinicia a cada
+    deploy no Render, então isso acontece com regularidade sem precisar de
+    nenhuma dependência nova (cron, APScheduler etc.)."""
+    db.execute(delete(Sessao).where(Sessao.expira_em < datetime.utcnow()))
+    db.commit()
 
 
 def _bootstrap_admin(db: Session) -> None:
