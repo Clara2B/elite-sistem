@@ -1,5 +1,7 @@
+from datetime import datetime, timedelta
+
 from app.auth import hash_senha
-from app.models import Usuario
+from app.models import LogAuditoria, Usuario
 
 
 def _criar_usuario(db, email="fulano@teste.local", senha="senha123", papel_global=None):
@@ -27,6 +29,42 @@ def test_login_com_senha_errada(client, db):
 def test_login_usuario_inexistente(client):
     resp = client.post("/auth/login", json={"email": "ninguem@teste.local", "senha": "x"})
     assert resp.status_code == 401
+
+
+def test_login_bloqueia_apos_5_tentativas_falhas(client, db):
+    """Auditoria M08: sem isso, nenhuma tentativa automatizada de login
+    travava — só o custo do bcrypt. 5 falhas seguidas pro mesmo e-mail
+    bloqueiam tentativas novas por um tempo, mesmo com a senha certa."""
+    _criar_usuario(db, email="bloqueio@teste.local", senha="senha123")
+
+    for _ in range(5):
+        resp = client.post("/auth/login", json={"email": "bloqueio@teste.local", "senha": "errada"})
+        assert resp.status_code == 401
+
+    resp = client.post("/auth/login", json={"email": "bloqueio@teste.local", "senha": "senha123"})
+    assert resp.status_code == 429
+
+
+def test_bloqueio_de_login_eh_por_email_nao_global(client, db):
+    _criar_usuario(db, email="vitima@teste.local", senha="senha123")
+    _criar_usuario(db, email="outro.usuario@teste.local", senha="senha456")
+
+    for _ in range(5):
+        client.post("/auth/login", json={"email": "vitima@teste.local", "senha": "errada"})
+
+    resp = client.post("/auth/login", json={"email": "outro.usuario@teste.local", "senha": "senha456"})
+    assert resp.status_code == 200
+
+
+def test_tentativas_fora_da_janela_de_bloqueio_nao_contam(client, db):
+    _criar_usuario(db, email="janela@teste.local", senha="senha123")
+    antigo = datetime.utcnow() - timedelta(minutes=30)
+    for _ in range(5):
+        db.add(LogAuditoria(acao="LOGIN_FALHOU", entidade="usuario", entidade_id="janela@teste.local", criado_em=antigo))
+    db.commit()
+
+    resp = client.post("/auth/login", json={"email": "janela@teste.local", "senha": "senha123"})
+    assert resp.status_code == 200
 
 
 def test_me_sem_token(client):

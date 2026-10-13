@@ -42,6 +42,21 @@ def test_login_senha_errada_mostra_erro(client, db):
     assert "incorretos" in resposta.text
 
 
+def test_login_web_bloqueia_apos_5_tentativas_falhas(client, db):
+    """Auditoria M08: 5 falhas seguidas pro mesmo e-mail bloqueiam
+    tentativas novas por um tempo, mesmo com a senha certa."""
+    db.add(Usuario(nome="Fulano", email="bloqueio.web@teste.local", senha_hash=hash_senha("certa")))
+    db.commit()
+
+    for _ in range(5):
+        resposta = client.post("/login", data={"email": "bloqueio.web@teste.local", "senha": "errada"})
+        assert resposta.status_code == 401
+
+    resposta = client.post("/login", data={"email": "bloqueio.web@teste.local", "senha": "certa"})
+    assert resposta.status_code == 429
+    assert "Muitas tentativas" in resposta.text
+
+
 def test_login_certo_seta_cookie_e_leva_ao_dashboard(client, db):
     db.add(Usuario(nome="Fulano de Tal", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
     db.commit()
