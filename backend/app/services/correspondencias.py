@@ -176,10 +176,16 @@ def gerar_relatorio(db: Session, empresa_nome: str, mes: str) -> Correspondencia
         raise ValueError(f"A empresa '{empresa_nome}' não foi encontrada.")
 
     mes_normalizado = mes.strip().upper()
-    query = select(Correspondencia).where(
-        Correspondencia.empresa_cliente_id == empresa.id,
-        Correspondencia.mes == mes_normalizado,
-    )
+    # Comparação por normalize() (sem acento), não por igualdade direta
+    # (2026-10-13, auditoria M15) — a importação já normaliza o mês na
+    # chave de deduplicação (ver import_planilha, mais acima), mas o texto
+    # gravado em Correspondencia.mes mantém o acento como veio da planilha
+    # (só .upper()). Comparar sem normalizar fazia "MARCO" (sem cedilha,
+    # erro de digitação já visto em outras colunas deste sistema) nunca
+    # bater com "Março" vindo do dropdown da tela — o relatório mostrava
+    # "Nenhuma correspondência encontrada" mesmo havendo linhas.
+    alvo_mes = normalize(mes_normalizado)
+    query = select(Correspondencia).where(Correspondencia.empresa_cliente_id == empresa.id)
 
     linhas = [
         LinhaCorrespondencia(
@@ -187,6 +193,7 @@ def gerar_relatorio(db: Session, empresa_nome: str, mes: str) -> Correspondencia
             valor_texto=c.valor_texto, valor=c.valor, tipo_acao=c.tipo_acao,
         )
         for c in db.scalars(query)
+        if normalize(c.mes) == alvo_mes
     ]
     linhas.sort(key=lambda l: normalize(l.autor))
     total = sum(l.valor for l in linhas if l.valor is not None)
