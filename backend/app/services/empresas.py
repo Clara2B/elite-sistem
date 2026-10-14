@@ -167,9 +167,16 @@ def criar_empresa(db: Session, nome: str, cnpj: str | None = None) -> EmpresaCli
     claro em vez de deixar o banco recusar sem contexto)."""
     nome = nome.strip()
     alvo = normalize(nome)
-    for existente in db.scalars(select(EmpresaCliente)):
-        if normalize(existente.nome) == alvo:
-            raise ValueError(f"Já existe uma empresa-cliente chamada '{existente.nome}'.")
+    # Só id/nome, não os objetos EmpresaCliente completos (2026-10-14,
+    # auditoria M20) — ainda é uma varredura em Python (normalize() não é
+    # uma expressão SQL simples, então não dá pra empurrar a comparação
+    # pro banco sem uma coluna nova, que traria risco de migração se já
+    # existir duplicata hoje — fora do escopo deste item, ver Pergunta
+    # correspondente), mas evita montar e trazer o objeto ORM inteiro
+    # (todas as colunas) só pra olhar o nome.
+    for _, existente_nome in db.execute(select(EmpresaCliente.id, EmpresaCliente.nome)):
+        if normalize(existente_nome) == alvo:
+            raise ValueError(f"Já existe uma empresa-cliente chamada '{existente_nome}'.")
     empresa = EmpresaCliente(nome=nome, cnpj=(cnpj or "").strip() or None)
     db.add(empresa)
     db.commit()
@@ -182,9 +189,9 @@ def atualizar_empresa(db: Session, empresa_id: int, nome: str, cnpj: str | None)
         raise ValueError(f"Empresa-cliente {empresa_id} não encontrada.")
     nome = nome.strip()
     alvo = normalize(nome)
-    for existente in db.scalars(select(EmpresaCliente)):
-        if existente.id != empresa_id and normalize(existente.nome) == alvo:
-            raise ValueError(f"Já existe uma empresa-cliente chamada '{existente.nome}'.")
+    for existente_id, existente_nome in db.execute(select(EmpresaCliente.id, EmpresaCliente.nome)):
+        if existente_id != empresa_id and normalize(existente_nome) == alvo:
+            raise ValueError(f"Já existe uma empresa-cliente chamada '{existente_nome}'.")
     empresa.nome = nome
     empresa.cnpj = (cnpj or "").strip() or None
     db.commit()
