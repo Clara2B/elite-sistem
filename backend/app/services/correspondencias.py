@@ -13,8 +13,8 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.excel_reader import load_data_sheets
-from app.models import Correspondencia, EmpresaCliente
-from app.services.empresas import get_or_create_empresa
+from app.models import Correspondencia
+from app.services.empresas import get_or_create_empresa, resolver_empresa_por_nome
 from app.utils import cell_text, normalize
 
 _logger = logging.getLogger("elite_sistem.import")
@@ -162,16 +162,8 @@ class CorrespondenciasResult:
     total: float = 0.0
 
 
-def _resolver_empresa(db: Session, empresa_nome: str) -> EmpresaCliente | None:
-    alvo = normalize(empresa_nome)
-    for e in db.scalars(select(EmpresaCliente)):
-        if normalize(e.nome) == alvo:
-            return e
-    return None
-
-
 def gerar_relatorio(db: Session, empresa_nome: str, mes: str) -> CorrespondenciasResult:
-    empresa = _resolver_empresa(db, empresa_nome)
+    empresa = resolver_empresa_por_nome(db, empresa_nome)
     if empresa is None:
         raise ValueError(f"A empresa '{empresa_nome}' não foi encontrada.")
 

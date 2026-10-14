@@ -125,6 +125,20 @@ LISTA_OFICIAL_EMPRESAS: list[tuple[str, str | None]] = [
 ]
 
 
+def resolver_empresa_por_nome(db: Session, nome: str) -> EmpresaCliente | None:
+    """Busca uma empresa-cliente pelo nome normalizado (sem acento/caixa) —
+    usada por Audiências, Pendências e Correspondências pra resolver o
+    nome de empresa vindo do filtro da tela (2026-10-14, auditoria M21):
+    a mesma varredura estava copiada 3 vezes, cada módulo com sua própria
+    cópia. `None` se não encontrar (quem chama decide a mensagem de erro —
+    cada módulo tem a sua própria, ex. "laudo"/"audiência"/"relatório")."""
+    alvo = normalize(nome)
+    for empresa in db.scalars(select(EmpresaCliente)):
+        if normalize(empresa.nome) == alvo:
+            return empresa
+    return None
+
+
 def get_or_create_empresa(
     db: Session, nome: str, cache: dict[str, EmpresaCliente] | None = None
 ) -> EmpresaCliente:
