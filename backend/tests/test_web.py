@@ -730,6 +730,24 @@ def test_configuracao_lista_as_4_areas_administrativas(client, db):
         assert rotulo in resposta.text
 
 
+def test_relatorios_e_chamados_tem_item_proprio_no_menu_fora_de_configuracao(client, db):
+    """2026-10-14, a pedido da Clara: Relatórios das Assessorias e Chamados
+    saíram de dentro de Configuração e ganharam item próprio na barra
+    lateral."""
+    admin = Usuario(nome="Admin", email="admin.menu.novo@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR")
+    db.add(admin)
+    db.commit()
+    client.post("/login", data={"email": "admin.menu.novo@teste.local", "senha": "certa"})
+
+    resposta = client.get("/")
+    assert 'href="/app/relatorios-assessorias"' in resposta.text
+    assert 'href="/app/chamados"' in resposta.text
+
+    resposta_config = client.get("/app/configuracao")
+    assert 'class="modulo" href="/app/relatorios-assessorias"' not in resposta_config.text
+    assert 'class="modulo" href="/app/chamados"' not in resposta_config.text
+
+
 def test_configuracao_bloqueada_para_nao_admin(client, db):
     setor = db.query(Setor).first()
     usuario = Usuario(nome="Colaboradora", email="colab.config@teste.local", senha_hash=hash_senha("certa"))
