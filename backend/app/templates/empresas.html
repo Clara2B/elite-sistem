@@ -148,12 +148,17 @@
               {% endfor %}
             </select>
           </div>
+          <div class="campo" style="margin-top: 14px;">
+            <label for="confirmar-excluir-em-massa">Digite EXCLUIR para confirmar</label>
+            <input type="text" id="confirmar-excluir-em-massa" autocomplete="off"
+                   data-confirmar-texto="EXCLUIR" placeholder="EXCLUIR">
+          </div>
         </div>
         <div class="modal-acoes">
           <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
           <form id="form-excluir-em-massa" method="post" action="/app/empresas/excluir-em-massa">
             <span data-ids-selecionados></span>
-            <button type="submit" class="perigo">Excluir selecionadas</button>
+            <button type="submit" class="perigo" data-confirmar-alvo>Excluir selecionadas</button>
           </form>
         </div>
       </dialog>
@@ -176,12 +181,17 @@
               {% endfor %}
             </select>
           </div>
+          <div class="campo" style="margin-top: 14px;">
+            <label for="confirmar-realocar-em-massa">Digite REALOCAR para confirmar</label>
+            <input type="text" id="confirmar-realocar-em-massa" autocomplete="off"
+                   data-confirmar-texto="REALOCAR" placeholder="REALOCAR">
+          </div>
         </div>
         <div class="modal-acoes">
           <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
           <form id="form-realocar-em-massa" method="post" action="/app/empresas/realocar-em-massa">
             <span data-ids-selecionados></span>
-            <button type="submit" class="perigo">Realocar selecionadas</button>
+            <button type="submit" class="perigo" data-confirmar-alvo>Realocar selecionadas</button>
           </form>
         </div>
       </dialog>
