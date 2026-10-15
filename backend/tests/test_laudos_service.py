@@ -112,6 +112,52 @@ def test_import_usa_coluna_a_como_data_mesmo_com_coluna_extra_de_data(db):
     assert laudo.data == date(2026, 8, 26)  # coluna A, não a coluna extra (27/08)
 
 
+def test_reimportacao_nao_duplica_o_mesmo_laudo(db):
+    """M31: Laudos não tinha nenhum teste de deduplicação na reimportação
+    (Processos tem 4 equivalentes) — diferente de Processos, aqui não há
+    atualização de linha existente, só "já existe, ignora" (chave: empresa
+    + tipo + data + nome do cliente)."""
+    def _planilha(nome_arquivo):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["DATA", "EMPRESA", "TIPO DE LAUDO", "NOME DO CLIENTE"])
+        ws.append([date(2026, 8, 26), "ABSOLUTA", "AUTO", "Fulano de Tal"])
+        path = Path(tempfile.mkdtemp()) / nome_arquivo
+        wb.save(path)
+        return str(path)
+
+    resumo1 = importar_planilha(db, _planilha("v1.xlsx"))
+    assert resumo1.linhas_novas == 1
+    assert resumo1.linhas_ja_existentes == 0
+
+    resumo2 = importar_planilha(db, _planilha("v2.xlsx"))
+    assert resumo2.linhas_novas == 0
+    assert resumo2.linhas_ja_existentes == 1
+
+    assert db.query(Laudo).count() == 1
+
+
+def test_reimportacao_com_cliente_diferente_nao_e_tratada_como_duplicata(db):
+    """A chave de duplicidade inclui NOME DO CLIENTE — dois laudos no mesmo
+    dia, mesma empresa e mesmo tipo, mas de clientes diferentes, são dois
+    registros, não um só."""
+    def _planilha(nome_arquivo, cliente):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["DATA", "EMPRESA", "TIPO DE LAUDO", "NOME DO CLIENTE"])
+        ws.append([date(2026, 8, 26), "ABSOLUTA", "AUTO", cliente])
+        path = Path(tempfile.mkdtemp()) / nome_arquivo
+        wb.save(path)
+        return str(path)
+
+    importar_planilha(db, _planilha("v1.xlsx", "Fulano de Tal"))
+    resumo2 = importar_planilha(db, _planilha("v2.xlsx", "Beltrano"))
+
+    assert resumo2.linhas_novas == 1
+    assert resumo2.linhas_ja_existentes == 0
+    assert db.query(Laudo).count() == 2
+
+
 def test_apagar_todos_laudos_remove_tudo_e_devolve_a_contagem(db):
     empresa1 = get_or_create_empresa(db, "ABSOLUTA")
     empresa2 = get_or_create_empresa(db, "ALFA")
