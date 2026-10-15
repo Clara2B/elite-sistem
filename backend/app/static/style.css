@@ -1240,6 +1240,9 @@ dialog.popup-suporte .popup-suporte-corpo {
     min-width: 0;
     width: 100%;
   }
+  .upload-label {
+    min-width: 0;
+  }
   .grid-modulos-inicio {
     grid-template-columns: 1fr;
   }
