@@ -84,26 +84,28 @@
         </div>
       {% endif %}
       {% if resultado.linhas %}
-        <table>
-          <thead>
-            <tr><th>Data</th><th>Cliente</th><th>Tipo</th><th>Status</th><th>Valor</th></tr>
-          </thead>
-          <tbody>
-            {% for l in resultado.linhas %}
-              <tr>
-                <td>{{ l.data.strftime("%d/%m/%Y") }}</td>
-                <td>{{ l.cliente }}</td>
-                <td>{{ l.tipo }}</td>
-                <td>{{ l.status }}</td>
-                <td>R$ {{ "%.2f"|format(l.valor)|replace(".", ",") }}</td>
+        <div class="tabela-wrap">
+          <table>
+            <thead>
+              <tr><th>Data</th><th>Cliente</th><th>Tipo</th><th>Status</th><th>Valor</th></tr>
+            </thead>
+            <tbody>
+              {% for l in resultado.linhas %}
+                <tr>
+                  <td>{{ l.data.strftime("%d/%m/%Y") }}</td>
+                  <td>{{ l.cliente }}</td>
+                  <td>{{ l.tipo }}</td>
+                  <td>{{ l.status }}</td>
+                  <td>R$ {{ "%.2f"|format(l.valor)|replace(".", ",") }}</td>
+                </tr>
+              {% endfor %}
+              <tr class="total">
+                <td colspan="4">Total</td>
+                <td>R$ {{ "%.2f"|format(resultado.total)|replace(".", ",") }}</td>
               </tr>
-            {% endfor %}
-            <tr class="total">
-              <td colspan="4">Total</td>
-              <td>R$ {{ "%.2f"|format(resultado.total)|replace(".", ",") }}</td>
-            </tr>
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
       {% else %}
         <p class="vazio">Nenhum laudo encontrado nesse período.</p>
       {% endif %}

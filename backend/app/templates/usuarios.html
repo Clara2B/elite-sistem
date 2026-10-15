@@ -17,7 +17,8 @@
 
   <div class="card">
     <h2>Equipe cadastrada</h2>
-    <table>
+    <div class="tabela-wrap">
+      <table>
       <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Setores</th><th>Status</th><th></th></tr></thead>
       <tbody>
         {% for u in usuarios %}
@@ -78,25 +79,27 @@
 
                     <p class="painel-secao-titulo">Setores e papéis</p>
                     <div class="tabela-setores">
-                      <table>
-                        <thead><tr><th style="width:40px;"></th><th>Setor</th><th>Operadora</th><th>Papel no setor</th></tr></thead>
-                        <tbody>
-                          {% for s in setores %}
-                            {% set papel_atual = vinculos_por_usuario[u.id].get(s.id) %}
-                            <tr>
-                              <td><input type="checkbox" name="setor_{{ s.id }}" {{ "checked" if papel_atual else "" }}></td>
-                              <td>{{ s.nome }}</td>
-                              <td>{{ s.operadora.nome }}</td>
-                              <td>
-                                <select name="papel_{{ s.id }}">
-                                  <option value="COLABORADOR" {{ "selected" if papel_atual == "COLABORADOR" else "" }}>Colaborador</option>
-                                  <option value="LIDER" {{ "selected" if papel_atual == "LIDER" else "" }}>Líder</option>
-                                </select>
-                              </td>
-                            </tr>
-                          {% endfor %}
-                        </tbody>
-                      </table>
+                      <div class="tabela-wrap">
+                        <table>
+                          <thead><tr><th style="width:40px;"></th><th>Setor</th><th>Operadora</th><th>Papel no setor</th></tr></thead>
+                          <tbody>
+                            {% for s in setores %}
+                              {% set papel_atual = vinculos_por_usuario[u.id].get(s.id) %}
+                              <tr>
+                                <td><input type="checkbox" name="setor_{{ s.id }}" {{ "checked" if papel_atual else "" }}></td>
+                                <td>{{ s.nome }}</td>
+                                <td>{{ s.operadora.nome }}</td>
+                                <td>
+                                  <select name="papel_{{ s.id }}">
+                                    <option value="COLABORADOR" {{ "selected" if papel_atual == "COLABORADOR" else "" }}>Colaborador</option>
+                                    <option value="LIDER" {{ "selected" if papel_atual == "LIDER" else "" }}>Líder</option>
+                                  </select>
+                                </td>
+                              </tr>
+                            {% endfor %}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                     <p class="subtitulo" style="margin-top: 8px;">
                       Precisa de um setor que ainda não existe?
@@ -111,7 +114,8 @@
           </tr>
         {% endfor %}
       </tbody>
-    </table>
+      </table>
+    </div>
   </div>
 
   <div class="card">
@@ -142,24 +146,26 @@
       </div>
 
       <h2 style="font-size: 0.95rem;">Setores</h2>
-      <table>
-        <thead><tr><th style="width:40px;"></th><th>Setor</th><th>Operadora</th><th>Papel no setor</th></tr></thead>
-        <tbody>
-          {% for s in setores %}
-            <tr>
-              <td><input type="checkbox" name="setor_{{ s.id }}"></td>
-              <td>{{ s.nome }}</td>
-              <td>{{ s.operadora.nome }}</td>
-              <td>
-                <select name="papel_{{ s.id }}">
-                  <option value="COLABORADOR">Colaborador</option>
-                  <option value="LIDER">Líder</option>
-                </select>
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="tabela-wrap">
+        <table>
+          <thead><tr><th style="width:40px;"></th><th>Setor</th><th>Operadora</th><th>Papel no setor</th></tr></thead>
+          <tbody>
+            {% for s in setores %}
+              <tr>
+                <td><input type="checkbox" name="setor_{{ s.id }}"></td>
+                <td>{{ s.nome }}</td>
+                <td>{{ s.operadora.nome }}</td>
+                <td>
+                  <select name="papel_{{ s.id }}">
+                    <option value="COLABORADOR">Colaborador</option>
+                    <option value="LIDER">Líder</option>
+                  </select>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
       <p class="subtitulo" style="margin-top: 8px;">
         Precisa de um setor que ainda não existe?
         <a href="/app/setores">Cadastre em Configuração → Setores</a>.
