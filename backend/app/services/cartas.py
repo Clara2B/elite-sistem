@@ -30,7 +30,10 @@ def detectar_plataforma(link: str) -> str:
 
 def formatar_hora(hora: str) -> str:
     """"14:05" -> "14H05" (Clara, 2026-09-25: sem "m" no final)."""
-    h, m = hora.split(":")
+    partes = (hora or "").split(":")
+    if len(partes) != 2:
+        raise ValueError(f'Horário inválido: "{hora}" — informe no formato HH:MM (ex.: 14:05).')
+    h, m = partes
     return f"{h}H{m}"
 
 
