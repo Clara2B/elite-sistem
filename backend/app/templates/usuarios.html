@@ -84,7 +84,7 @@
                           {% for s in setores %}
                             {% set papel_atual = vinculos_por_usuario[u.id].get(s.id) %}
                             <tr>
-                              <td><input type="checkbox" name="setor_{{ s.id }}" {{ "checked" if papel_atual else "" }}></td>
+                              <td><input type="checkbox" name="setor_{{ s.id }}" {{ "checked" if papel_atual else "" }} aria-label="Vincular ao setor {{ s.nome }}"></td>
                               <td>{{ s.nome }}</td>
                               <td>{{ s.operadora.nome }}</td>
                               <td>
@@ -147,7 +147,7 @@
         <tbody>
           {% for s in setores %}
             <tr>
-              <td><input type="checkbox" name="setor_{{ s.id }}"></td>
+              <td><input type="checkbox" name="setor_{{ s.id }}" aria-label="Vincular ao setor {{ s.nome }}"></td>
               <td>{{ s.nome }}</td>
               <td>{{ s.operadora.nome }}</td>
               <td>
