@@ -161,7 +161,6 @@ class AudienciasResult:
     valor_unitario: float | None
     clientes: list[str] = field(default_factory=list)
     total: float | None = None
-    valor_cadastrado: bool = True
     quantidade_mes_anterior: int = 0
     quantidade_mes: int = 0
     faixa_inicio: int | None = None
@@ -230,7 +229,6 @@ def gerar_relatorio(
         valor_unitario=valor_unitario,
         clientes=clientes,
         total=total,
-        valor_cadastrado=faixa is not None or not clientes,
         quantidade_mes_anterior=quantidade_mes_anterior,
         quantidade_mes=quantidade_mes,
         faixa_inicio=faixa.inicio if faixa else None,

@@ -74,7 +74,6 @@ def relatorio(
         "valor_unitario": resultado.valor_unitario,
         "clientes": resultado.clientes,
         "total": resultado.total,
-        "valor_cadastrado": resultado.valor_cadastrado,
         "quantidade_mes_anterior": resultado.quantidade_mes_anterior,
         "quantidade_mes": resultado.quantidade_mes,
         "texto": audiencias_service.formatar_texto(resultado),
