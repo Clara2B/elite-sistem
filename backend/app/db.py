@@ -260,6 +260,8 @@ def init_db() -> None:
         engine, "audiencias", "nome_cliente", "cpf", "data_agendamento", "conciliadora", "advogada"
     )
     _garantir_texto_ilimitado(engine, "logs_auditoria", "entidade_id")
+    _garantir_texto_ilimitado(engine, "laudos", "tipo_laudo_nome", "nome_cliente")
+    _garantir_texto_ilimitado(engine, "cobrancas", "tipo_cobranca")
     _garantir_indice_prazos_fatais(engine)
     _garantir_indices_logs_auditoria(engine)
     _garantir_indices_empresa_cliente_id(engine)
