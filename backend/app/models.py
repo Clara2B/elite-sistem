@@ -70,7 +70,14 @@ class Banco(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     nome: Mapped[str] = mapped_column(String(120), unique=True, index=True)
     cnpj: Mapped[str] = mapped_column(String(20))
-    email: Mapped[str] = mapped_column(String(160))
+    # Alguns bancos têm um segundo CNPJ válido (ex.: Itaú, na planilha real
+    # de bancos) — quem monta a Carta Banco escolhe qual se aplica a cada
+    # caso. `None` pra quem só tem um.
+    cnpj_alternativo: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Text, não VARCHAR (mesmo motivo já conhecido no projeto — ver
+    # DECISIONS.md M02): a planilha real tem bancos com vários e-mails
+    # separados por ponto-e-vírgula, alguns bem longos.
+    email: Mapped[str] = mapped_column(Text)
     ativo: Mapped[bool] = mapped_column(default=True)
 
 

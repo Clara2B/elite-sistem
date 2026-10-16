@@ -9,7 +9,9 @@ import openpyxl
 from sqlalchemy import select
 
 from app.auth import hash_senha
+from app.config import settings as app_settings
 from app.models import Banco, Setor, Usuario, UsuarioSetor
+from app.services import bancos as bancos_service
 
 CNPJ_VALIDO = "11.222.333/0001-81"
 
@@ -138,3 +140,28 @@ def test_importar_planilha_pela_tela(client, db):
     assert resposta.status_code == 200
     assert "1 criado" in resposta.text
     assert db.scalar(select(Banco).where(Banco.nome == "Banco XPTO")) is not None
+
+
+def test_importar_da_planilha_google_pela_tela(client, db, monkeypatch):
+    """A leitura em si é mockada (sem rede/credencial real nos testes
+    automatizados) — só confirma que a rota liga a tela ao serviço certo."""
+    _logar_admin(db, client)
+    monkeypatch.setattr(app_settings, "google_sheets_id", "planilha-fake-id")
+    linha = {"BANCOS ": "Banco XPTO", "E-MAIL": "contato@xpto.com.br", "CNPJ": CNPJ_VALIDO, "2° OPÇÃO CNPJ": ""}
+    monkeypatch.setattr(bancos_service.google_sheets, "ler_aba", lambda spreadsheet_id, aba: [linha])
+
+    resposta = client.post("/app/bancos/importar-da-planilha")
+
+    assert resposta.status_code == 200
+    assert "1 criado" in resposta.text
+    assert db.scalar(select(Banco).where(Banco.nome == "Banco XPTO")) is not None
+
+
+def test_importar_da_planilha_google_sem_id_configurado_mostra_erro(client, db, monkeypatch):
+    _logar_admin(db, client)
+    monkeypatch.setattr(app_settings, "google_sheets_id", None)
+
+    resposta = client.post("/app/bancos/importar-da-planilha")
+
+    assert resposta.status_code == 400
+    assert "GOOGLE_SHEETS_ID" in resposta.text

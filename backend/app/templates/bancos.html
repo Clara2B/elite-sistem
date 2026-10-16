@@ -12,7 +12,19 @@
   {{ flash.toast('erro', erro) }}
 
   <div class="card">
-    <h2>Importar planilha</h2>
+    <h2>Importar da planilha de controle</h2>
+    <form method="post" action="/app/bancos/importar-da-planilha">
+      <button type="submit">Importar da aba "E-MAIL BANCO"</button>
+    </form>
+    <p class="subtitulo" style="margin-top: 8px;">
+      Lê direto da planilha de controle (Google Sheets), aba "E-MAIL BANCO" — sem precisar
+      exportar/subir arquivo. Banco já cadastrado (mesmo nome, sem acento/caixa) tem CNPJ/e-mail
+      atualizados; nome novo cria um cadastro novo. Nada é apagado numa reimportação parcial.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Importar planilha (.xlsx)</h2>
     <form class="formulario" method="post" action="/app/bancos/import" enctype="multipart/form-data">
       <div class="campo upload-zona" data-upload>
         <input type="file" id="arquivo" name="arquivo" accept=".xlsx" required class="upload-input" data-upload-input>
@@ -24,9 +36,7 @@
       <button type="submit">Importar</button>
     </form>
     <p class="subtitulo" style="margin-top: 8px;">
-      Colunas esperadas: BANCO (obrigatória), CNPJ e EMAIL (opcionais). Banco já cadastrado (mesmo
-      nome, sem acento/caixa) tem CNPJ/e-mail atualizados; nome novo cria um cadastro novo. Nada é
-      apagado numa reimportação parcial.
+      Colunas esperadas: BANCO (obrigatória), CNPJ e EMAIL (opcionais). Mesmo upsert do botão acima.
     </p>
   </div>
 
@@ -38,7 +48,7 @@
       {% endfor %}
       <div class="tabela-wrap">
         <table>
-          <thead><tr><th>Nome</th><th>CNPJ</th><th>E-mail</th><th>Status</th><th style="width:1%;"></th></tr></thead>
+          <thead><tr><th>Nome</th><th>CNPJ</th><th>2° opção CNPJ</th><th>E-mail</th><th>Status</th><th style="width:1%;"></th></tr></thead>
           <tbody>
             {% for b in bancos %}
               <tr>
@@ -51,7 +61,11 @@
                          style="min-width:160px; padding:6px 9px; border:1px solid var(--border); border-radius:7px; font-size:0.86rem;">
                 </td>
                 <td>
-                  <input type="email" name="email" value="{{ b.email }}" required form="banco-{{ b.id }}"
+                  <input type="text" name="cnpj_alternativo" value="{{ b.cnpj_alternativo or '' }}" form="banco-{{ b.id }}"
+                         placeholder="Opcional" style="min-width:160px; padding:6px 9px; border:1px solid var(--border); border-radius:7px; font-size:0.86rem;">
+                </td>
+                <td>
+                  <input type="text" name="email" value="{{ b.email }}" required form="banco-{{ b.id }}"
                          style="min-width:200px; padding:6px 9px; border:1px solid var(--border); border-radius:7px; font-size:0.86rem;">
                 </td>
                 <td>
@@ -112,8 +126,12 @@
         <input type="text" id="cnpj" name="cnpj" required placeholder="00.000.000/0000-00">
       </div>
       <div class="campo">
+        <label for="cnpj_alternativo">2° opção de CNPJ (opcional)</label>
+        <input type="text" id="cnpj_alternativo" name="cnpj_alternativo" placeholder="00.000.000/0000-00">
+      </div>
+      <div class="campo">
         <label for="email">E-mail</label>
-        <input type="email" id="email" name="email" required placeholder="contato@banco.com.br">
+        <input type="text" id="email" name="email" required placeholder="contato@banco.com.br">
       </div>
       <button type="submit">Cadastrar</button>
     </form>

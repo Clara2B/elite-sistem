@@ -36,3 +36,14 @@ services:
       # sendo salvo normalmente, só não avisa ninguém na hora.
       - key: DISCORD_WEBHOOK_SUPORTE
         sync: false
+      # Fase 1 — Solicitação de Audiência (2026-10-16): acesso à planilha
+      # de controle (Google Sheets) via conta de serviço do Google (ver
+      # app/services/google_sheets.py). GOOGLE_SERVICE_ACCOUNT_JSON é o
+      # conteúdo inteiro do .json da conta de serviço, não um caminho de
+      # arquivo. GOOGLE_SHEETS_ID é o ID da planilha (trecho entre /d/ e
+      # /edit na URL) — em produção, a planilha real; em dev/teste, a
+      # cópia com dados fictícios.
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: GOOGLE_SHEETS_ID
+        sync: false

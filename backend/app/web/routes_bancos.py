@@ -7,6 +7,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.api._shared import remover_temp, salvar_temp
+from app.config import settings
 from app.db import get_db
 from app.models import Banco, Usuario
 from app.services.auditoria import registrar
@@ -15,6 +16,7 @@ from app.services.bancos import (
     atualizar_banco,
     criar_banco,
     excluir_banco,
+    importar_do_google_sheets,
     importar_planilha_bancos,
     listar_bancos,
 )
@@ -63,12 +65,13 @@ async def criar(
     contexto = _contexto_base(db, usuario)
     nome = str(form.get("nome", "")).strip()
     cnpj = str(form.get("cnpj", "")).strip()
+    cnpj_alternativo = str(form.get("cnpj_alternativo", "")).strip()
     email = str(form.get("email", "")).strip()
     if not nome or not cnpj or not email:
         contexto["erro"] = "Nome, CNPJ e e-mail são obrigatórios."
         return templates.TemplateResponse(request, "bancos.html", contexto, status_code=400)
     try:
-        banco = criar_banco(db, nome, cnpj, email)
+        banco = criar_banco(db, nome, cnpj, email, cnpj_alternativo)
     except ValueError as e:
         contexto["erro"] = str(e)
         return templates.TemplateResponse(request, "bancos.html", contexto, status_code=400)
@@ -103,6 +106,33 @@ async def importar(
     return templates.TemplateResponse(request, "bancos.html", contexto)
 
 
+@router.post("/importar-da-planilha")
+def importar_sheets(
+    request: Request,
+    usuario: Usuario = Depends(_acesso_eximia),
+    db: Session = Depends(get_db),
+):
+    """Lê direto da aba "E-MAIL BANCO" da planilha de controle configurada
+    em GOOGLE_SHEETS_ID — sem upload de arquivo (2026-10-16, a pedido da
+    Clara). Mesmo upsert do botão de importar .xlsx; os dois convivem."""
+    contexto = _contexto_base(db, usuario)
+    if not settings.google_sheets_id:
+        contexto["erro"] = "GOOGLE_SHEETS_ID não está configurado."
+        return templates.TemplateResponse(request, "bancos.html", contexto, status_code=400)
+    try:
+        resumo = importar_do_google_sheets(db, settings.google_sheets_id)
+    except ValueError as e:
+        contexto["erro"] = str(e)
+        return templates.TemplateResponse(request, "bancos.html", contexto, status_code=400)
+    registrar(db, usuario, "IMPORTOU_BANCOS_GOOGLE_SHEETS", entidade="banco", detalhes=str(resumo))
+    contexto = _contexto_base(db, usuario)
+    partes = [f"{resumo.criados} criado(s), {resumo.atualizados} atualizado(s)"]
+    if resumo.rejeitados:
+        partes.append(f"{len(resumo.rejeitados)} rejeitado(s): {'; '.join(resumo.rejeitados)}")
+    contexto["mensagem"] = " — ".join(partes)
+    return templates.TemplateResponse(request, "bancos.html", contexto)
+
+
 @router.post("/{banco_id}")
 async def editar(
     request: Request,
@@ -114,12 +144,13 @@ async def editar(
     contexto = _contexto_base(db, usuario)
     nome = str(form.get("nome", "")).strip()
     cnpj = str(form.get("cnpj", "")).strip()
+    cnpj_alternativo = str(form.get("cnpj_alternativo", "")).strip()
     email = str(form.get("email", "")).strip()
     if not nome or not cnpj or not email:
         contexto["erro"] = "Nome, CNPJ e e-mail são obrigatórios."
         return templates.TemplateResponse(request, "bancos.html", contexto, status_code=400)
     try:
-        banco = atualizar_banco(db, banco_id, nome, cnpj, email)
+        banco = atualizar_banco(db, banco_id, nome, cnpj, email, cnpj_alternativo)
     except ValueError as e:
         contexto["erro"] = str(e)
         return templates.TemplateResponse(request, "bancos.html", contexto, status_code=400)

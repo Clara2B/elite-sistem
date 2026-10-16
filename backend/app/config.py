@@ -29,6 +29,18 @@ class Settings(BaseSettings):
     # opcional: sem ele, o chamado continua sendo salvo normalmente, só não
     # avisa ninguém na hora.
     discord_webhook_suporte: str | None = None
+    # Fase 1 — Solicitação de Audiência (2026-10-16): acesso à planilha de
+    # controle (Google Sheets) via conta de serviço do Google, a pedido da
+    # Clara. `google_service_account_json` é o conteúdo inteiro do arquivo
+    # .json da conta de serviço (não um caminho de arquivo); gerado pela
+    # própria Clara no Google Cloud Console (ver ARCHITECTURE.md/DECISIONS.md
+    # — não existia nenhuma integração com Google antes disso). O e-mail da
+    # conta de serviço (dentro do .json) precisa estar com permissão de
+    # Editor na planilha. `google_sheets_id` é o ID da planilha (o trecho
+    # entre /d/ e /edit na URL) — em dev/teste, a cópia com dados fictícios;
+    # em produção, a planilha real.
+    google_service_account_json: str | None = None
+    google_sheets_id: str | None = None
 
 
 settings = Settings()
