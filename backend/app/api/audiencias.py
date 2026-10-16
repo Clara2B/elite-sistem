@@ -60,8 +60,10 @@ def relatorio(
     try:
         periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
         resultado = audiencias_service.gerar_relatorio(db, empresa, periodo_ini, periodo_fim, cnpj)
-    except ValueError as e:
+    except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     registrar(
         db, usuario, "GEROU_RELATORIO_AUDIENCIAS", entidade="empresa_cliente", entidade_id=empresa,
         detalhes=f"CNPJ sobrescrito via parâmetro: {cnpj}" if cnpj else None,
@@ -93,8 +95,10 @@ def relatorio_pdf(
     try:
         periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
         resultado = audiencias_service.gerar_relatorio(db, empresa, periodo_ini, periodo_fim, cnpj)
-    except ValueError as e:
+    except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     registrar(
         db, usuario, "GEROU_RELATORIO_AUDIENCIAS_PDF", entidade="empresa_cliente", entidade_id=empresa,
         detalhes=f"CNPJ sobrescrito via parâmetro: {cnpj}" if cnpj else None,
@@ -120,8 +124,10 @@ def relatorio_xlsx(
     try:
         periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
         resultado = audiencias_service.gerar_relatorio(db, empresa, periodo_ini, periodo_fim, cnpj)
-    except ValueError as e:
+    except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     registrar(
         db, usuario, "GEROU_RELATORIO_AUDIENCIAS_XLSX", entidade="empresa_cliente", entidade_id=empresa,
         detalhes=f"CNPJ sobrescrito via parâmetro: {cnpj}" if cnpj else None,

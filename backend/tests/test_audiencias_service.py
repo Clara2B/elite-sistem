@@ -66,6 +66,35 @@ def test_proxima_faixa(db):
     assert (result.quantidade_mes, result.valor_unitario, result.total) == (40, 300.0, 6000.0)
 
 
+# --- M43: diferencia LookupError (empresa não encontrada, 404 na API) de
+# ValueError (regra de negócio, 422 na API) ----------------------------------
+
+
+def test_empresa_nao_encontrada_levanta_lookup_error(db):
+    ini, fim = periodo_quinzenal(2026, 9, 1)
+    try:
+        gerar_relatorio(db, "NÃO EXISTE", ini, fim)
+        assert False, "deveria ter levantado LookupError"
+    except LookupError as e:
+        assert "NÃO EXISTE" in str(e)
+
+
+def test_faixa_nao_cadastrada_continua_value_error_puro(db):
+    """Acima de 100 audiências acumuladas não tem faixa cadastrada
+    (DEFAULT_FAIXAS_AUDIENCIA vai até 100) — regra de negócio, não "recurso
+    não encontrado": deve continuar ValueError puro (não LookupError, que
+    agora é só pra "empresa não encontrada" — auditoria M43)."""
+    _planilha(db, "ALFA", 101, 0)
+    ini, fim = periodo_quinzenal(2026, 9, 1)
+    try:
+        gerar_relatorio(db, "ALFA", ini, fim)
+        assert False, "deveria ter levantado ValueError"
+    except LookupError:
+        assert False, "faixa não cadastrada não deve ser LookupError"
+    except ValueError as e:
+        assert "faixa de preço" in str(e)
+
+
 def test_mes_anterior_nao_entra_no_acumulado(db):
     _planilha(db, "ALFA", 20, 20, ano=2026, mes=9)
     _planilha(db, "ALFA", 0, 1, ano=2026, mes=10)

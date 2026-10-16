@@ -3,7 +3,15 @@ from datetime import date
 from sqlalchemy import select
 
 from app.auth import criar_sessao, hash_senha, modulos_acessiveis
-from app.models import Cobranca, Operadora, Setor, SetorModulo, Usuario, UsuarioSetor
+from app.models import (
+    Audiencia,
+    Cobranca,
+    Operadora,
+    Setor,
+    SetorModulo,
+    Usuario,
+    UsuarioSetor,
+)
 from app.services.empresas import get_or_create_empresa
 
 
@@ -77,6 +85,33 @@ def test_admin_superior_acessa_os_dois(client, db, admin_token):
     ]:
         resp = client.get(rota, params=params, headers=headers)
         assert resp.status_code != 403
+
+
+def test_relatorio_audiencias_empresa_nao_encontrada_e_404(client, db, admin_token):
+    """Auditoria M43: "empresa não encontrada" é um 404 de verdade (recurso
+    não encontrado)."""
+    resp = client.get(
+        "/audiencias/relatorio", params={"empresa": "NÃO EXISTE", "ano": 2026, "mes": 1, "quinzena": 1},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 404
+
+
+def test_relatorio_audiencias_faixa_nao_cadastrada_e_422(client, db, admin_token):
+    """Auditoria M43: "faixa de preço não cadastrada" é erro de regra de
+    negócio (422), diferente de "empresa não encontrada" (404) — antes os
+    dois caíam no mesmo 404."""
+    empresa = get_or_create_empresa(db, "EMPRESA CHEIA")
+    for i in range(101):  # DEFAULT_FAIXAS_AUDIENCIA só vai até 100
+        db.add(Audiencia(empresa_cliente_id=empresa.id, nome_cliente=f"Cliente {i}", data_recebimento=date(2026, 1, 1)))
+    db.commit()
+
+    resp = client.get(
+        "/audiencias/relatorio", params={"empresa": "EMPRESA CHEIA", "ano": 2026, "mes": 1, "quinzena": 1},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 422
+    assert "faixa de preço" in resp.json()["detail"]
 
 
 def test_rota_de_usuarios_exige_admin(client, db):

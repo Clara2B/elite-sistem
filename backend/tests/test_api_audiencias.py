@@ -58,7 +58,9 @@ def test_relatorio_com_cnpj_invalido_eh_rejeitado(client, db, admin_token):
         params={"empresa": "ALFA", "ano": 2026, "mes": 9, "quinzena": 1, "cnpj": "123"},
         headers=headers,
     )
-    assert resposta.status_code == 404
+    # Auditoria M43: CNPJ inválido é erro de regra de negócio (422), não
+    # "recurso não encontrado" (404) — só "empresa não encontrada" é 404.
+    assert resposta.status_code == 422
     assert "CNPJ" in resposta.json()["detail"]
 
 
@@ -83,8 +85,10 @@ def test_relatorio_sem_cnpj_nao_registra_sobrescrita(client, db, admin_token):
 def test_relatorio_com_quinzena_invalida_nao_quebra_com_erro_generico(client, db, admin_token):
     """Antes da correção, `quinzena=99` escapava do try/except (a chamada
     a periodo_quinzenal ficava fora dele) e caía no handler genérico de
-    exceção — um 500 sem mensagem clara, em vez do 404 com detalhe que as
-    outras validações desse endpoint já dão."""
+    exceção — um 500 sem mensagem clara, em vez do erro com detalhe que as
+    outras validações desse endpoint já dão. Auditoria M43: "quinzena
+    inválida" é erro de regra de negócio (422), não "recurso não
+    encontrado" (404)."""
     _planilha(db)
     headers = {"Authorization": f"Bearer {admin_token}"}
 
@@ -93,7 +97,7 @@ def test_relatorio_com_quinzena_invalida_nao_quebra_com_erro_generico(client, db
         params={"empresa": "ALFA", "ano": 2026, "mes": 9, "quinzena": 99},
         headers=headers,
     )
-    assert resposta.status_code == 404
+    assert resposta.status_code == 422
     assert "Quinzena" in resposta.json()["detail"]
 
 
