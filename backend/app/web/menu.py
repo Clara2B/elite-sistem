@@ -19,6 +19,10 @@ def itens_menu(db: Session, usuario: Usuario) -> list[dict]:
         itens.append({"url": "/app/audiencias", "rotulo": "Audiências", "icone": "audiencias", "descricao": "Importar planilha e gerar relatório quinzenal."})
     if "CARTAS" in acessiveis:
         itens.append({"url": "/app/cartas", "rotulo": "Cartas", "icone": "cartas", "descricao": "Cartas-convite em PDF para clientes e bancos."})
+    if "AUDIENCIAS" in acessiveis:
+        # Mesmo acesso de Audiências (2026-10-16, Fase 1 — Solicitação de
+        # Audiência, a pedido da Clara: "reaproveita o acesso").
+        itens.append({"url": "/app/bancos", "rotulo": "Bancos", "icone": "bancos", "descricao": "Cadastro de bancos para a Carta Convite Banco."})
     if "PENDENCIAS" in acessiveis:
         itens.append({"url": "/app/pendencias", "rotulo": "Pendências", "icone": "pendencias", "descricao": "Cobranças em aberto por empresa-cliente."})
     if "CORRESPONDENCIAS" in acessiveis:

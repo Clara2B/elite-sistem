@@ -59,6 +59,21 @@ class Funcionario(Base):
     ativo: Mapped[bool] = mapped_column(default=True)
 
 
+class Banco(Base):
+    """Cadastro de bancos (Fase 1 — Solicitação de Audiência, 2026-10-16) —
+    alimenta o seletor "Banco" da tela de Nova Solicitação de Audiência e
+    resolve nome/CNPJ/e-mail pra Carta Convite Banco sem digitar de novo.
+    Mesmo padrão de EmpresaCliente/Funcionario."""
+
+    __tablename__ = "bancos"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    nome: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    cnpj: Mapped[str] = mapped_column(String(20))
+    email: Mapped[str] = mapped_column(String(160))
+    ativo: Mapped[bool] = mapped_column(default=True)
+
+
 class Laudo(Base):
     __tablename__ = "laudos"
 
