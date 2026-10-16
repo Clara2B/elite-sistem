@@ -105,11 +105,11 @@
         <h2>
           {{ resultado.empresa }} — {{ resultado.total_processos }} processo(s)
           <a class="botao secundario" style="float:right; font-size:0.82rem; padding:6px 12px;"
-             href="/processos/relatorio.pdf?periodo_ini={{ filtro.periodo_ini }}&periodo_fim={{ filtro.periodo_fim }}&tipo=empresa&empresa={{ filtro.empresa }}&assistente={{ filtro.assistente }}">
+             href="/processos/relatorio.pdf?periodo_ini={{ filtro.periodo_ini | urlencode }}&periodo_fim={{ filtro.periodo_fim | urlencode }}&tipo=empresa&empresa={{ filtro.empresa | urlencode }}&assistente={{ filtro.assistente | urlencode }}">
             Baixar PDF
           </a>
           <a class="botao secundario" style="float:right; font-size:0.82rem; padding:6px 12px; margin-right:8px;"
-             href="/processos/relatorio.xlsx?periodo_ini={{ filtro.periodo_ini }}&periodo_fim={{ filtro.periodo_fim }}&tipo=empresa&empresa={{ filtro.empresa }}&assistente={{ filtro.assistente }}">
+             href="/processos/relatorio.xlsx?periodo_ini={{ filtro.periodo_ini | urlencode }}&periodo_fim={{ filtro.periodo_fim | urlencode }}&tipo=empresa&empresa={{ filtro.empresa | urlencode }}&assistente={{ filtro.assistente | urlencode }}">
             Baixar Excel
           </a>
         </h2>
@@ -187,11 +187,11 @@
         {% endfor %}
         <div class="card">
           <a class="botao secundario"
-             href="/processos/relatorio.pdf?periodo_ini={{ filtro.periodo_ini }}&periodo_fim={{ filtro.periodo_fim }}&tipo=geral&assistente={{ filtro.assistente }}">
+             href="/processos/relatorio.pdf?periodo_ini={{ filtro.periodo_ini | urlencode }}&periodo_fim={{ filtro.periodo_fim | urlencode }}&tipo=geral&assistente={{ filtro.assistente | urlencode }}">
             Baixar PDF
           </a>
           <a class="botao secundario" style="margin-left:8px;"
-             href="/processos/relatorio.xlsx?periodo_ini={{ filtro.periodo_ini }}&periodo_fim={{ filtro.periodo_fim }}&tipo=geral&assistente={{ filtro.assistente }}">
+             href="/processos/relatorio.xlsx?periodo_ini={{ filtro.periodo_ini | urlencode }}&periodo_fim={{ filtro.periodo_fim | urlencode }}&tipo=geral&assistente={{ filtro.assistente | urlencode }}">
             Baixar Excel
           </a>
         </div>
