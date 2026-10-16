@@ -14,7 +14,8 @@ def _usuario_com_setor(db, operadora_nome: str, email: str) -> str:
     db.flush()
     db.add(UsuarioSetor(usuario_id=usuario.id, setor_id=setor.id, papel="COLABORADOR"))
     db.commit()
-    return criar_sessao(db, usuario).token
+    _, token = criar_sessao(db, usuario)
+    return token
 
 
 def test_setor_elite_acessa_laudos_mas_nao_audiencias(client, db):
@@ -228,7 +229,7 @@ def test_setor_restrito_a_laudos_nao_acessa_processos_nem_pendencias(client, db)
     db.add(SetorModulo(setor_id=setor.id, modulo="LAUDOS"))
     db.commit()
     usuario = _usuario_no_setor(db, setor.id, "restrito.laudos@teste.local")
-    token = criar_sessao(db, usuario).token
+    _, token = criar_sessao(db, usuario)
     headers = {"Authorization": f"Bearer {token}"}
 
     resp_laudos = client.get("/laudos/relatorio", params={"empresa": "X", "ano": 2026, "mes": 1}, headers=headers)

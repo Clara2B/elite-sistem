@@ -1,5 +1,5 @@
-from app.auth import hash_senha
-from app.models import Usuario
+from app.auth import _hash_token, hash_senha
+from app.models import Sessao, Usuario
 
 
 def _criar_usuario(db, email="fulano@teste.local", senha="senha123", papel_global=None):
@@ -51,6 +51,24 @@ def test_logout_invalida_o_token(client, db):
 
     assert client.post("/auth/logout", headers=headers).status_code == 200
     assert client.get("/auth/me", headers=headers).status_code == 401
+
+
+def test_token_de_sessao_nunca_fica_em_texto_puro_no_banco(client, db):
+    """Auditoria M07: `Sessao.token` guarda o hash, não o token de verdade
+    — um dump/backup do banco não deve entregar um token pronto pra uso."""
+    _criar_usuario(db, senha="senha123")
+    login = client.post("/auth/login", json={"email": "fulano@teste.local", "senha": "senha123"})
+    token = login.json()["token"]
+
+    todas_as_sessoes = db.query(Sessao).all()
+    assert len(todas_as_sessoes) == 1
+    sessao = todas_as_sessoes[0]
+    assert sessao.token != token
+    assert sessao.token == _hash_token(token)
+
+    # Buscar pelo token em texto puro direto (sem passar pelo hash) não
+    # pode achar nada — é exatamente o que um leitor direto do banco veria.
+    assert db.get(Sessao, token) is None
 
 
 def test_trocar_senha(client, db):
