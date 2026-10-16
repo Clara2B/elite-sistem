@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from app.models import (
     Audiencia,
     Cobranca,
@@ -10,16 +12,53 @@ from app.models import (
 )
 from app.services.empresas import (
     LISTA_OFICIAL_EMPRESAS,
+    atualizar_empresa,
     contar_vinculos_empresa,
+    contar_vinculos_por_tipo_todas_empresas,
     contar_vinculos_todas_empresas,
+    criar_empresa,
     excluir_empresa,
     excluir_empresas_em_massa,
     excluir_empresas_inativas,
     get_or_create_empresa,
     realocar_empresas_em_massa,
+    resolver_empresa_por_nome,
     sincronizar_lista_oficial,
 )
 from app.utils import normalize
+
+
+def test_criar_empresa_com_cnpj_valido(db):
+    empresa = criar_empresa(db, "Nova Empresa", "11.222.333/0001-81")
+    assert empresa.cnpj == "11.222.333/0001-81"
+
+
+def test_criar_empresa_com_cnpj_invalido_eh_rejeitada(db):
+    """Auditoria M16: cnpj_valido() já existe (services/cartas.py) mas não
+    era reaproveitado aqui — qualquer texto era aceito como CNPJ, sem
+    checagem de dígito verificador."""
+    with pytest.raises(ValueError, match="CNPJ"):
+        criar_empresa(db, "Nova Empresa Invalida", "123")
+
+
+def test_criar_empresa_sem_cnpj_funciona(db):
+    empresa = criar_empresa(db, "Empresa Sem Cnpj")
+    assert empresa.cnpj is None
+
+
+def test_atualizar_empresa_com_cnpj_invalido_eh_rejeitada(db):
+    empresa = criar_empresa(db, "Empresa Para Editar")
+    with pytest.raises(ValueError, match="CNPJ"):
+        atualizar_empresa(db, empresa.id, "Empresa Para Editar", "abc")
+    db.refresh(empresa)
+    assert empresa.cnpj is None
+
+
+def test_atualizar_empresa_com_cnpj_valido_funciona(db):
+    empresa = criar_empresa(db, "Empresa Para Editar 2")
+    atualizar_empresa(db, empresa.id, "Empresa Para Editar 2", "11222333000181")
+    db.refresh(empresa)
+    assert empresa.cnpj == "11222333000181"
 
 
 def test_sincroniza_cria_atualiza_e_exclui(db):
@@ -257,6 +296,23 @@ def test_contar_vinculos_todas_empresas_sem_nenhuma_empresa_vinculada(db):
     assert contar_vinculos_todas_empresas(db) == {}
 
 
+def test_contar_vinculos_por_tipo_todas_empresas_bate_com_a_versao_individual(db):
+    """Auditoria M22: contar_vinculos_por_tipo_todas_empresas mantém o
+    detalhe por tipo (não só o total) em lote — usada por
+    excluir_empresas_em_massa pra não reconsultar por empresa."""
+    com_dois_tipos = get_or_create_empresa(db, "LOTE TIPO COM DOIS TIPOS")
+    db.add(
+        Audiencia(empresa_cliente_id=com_dois_tipos.id, nome_cliente="Fulano", data_recebimento=date(2026, 1, 1))
+    )
+    db.add(Processo(numero_processo="LOTE-TIPO-0001", empresa_cliente_id=com_dois_tipos.id))
+    db.commit()
+
+    por_tipo = contar_vinculos_por_tipo_todas_empresas(db)
+    individual = contar_vinculos_empresa(db, com_dois_tipos.id)
+
+    assert por_tipo[com_dois_tipos.id] == {k: v for k, v in individual.items() if v}
+
+
 def test_excluir_em_massa_sem_vinculo_exclui_todas_direto(db):
     a = get_or_create_empresa(db, "MASSA SEM VINCULO A")
     b = get_or_create_empresa(db, "MASSA SEM VINCULO B")
@@ -370,6 +426,21 @@ def test_realocar_em_massa_destino_inexistente_e_recusada(db):
         assert False, "deveria ter recusado"
     except ValueError as e:
         assert "não encontrada" in str(e).lower()
+
+
+def test_resolver_empresa_por_nome_ignora_acento_e_caixa(db):
+    """Auditoria M21: esse helper substitui a mesma varredura que estava
+    copiada 3 vezes (Audiências/Pendências/Correspondências) por uma
+    função só, em services/empresas.py."""
+    get_or_create_empresa(db, "São José")
+    db.commit()
+
+    assert resolver_empresa_por_nome(db, "sao jose").nome == "São José"
+    assert resolver_empresa_por_nome(db, "SÃO JOSÉ").nome == "São José"
+
+
+def test_resolver_empresa_por_nome_nao_encontrada_devolve_none(db):
+    assert resolver_empresa_por_nome(db, "Empresa Que Não Existe") is None
 
 
 def test_lista_oficial_tem_48_empresas_sem_duplicidade():

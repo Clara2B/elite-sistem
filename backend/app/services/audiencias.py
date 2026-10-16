@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import calendar
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import date
@@ -18,9 +19,23 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.excel_reader import load_data_sheets
-from app.models import Audiencia, EmpresaCliente, FaixaAudiencia
-from app.services.empresas import get_or_create_empresa
+from app.models import Audiencia, FaixaAudiencia
+from app.services.cartas import cnpj_valido
+from app.services.empresas import get_or_create_empresa, resolver_empresa_por_nome
 from app.utils import cell_text, normalize, parse_date_cell
+
+_RE_SOMENTE_DIGITOS = re.compile(r"\D")
+
+
+def _normalizar_cpf(cpf: str | None) -> str:
+    """Só os dígitos do CPF (2026-10-13, auditoria M14) — usado SÓ na
+    chave de deduplicação, nunca pra sobrescrever o valor gravado. Antes,
+    a chave comparava o nome normalizado (sem acento/maiúscula) mas o CPF
+    em texto cru (só `.strip()`): reimportar a mesma pessoa com o CPF
+    formatado diferente entre uma planilha e outra ("123.456.789-01" vs
+    "12345678901") criava uma duplicata silenciosa, inflando a contagem
+    usada pra calcular a faixa de cobrança."""
+    return _RE_SOMENTE_DIGITOS.sub("", cpf or "")
 
 _logger = logging.getLogger("elite_sistem.import")
 
@@ -29,6 +44,12 @@ CHAVE_DUPLICIDADE = ["DATA DE RECEBIMENTO", "EMPRESA", "NOME COMPLETO", "CPF"]
 
 
 def periodo_quinzenal(ano: int, mes: int, quinzena: int) -> tuple[date, date]:
+    # Validação explícita (2026-10-13, auditoria M13) — antes, qualquer
+    # valor diferente de 1 (ex.: 0, 3, 99) caía silenciosamente no "else" e
+    # devolvia o período da 2ª quinzena, sem erro. A tela só oferece 1/2,
+    # mas a API aceita um inteiro livre.
+    if quinzena not in (1, 2):
+        raise ValueError(f"Quinzena inválida: {quinzena}. Use 1 ou 2.")
     if quinzena == 1:
         return date(ano, mes, 1), date(ano, mes, 15)
     ultimo_dia = calendar.monthrange(ano, mes)[1]
@@ -73,7 +94,7 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
     col_advogada = _col_optional(df, "ADVOGADA")
 
     existentes = {
-        (a.empresa_cliente_id, a.data_recebimento, normalize(a.nome_cliente), (a.cpf or "").strip())
+        (a.empresa_cliente_id, a.data_recebimento, normalize(a.nome_cliente), _normalizar_cpf(a.cpf))
         for a in db.scalars(select(Audiencia))
     }
     # Cache de empresa-cliente pro import inteiro — ver nota equivalente em
@@ -95,7 +116,7 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
         cpf = cell_text(row.get(col_cpf)) if col_cpf else ""
 
         empresa = get_or_create_empresa(db, empresa_nome, cache=empresa_cache)
-        chave = (empresa.id, data_val, normalize(cliente), cpf)
+        chave = (empresa.id, data_val, normalize(cliente), _normalizar_cpf(cpf))
         if chave in existentes:
             resumo.linhas_ja_existentes += 1
             continue
@@ -140,7 +161,6 @@ class AudienciasResult:
     valor_unitario: float | None
     clientes: list[str] = field(default_factory=list)
     total: float | None = None
-    valor_cadastrado: bool = True
     quantidade_mes_anterior: int = 0
     quantidade_mes: int = 0
     faixa_inicio: int | None = None
@@ -171,14 +191,21 @@ def gerar_relatorio(
     periodo_fim: date,
     cnpj: str | None = None,
 ) -> AudienciasResult:
-    alvo_empresa = normalize(empresa_nome)
-    empresa = None
-    for e in db.scalars(select(EmpresaCliente)):
-        if normalize(e.nome) == alvo_empresa:
-            empresa = e
-            break
+    empresa = resolver_empresa_por_nome(db, empresa_nome)
     if empresa is None:
-        raise ValueError(f"A empresa '{empresa_nome}' não foi encontrada.")
+        # LookupError (não ValueError) de propósito — diferencia "recurso
+        # não encontrado" (404) de "erro de regra de negócio" (a falta de
+        # faixa de preço, logo abaixo, continua ValueError -> 422) pra quem
+        # consome a API (auditoria M43, 2026-10-16).
+        raise LookupError(f"A empresa '{empresa_nome}' não foi encontrada.")
+
+    # Validação do CNPJ sobrescrito via parâmetro (2026-10-13, auditoria
+    # M12) — antes, um CNPJ qualquer passado por query param aparecia no
+    # PDF/Excel/JSON oficial no lugar do CNPJ cadastrado, sem nenhuma
+    # checagem de formato (quem chama decide registrar a sobrescrita no
+    # log de auditoria — ver app/api/audiencias.py).
+    if cnpj and not cnpj_valido(cnpj):
+        raise ValueError(f"CNPJ '{cnpj}' inválido.")
 
     clientes = _clientes_no_periodo(db, empresa.id, periodo_ini, periodo_fim)
 
@@ -206,7 +233,6 @@ def gerar_relatorio(
         valor_unitario=valor_unitario,
         clientes=clientes,
         total=total,
-        valor_cadastrado=faixa is not None or not clientes,
         quantidade_mes_anterior=quantidade_mes_anterior,
         quantidade_mes=quantidade_mes,
         faixa_inicio=faixa.inicio if faixa else None,

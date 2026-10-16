@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from app.api._shared import salvar_temp
+from app.api._shared import remover_temp, salvar_temp
 from app.auth import operadoras_acessiveis, require_admin, require_modulo
 from app.db import get_db
 from app.models import Usuario
@@ -30,6 +30,8 @@ def importar(
         resumo = pendencias_service.importar_planilha(db, path)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        remover_temp(path)
     registrar(db, usuario, "IMPORTOU_PENDENCIAS", entidade="cobranca", detalhes=str(resumo))
     return resumo
 

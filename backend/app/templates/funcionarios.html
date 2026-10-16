@@ -36,13 +36,13 @@
                 </td>
                 <td>
                   <div class="acoes-linha">
-                    <button type="submit" form="funcionario-{{ f.id }}" class="secundario" style="padding:7px 12px; font-size:0.8rem;">Salvar</button>
+                    <button type="submit" form="funcionario-{{ f.id }}" class="secundario botao-linha">Salvar</button>
                     <form method="post" action="/app/funcionarios/{{ f.id }}/ativo?ativo={{ 'false' if f.ativo else 'true' }}">
-                      <button type="submit" class="{{ 'perigo' if f.ativo else 'secundario' }}" style="padding:7px 12px; font-size:0.8rem;">
+                      <button type="submit" class="{{ 'perigo' if f.ativo else 'secundario' }} botao-linha">
                         {{ "Desativar" if f.ativo else "Ativar" }}
                       </button>
                     </form>
-                    <button type="button" class="perigo" style="padding:7px 10px; font-size:0.8rem;"
+                    <button type="button" class="perigo botao-linha"
                             data-abrir-confirmacao="modal-excluir-{{ f.id }}" data-nome-alvo="{{ f.nome }}"
                             aria-label="Excluir {{ f.nome }}">
                       {{ icones.icone('lixeira') }}

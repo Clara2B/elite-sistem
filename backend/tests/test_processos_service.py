@@ -18,7 +18,9 @@ from app.services.processos import (
     gerar_relatorio_por_empresa,
     importar_planilha,
     marcar_resolvido,
+    prazos_proximos,
     status_prazo,
+    tipos_evento_cadastrados,
 )
 
 
@@ -95,6 +97,83 @@ def test_marcar_resolvido(db):
     resolvido = marcar_resolvido(db, evento.id)
     assert resolvido.resolvido is True
     assert resolvido.resolvido_em is not None
+
+
+# --- prazos_proximos (M31: função mais sensível do módulo, sem nenhum
+# teste até então — alimenta o painel "Prazos próximos" mostrado em toda
+# tela de Processos e a API equivalente) -------------------------------
+
+
+def _evento_prazo(db, processo, data_prazo, prazo_fatal=True, resolvido=False):
+    evento = EventoProcesso(
+        processo_id=processo.id, data=date(2026, 9, 1), tipo_evento_nome="CUSTAS",
+        prazo_fatal=prazo_fatal, data_prazo=data_prazo, resolvido=resolvido,
+    )
+    db.add(evento)
+    db.commit()
+    return evento
+
+
+def test_prazos_proximos_inclui_prazo_exatamente_no_limite_de_dias(db):
+    processo = _processo(db)
+    _evento_prazo(db, processo, date.today() + timedelta(days=30))
+
+    resultado = prazos_proximos(db, dias=30)
+    assert len(resultado) == 1
+
+
+def test_prazos_proximos_exclui_prazo_um_dia_apos_o_limite(db):
+    processo = _processo(db)
+    _evento_prazo(db, processo, date.today() + timedelta(days=31))
+
+    resultado = prazos_proximos(db, dias=30)
+    assert resultado == []
+
+
+def test_prazos_proximos_inclui_prazo_ja_vencido(db):
+    """Sem limite inferior de propósito — um prazo vencido há muito tempo
+    continua alertando até alguém marcar como resolvido (ver docstring da
+    função: "vencendo nos próximos `dias` dias (ou já vencidos)")."""
+    processo = _processo(db)
+    _evento_prazo(db, processo, date.today() - timedelta(days=200))
+
+    resultado = prazos_proximos(db, dias=30)
+    assert len(resultado) == 1
+    assert resultado[0].dias_restantes == -200
+
+
+def test_prazos_proximos_ignora_evento_sem_data_prazo(db):
+    processo = _processo(db)
+    _evento_prazo(db, processo, data_prazo=None)
+
+    resultado = prazos_proximos(db, dias=30)
+    assert resultado == []
+
+
+def test_prazos_proximos_ignora_evento_nao_fatal(db):
+    processo = _processo(db)
+    _evento_prazo(db, processo, date.today(), prazo_fatal=False)
+
+    resultado = prazos_proximos(db, dias=30)
+    assert resultado == []
+
+
+def test_prazos_proximos_ignora_evento_ja_resolvido(db):
+    processo = _processo(db)
+    _evento_prazo(db, processo, date.today(), resolvido=True)
+
+    resultado = prazos_proximos(db, dias=30)
+    assert resultado == []
+
+
+def test_prazos_proximos_ordena_do_mais_urgente_pro_menos_urgente(db):
+    processo = _processo(db)
+    _evento_prazo(db, processo, date.today() + timedelta(days=10))
+    _evento_prazo(db, processo, date.today() - timedelta(days=5))
+    _evento_prazo(db, processo, date.today() + timedelta(days=1))
+
+    resultado = prazos_proximos(db, dias=30)
+    assert [p.dias_restantes for p in resultado] == [-5, 1, 10]
 
 
 def test_import_prazo_fatal_so_quando_coluna_e_sim(db, tmp_path):
@@ -645,6 +724,42 @@ def test_relatorio_por_empresa_inexistente_gera_erro(db):
         assert "NAO EXISTE" in str(e)
 
 
+# --- tipos_evento_cadastrados / aviso de tipo não catalogado (M41) ---------
+
+
+def test_tipos_evento_cadastrados_normaliza_os_nomes(db):
+    cadastrados = tipos_evento_cadastrados(db)
+    assert "CUSTAS" in cadastrados
+    assert "TIPO FICTÍCIO" not in cadastrados
+
+
+def test_relatorio_geral_avisa_tipo_de_evento_nao_catalogado(db):
+    processo = _processo(db, numero="1231231-23.2026.8.11.0111", assistente="DANILO")
+    db.add(EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="TIPO FICTÍCIO"))
+    db.commit()
+
+    relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30))
+    assert relatorio.tipos_nao_catalogados == ["TIPO FICTÍCIO"]
+
+
+def test_relatorio_geral_sem_tipo_nao_catalogado_fica_vazio(db):
+    processo = _processo(db, numero="3213214-32.2026.8.11.0112", assistente="DANILO")
+    db.add(EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"))
+    db.commit()
+
+    relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30))
+    assert relatorio.tipos_nao_catalogados == []
+
+
+def test_relatorio_por_empresa_avisa_tipo_de_evento_nao_catalogado(db):
+    processo = _processo(db, numero="4564564-56.2026.8.11.0113", assistente="DANILO")
+    db.add(EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="OUTRO TIPO FICTÍCIO"))
+    db.commit()
+
+    relatorio = gerar_relatorio_por_empresa(db, "ABSOLUTA", date(2026, 9, 1), date(2026, 9, 30))
+    assert relatorio.tipos_nao_catalogados == ["OUTRO TIPO FICTÍCIO"]
+
+
 def test_relatorio_geral_nao_carrega_processos_fora_do_periodo(db):
     """Regressão de performance (já cobria a versão antiga do relatório):
     confirma que o número de consultas SQL não escala com o total de
@@ -669,7 +784,9 @@ def test_relatorio_geral_nao_carrega_processos_fora_do_periodo(db):
 
     assert len(relatorio.secoes) == 1
     assert relatorio.secoes[0].linhas[0].assistente == "DANILO"  # "JULIA" (fora do período) nem aparece
-    assert len(consultas) <= 3  # processos do período + último evento por processo
+    # processos do período + último evento por processo + catálogo de tipos de
+    # evento (M41, consulta única por chamada, não por processo)
+    assert len(consultas) <= 4
 
 
 def test_formatar_texto_geral_sem_coluna_assistente(db):

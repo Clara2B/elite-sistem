@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.api._shared import salvar_temp
+from app.api._shared import remover_temp, salvar_temp
 from app.auth import PAPEIS_GLOBAIS
 from app.db import get_db
 from app.models import Usuario
@@ -52,10 +52,14 @@ def tela(
     contexto["mensagem"] = mensagem
     contexto["filtro"] = {"empresa": empresa, "ano": ano, "mes": mes, "quinzena": quinzena}
     if empresa and ano and mes and quinzena:
-        periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
         try:
+            periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
             resultado = audiencias_service.gerar_relatorio(db, empresa, periodo_ini, periodo_fim)
-        except ValueError as e:
+        except (LookupError, ValueError) as e:
+            # LookupError (empresa não encontrada) e ValueError (regra de
+            # negócio, ex.: faixa de preço não cadastrada) — a tela mostra o
+            # mesmo erro inline pros dois; só a API (app/api/audiencias.py)
+            # precisa diferenciar por status HTTP (auditoria M43).
             contexto["erro"] = str(e)
         else:
             registrar(db, usuario, "GEROU_RELATORIO_AUDIENCIAS", entidade="empresa_cliente", entidade_id=empresa)
@@ -82,6 +86,8 @@ async def importar(
             f"{resumo.linhas_novas} linha(s) nova(s) importada(s) "
             f"({resumo.linhas_ja_existentes} já existiam de antes)."
         )
+    finally:
+        remover_temp(path)
     return templates.TemplateResponse(request, "audiencias.html", contexto)
 
 

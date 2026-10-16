@@ -45,9 +45,10 @@
                 </td>
                 <td>{{ p.assistente or "-" }}</td>
                 <td>
-                  <form method="post" action="/app/processos/eventos/{{ p.evento_id }}/resolver">
-                    <button type="submit" class="secundario" style="padding:6px 10px; font-size:0.8rem;">Marcar resolvido</button>
-                  </form>
+                  <button type="button" class="secundario botao-linha"
+                          data-abrir-confirmacao="modal-resolver-{{ p.evento_id }}" data-nome-alvo="{{ p.nome_cliente }}">
+                    Marcar resolvido
+                  </button>
                 </td>
               </tr>
             {% endfor %}
@@ -58,6 +59,26 @@
       <p class="vazio">Nenhum prazo fatal vencendo nos próximos 30 dias. 🎉</p>
     {% endif %}
   </div>
+
+  {% for p in prazos %}
+    <dialog id="modal-resolver-{{ p.evento_id }}" class="modal-confirmacao">
+      <div class="modal-corpo">
+        <div class="modal-icone">{{ icones.icone('alerta') }}</div>
+        <h3>Marcar prazo fatal como resolvido?</h3>
+        <p>
+          Isso remove definitivamente o prazo de <strong data-nome-alvo-destino>{{ p.nome_cliente }}</strong>
+          ({{ p.tipo_evento_nome }}, {{ p.data_prazo.strftime("%d/%m/%Y") }}) da lista de alertas — não
+          existe uma forma de reabrir pelo sistema, só direto no banco.
+        </p>
+      </div>
+      <div class="modal-acoes">
+        <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
+        <form method="post" action="/app/processos/eventos/{{ p.evento_id }}/resolver">
+          <button type="submit" class="perigo">Marcar resolvido</button>
+        </form>
+      </div>
+    </dialog>
+  {% endfor %}
 
   <div class="card">
     <h2>Relatório</h2>
@@ -78,7 +99,7 @@
         </select>
       </div>
       <div class="campo" data-mostrar-se-tipo="empresa">
-        <label for="empresa">Empresa</label>
+        <label for="empresa">Empresa-cliente</label>
         <select id="empresa" name="empresa">
           <option value="">Selecione...</option>
           {% for e in empresas %}
@@ -100,16 +121,22 @@
   </div>
 
   {% if resultado %}
+    {% if resultado.tipos_nao_catalogados %}
+      <div class="aviso-inline">
+        Tipo(s) de evento não catalogado(s): {{ resultado.tipos_nao_catalogados | join(", ") }}
+        (cadastre em Administração).
+      </div>
+    {% endif %}
     {% if filtro.tipo == "empresa" %}
       <div class="card">
         <h2>
           {{ resultado.empresa }} — {{ resultado.total_processos }} processo(s)
           <a class="botao secundario" style="float:right; font-size:0.82rem; padding:6px 12px;"
-             href="/processos/relatorio.pdf?periodo_ini={{ filtro.periodo_ini }}&periodo_fim={{ filtro.periodo_fim }}&tipo=empresa&empresa={{ filtro.empresa }}&assistente={{ filtro.assistente }}">
+             href="/processos/relatorio.pdf?periodo_ini={{ filtro.periodo_ini | urlencode }}&periodo_fim={{ filtro.periodo_fim | urlencode }}&tipo=empresa&empresa={{ filtro.empresa | urlencode }}&assistente={{ filtro.assistente | urlencode }}">
             Baixar PDF
           </a>
           <a class="botao secundario" style="float:right; font-size:0.82rem; padding:6px 12px; margin-right:8px;"
-             href="/processos/relatorio.xlsx?periodo_ini={{ filtro.periodo_ini }}&periodo_fim={{ filtro.periodo_fim }}&tipo=empresa&empresa={{ filtro.empresa }}&assistente={{ filtro.assistente }}">
+             href="/processos/relatorio.xlsx?periodo_ini={{ filtro.periodo_ini | urlencode }}&periodo_fim={{ filtro.periodo_fim | urlencode }}&tipo=empresa&empresa={{ filtro.empresa | urlencode }}&assistente={{ filtro.assistente | urlencode }}">
             Baixar Excel
           </a>
         </h2>
@@ -187,11 +214,11 @@
         {% endfor %}
         <div class="card">
           <a class="botao secundario"
-             href="/processos/relatorio.pdf?periodo_ini={{ filtro.periodo_ini }}&periodo_fim={{ filtro.periodo_fim }}&tipo=geral&assistente={{ filtro.assistente }}">
+             href="/processos/relatorio.pdf?periodo_ini={{ filtro.periodo_ini | urlencode }}&periodo_fim={{ filtro.periodo_fim | urlencode }}&tipo=geral&assistente={{ filtro.assistente | urlencode }}">
             Baixar PDF
           </a>
           <a class="botao secundario" style="margin-left:8px;"
-             href="/processos/relatorio.xlsx?periodo_ini={{ filtro.periodo_ini }}&periodo_fim={{ filtro.periodo_fim }}&tipo=geral&assistente={{ filtro.assistente }}">
+             href="/processos/relatorio.xlsx?periodo_ini={{ filtro.periodo_ini | urlencode }}&periodo_fim={{ filtro.periodo_fim | urlencode }}&tipo=geral&assistente={{ filtro.assistente | urlencode }}">
             Baixar Excel
           </a>
         </div>

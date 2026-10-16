@@ -161,3 +161,23 @@ def test_tela_nao_faz_uma_consulta_por_empresa(client, db):
     # bem abaixo de "10 empresas × 5 consultas" (50) — um número pequeno e
     # fixo, que não cresce com a quantidade de empresas cadastradas.
     assert len(consultas) < 15, f"consultas demais ({len(consultas)}) — voltou o padrão N+1?"
+
+
+def test_modais_de_massa_exigem_confirmacao_por_texto(client, db):
+    """Auditoria M24: "Excluir selecionadas" e "Realocar em massa" usam o
+    mesmo mecanismo de confirmação por texto (data-confirmar-texto/
+    data-confirmar-alvo, já existente em app.js) que "Sincronizar com a
+    lista oficial" e "Excluir todas as inativas" já usavam — digitar a
+    palavra errada mantém o botão de envio travado."""
+    _logar_admin(db, client)
+    get_or_create_empresa(db, "WEB MASSA CONFIRMACAO TEXTO")
+    db.commit()
+
+    resposta = client.get("/app/empresas")
+    assert resposta.status_code == 200
+
+    assert 'id="modal-excluir-em-massa"' in resposta.text
+    assert 'id="modal-realocar-em-massa"' in resposta.text
+    assert 'data-confirmar-texto="EXCLUIR"' in resposta.text
+    assert 'data-confirmar-texto="REALOCAR"' in resposta.text
+    assert resposta.text.count("data-confirmar-alvo") >= 4  # 2 modais novos + sincronizar + excluir-inativas

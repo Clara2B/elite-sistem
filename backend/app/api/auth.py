@@ -1,26 +1,29 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import (
+    JANELA_BLOQUEIO_LOGIN_MINUTOS,
     _extrair_token,
+    buscar_sessao,
     criar_sessao,
+    excedeu_tentativas_login,
     get_current_user,
     hash_senha,
     verificar_senha,
 )
 from app.db import get_db
-from app.models import Sessao, Usuario
+from app.models import Usuario
 from app.services.auditoria import registrar
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 class LoginRequest(BaseModel):
-    email: str
+    email: EmailStr
     senha: str
 
 
@@ -44,14 +47,22 @@ def _perfil(usuario: Usuario) -> dict:
 
 @router.post("/login")
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
-    usuario = db.scalar(select(Usuario).where(Usuario.email == payload.email.strip().lower()))
+    email_normalizado = payload.email.strip().lower()
+    if excedeu_tentativas_login(db, email_normalizado):
+        raise HTTPException(
+            status_code=429,
+            detail=f"Muitas tentativas de login para esse e-mail. Tente novamente em até "
+            f"{JANELA_BLOQUEIO_LOGIN_MINUTOS} minutos.",
+        )
+
+    usuario = db.scalar(select(Usuario).where(Usuario.email == email_normalizado))
     if usuario is None or not usuario.ativo or not verificar_senha(payload.senha, usuario.senha_hash):
-        registrar(db, usuario, "LOGIN_FALHOU", entidade="usuario", entidade_id=payload.email)
+        registrar(db, usuario, "LOGIN_FALHOU", entidade="usuario", entidade_id=email_normalizado)
         raise HTTPException(status_code=401, detail="E-mail ou senha incorretos.")
 
-    sessao = criar_sessao(db, usuario)
+    sessao, token = criar_sessao(db, usuario)
     registrar(db, usuario, "LOGIN", entidade="usuario", entidade_id=usuario.id)
-    return {"token": sessao.token, "expira_em": sessao.expira_em, "usuario": _perfil(usuario)}
+    return {"token": token, "expira_em": sessao.expira_em, "usuario": _perfil(usuario)}
 
 
 @router.post("/logout")
@@ -60,7 +71,7 @@ def logout(
     usuario: Usuario = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    sessao = db.get(Sessao, token)
+    sessao = buscar_sessao(db, token)
     if sessao is not None:
         db.delete(sessao)
         db.commit()
