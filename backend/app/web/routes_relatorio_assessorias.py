@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
 
-from app.api._shared import salvar_temp
+from app.api._shared import remover_temp, salvar_temp
 from app.db import get_db
 from app.models import Usuario
 from app.relatorio_assessorias import armazenamento, mapas, processamento
@@ -113,6 +113,9 @@ async def processar(
             "erro": f"Não consegui ler uma das planilhas: {e}",
         })
         return templates.TemplateResponse(request, "relatorio_assessorias_upload.html", contexto)
+    finally:
+        for caminho in caminhos.values():
+            remover_temp(caminho)
 
     mensagem = quote(
         f"{len(resultados)} assessoria(s) processada(s)."
