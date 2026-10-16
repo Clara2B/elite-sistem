@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block titulo %}Nova Solicitação de Audiência — Elite Sistem{% endblock %}
+{% block conteudo %}
+  {% import "_flash.html" as flash %}
+  <h1>Nova Solicitação de Audiência</h1>
+  <p class="subtitulo">
+    Preenche uma vez só — o sistema encontra o próximo horário vago na planilha de controle, antes
+    de gravar.
+  </p>
+
+  {{ flash.toast('sucesso', mensagem) }}
+  {{ flash.toast('erro', erro) }}
+
+  {% if not previa %}
+    <div class="card">
+      <h2>Dados da solicitação</h2>
+      <form class="formulario" method="post" action="/app/solicitacoes-audiencia/buscar-horario">
+        <div class="campo">
+          <label for="empresa_cliente_id">Assessoria</label>
+          <select id="empresa_cliente_id" name="empresa_cliente_id" required>
+            <option value="">Selecione...</option>
+            {% for e in empresas %}
+              <option value="{{ e.id }}" {{ "selected" if valores.empresa_cliente_id == e.id|string else "" }}>{{ e.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="campo">
+          <label for="nome_cliente">Nome completo do cliente</label>
+          <input type="text" id="nome_cliente" name="nome_cliente" value="{{ valores.nome_cliente or '' }}" required>
+        </div>
+        <div class="campo">
+          <label for="cpf_cliente">CPF do cliente</label>
+          <input type="text" id="cpf_cliente" name="cpf_cliente" value="{{ valores.cpf_cliente or '' }}" required placeholder="000.000.000-00">
+        </div>
+        <div class="campo">
+          <label for="email_cliente">E-mail do cliente</label>
+          <input type="email" id="email_cliente" name="email_cliente" value="{{ valores.email_cliente or '' }}" required>
+        </div>
+        <div class="campo">
+          <label for="telefone_cliente">Telefone do cliente</label>
+          <input type="text" id="telefone_cliente" name="telefone_cliente" value="{{ valores.telefone_cliente or '' }}" required placeholder="(00) 00000-0000">
+        </div>
+        <div class="campo">
+          <label for="data_recebimento">Data de recebimento do e-mail</label>
+          <input type="date" id="data_recebimento" name="data_recebimento" value="{{ valores.data_recebimento or hoje.isoformat() }}" required>
+        </div>
+        <div class="campo">
+          <label for="numero_contrato">Número do contrato</label>
+          <input type="text" id="numero_contrato" name="numero_contrato" value="{{ valores.numero_contrato or '' }}" required>
+        </div>
+        <div class="campo">
+          <label for="banco_id">Banco</label>
+          <select id="banco_id" name="banco_id" required>
+            <option value="">Selecione...</option>
+            {% for b in bancos %}
+              <option value="{{ b.id }}" {{ "selected" if valores.banco_id == b.id|string else "" }}>{{ b.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="campo">
+          <label for="link_audiencia">Link da audiência (Meet ou Teams)</label>
+          <input type="text" id="link_audiencia" name="link_audiencia" value="{{ valores.link_audiencia or '' }}" required placeholder="meet.google.com/...">
+        </div>
+        <button type="submit">Buscar próximo horário</button>
+      </form>
+    </div>
+  {% else %}
+    <div class="card">
+      <h2>Horário encontrado</h2>
+      <p>
+        Próxima vaga na planilha de controle: <strong>{{ previa.dia.strftime('%d/%m/%Y') }} às {{ previa.hora }}</strong>.
+      </p>
+      <p class="subtitulo">Confirma pra gravar — o sistema confere de novo se a linha ainda está vaga antes de escrever.</p>
+      <form method="post" action="/app/solicitacoes-audiencia/confirmar">
+        <input type="hidden" name="empresa_cliente_id" value="{{ valores.empresa_cliente_id }}">
+        <input type="hidden" name="nome_cliente" value="{{ valores.nome_cliente }}">
+        <input type="hidden" name="cpf_cliente" value="{{ valores.cpf_cliente }}">
+        <input type="hidden" name="email_cliente" value="{{ valores.email_cliente }}">
+        <input type="hidden" name="telefone_cliente" value="{{ valores.telefone_cliente }}">
+        <input type="hidden" name="data_recebimento" value="{{ valores.data_recebimento }}">
+        <input type="hidden" name="numero_contrato" value="{{ valores.numero_contrato }}">
+        <input type="hidden" name="banco_id" value="{{ valores.banco_id }}">
+        <input type="hidden" name="link_audiencia" value="{{ valores.link_audiencia }}">
+        <input type="hidden" name="numero_linha" value="{{ previa.numero_linha }}">
+        <input type="hidden" name="dia" value="{{ previa.dia.isoformat() }}">
+        <input type="hidden" name="hora" value="{{ previa.hora }}">
+        <div class="acoes-linha">
+          <button type="submit">Confirmar e gravar</button>
+          <a href="/app/solicitacoes-audiencia" class="secundario botao-linha" style="display:inline-flex; align-items:center;">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  {% endif %}
+{% endblock %}

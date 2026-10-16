@@ -376,3 +376,51 @@ class EventoProcesso(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     processo: Mapped[Processo] = relationship(back_populates="eventos")
+
+
+class SolicitacaoAudiencia(Base):
+    """Fase 1 — Solicitação de Audiência (2026-10-16, a pedido da Clara): o
+    mesmo dado hoje é digitado 3x (planilha de controle, aba Cartas, corpo
+    dos 2 e-mails) — esta tabela guarda a solicitação em si, pra digitar
+    uma vez só.
+
+    `linha_planilha` (o número da linha na aba AGENDAMENTO da planilha de
+    controle) tem `unique=True` de propósito: é o travamento otimista que
+    impede duas solicitações simultâneas de ocuparem o mesmo horário — a
+    linha só é escrita na planilha de verdade depois que o INSERT aqui
+    (com a constraint UNIQUE) é confirmado pelo banco; se duas requisições
+    concorrentes acharem a mesma "próxima vaga" ao mesmo tempo, só uma
+    consegue inserir, a outra recebe erro de integridade e busca a vaga
+    seguinte. Ver app/services/solicitacoes_audiencia.py.
+
+    Clientes podem solicitar 2ª, 3ª... audiências (confirmado pela Clara —
+    não é duplicidade): não há nenhuma constraint de unicidade por CPF ou
+    número de contrato aqui."""
+
+    __tablename__ = "solicitacoes_audiencia"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    empresa_cliente_id: Mapped[int] = mapped_column(ForeignKey("empresas_clientes.id"), index=True)
+    nome_cliente: Mapped[str] = mapped_column(Text)
+    cpf_cliente: Mapped[str] = mapped_column(String(20))
+    email_cliente: Mapped[str] = mapped_column(Text)
+    telefone_cliente: Mapped[str] = mapped_column(String(30))
+    data_recebimento: Mapped[date] = mapped_column(Date)
+    numero_contrato: Mapped[str] = mapped_column(Text)
+    banco_id: Mapped[int] = mapped_column(ForeignKey("bancos.id"), index=True)
+    link_audiencia: Mapped[str] = mapped_column(Text)
+    linha_planilha: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    data_agendamento: Mapped[date] = mapped_column(Date)
+    hora_agendamento: Mapped[str] = mapped_column(String(10))
+    # RESERVADA (ganhou a linha no banco, ainda não escreveu na planilha) ->
+    # GRAVADA (escreveu na planilha de controle com sucesso) ->
+    # CARTAS_GERADAS -> EMAILS_ENVIADOS. FALHOU em qualquer etapa que não
+    # dê pra concluir (ex.: a linha não estava mais vaga na planilha de
+    # verdade no momento de escrever).
+    status: Mapped[str] = mapped_column(String(20), default="RESERVADA")
+    criado_por: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    empresa_cliente: Mapped[EmpresaCliente] = relationship()
+    banco: Mapped[Banco] = relationship()
+    usuario: Mapped[Usuario] = relationship()

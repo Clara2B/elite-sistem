@@ -122,14 +122,6 @@ class ImportResumoBancos:
     rejeitados: list[str] = field(default_factory=list)
 
 
-def _eh_valor_real(texto: str) -> bool:
-    """False pra fórmula do Google Sheets não resolvida (ex.: a "sugestão
-    de IA" da célula, tipo `=AI("Preencha com...")`) — a planilha real de
-    bancos tem isso em quase toda linha da coluna "2° OPÇÃO CNPJ" (nunca
-    aceita pela Clara), não é dado de verdade."""
-    return bool(texto) and not texto.startswith("=")
-
-
 def _upsert_banco_de_linha(
     db: Session,
     existentes: dict[str, Banco],
@@ -195,30 +187,23 @@ def importar_planilha_bancos(db: Session, path: str) -> ImportResumoBancos:
     return resumo
 
 
-def _valor_coluna(linha: dict[str, str], nome_coluna: str) -> str:
-    alvo = normalize(nome_coluna)
-    for chave, valor in linha.items():
-        if normalize(chave) == alvo:
-            return valor.strip() if _eh_valor_real(valor.strip()) else ""
-    return ""
-
-
 def importar_do_google_sheets(db: Session, spreadsheet_id: str) -> ImportResumoBancos:
     """Mesmo upsert de `importar_planilha_bancos`, mas lendo direto da aba
     "E-MAIL BANCO" da planilha de controle (2026-10-16, a pedido da Clara —
     sem precisar exportar/subir arquivo). Colunas reais: BANCOS, E-MAIL,
     CNPJ, 2° OPÇÃO CNPJ (a última quase sempre com uma fórmula de sugestão
-    de IA nunca aceita, não dado de verdade — ver `_eh_valor_real`)."""
+    de IA nunca aceita, não dado de verdade — ver
+    `google_sheets.eh_valor_real`)."""
     linhas = google_sheets.ler_aba(spreadsheet_id, ABA_GOOGLE_SHEETS)
     existentes = {normalize(nome): banco for nome, banco in ((b.nome, b) for b in db.scalars(select(Banco)))}
 
     resumo = ImportResumoBancos()
     for linha in linhas:
         resumo.linhas_lidas += 1
-        nome = _valor_coluna(linha, "BANCOS")
-        cnpj = _valor_coluna(linha, "CNPJ")
-        cnpj_alternativo = _valor_coluna(linha, "2° OPÇÃO CNPJ")
-        email = _valor_coluna(linha, "E-MAIL")
+        nome = google_sheets.valor_coluna(linha, "BANCOS")
+        cnpj = google_sheets.valor_coluna(linha, "CNPJ")
+        cnpj_alternativo = google_sheets.valor_coluna(linha, "2° OPÇÃO CNPJ")
+        email = google_sheets.valor_coluna(linha, "E-MAIL")
         _upsert_banco_de_linha(db, existentes, resumo, nome, cnpj, cnpj_alternativo, email)
 
     db.commit()
