@@ -14,6 +14,7 @@ from app.services.empresas import (
     LISTA_OFICIAL_EMPRESAS,
     atualizar_empresa,
     contar_vinculos_empresa,
+    contar_vinculos_por_tipo_todas_empresas,
     contar_vinculos_todas_empresas,
     criar_empresa,
     excluir_empresa,
@@ -293,6 +294,23 @@ def test_contar_vinculos_todas_empresas_sem_nenhuma_empresa_vinculada(db):
     db.commit()
 
     assert contar_vinculos_todas_empresas(db) == {}
+
+
+def test_contar_vinculos_por_tipo_todas_empresas_bate_com_a_versao_individual(db):
+    """Auditoria M22: contar_vinculos_por_tipo_todas_empresas mantém o
+    detalhe por tipo (não só o total) em lote — usada por
+    excluir_empresas_em_massa pra não reconsultar por empresa."""
+    com_dois_tipos = get_or_create_empresa(db, "LOTE TIPO COM DOIS TIPOS")
+    db.add(
+        Audiencia(empresa_cliente_id=com_dois_tipos.id, nome_cliente="Fulano", data_recebimento=date(2026, 1, 1))
+    )
+    db.add(Processo(numero_processo="LOTE-TIPO-0001", empresa_cliente_id=com_dois_tipos.id))
+    db.commit()
+
+    por_tipo = contar_vinculos_por_tipo_todas_empresas(db)
+    individual = contar_vinculos_empresa(db, com_dois_tipos.id)
+
+    assert por_tipo[com_dois_tipos.id] == {k: v for k, v in individual.items() if v}
 
 
 def test_excluir_em_massa_sem_vinculo_exclui_todas_direto(db):
