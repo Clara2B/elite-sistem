@@ -121,6 +121,12 @@
   </div>
 
   {% if resultado %}
+    {% if resultado.tipos_nao_catalogados %}
+      <div class="aviso-inline">
+        Tipo(s) de evento não catalogado(s): {{ resultado.tipos_nao_catalogados | join(", ") }}
+        (cadastre em Administração).
+      </div>
+    {% endif %}
     {% if filtro.tipo == "empresa" %}
       <div class="card">
         <h2>

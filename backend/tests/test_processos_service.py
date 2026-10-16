@@ -20,6 +20,7 @@ from app.services.processos import (
     marcar_resolvido,
     prazos_proximos,
     status_prazo,
+    tipos_evento_cadastrados,
 )
 
 
@@ -723,6 +724,42 @@ def test_relatorio_por_empresa_inexistente_gera_erro(db):
         assert "NAO EXISTE" in str(e)
 
 
+# --- tipos_evento_cadastrados / aviso de tipo não catalogado (M41) ---------
+
+
+def test_tipos_evento_cadastrados_normaliza_os_nomes(db):
+    cadastrados = tipos_evento_cadastrados(db)
+    assert "CUSTAS" in cadastrados
+    assert "TIPO FICTÍCIO" not in cadastrados
+
+
+def test_relatorio_geral_avisa_tipo_de_evento_nao_catalogado(db):
+    processo = _processo(db, numero="1231231-23.2026.8.11.0111", assistente="DANILO")
+    db.add(EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="TIPO FICTÍCIO"))
+    db.commit()
+
+    relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30))
+    assert relatorio.tipos_nao_catalogados == ["TIPO FICTÍCIO"]
+
+
+def test_relatorio_geral_sem_tipo_nao_catalogado_fica_vazio(db):
+    processo = _processo(db, numero="3213214-32.2026.8.11.0112", assistente="DANILO")
+    db.add(EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"))
+    db.commit()
+
+    relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30))
+    assert relatorio.tipos_nao_catalogados == []
+
+
+def test_relatorio_por_empresa_avisa_tipo_de_evento_nao_catalogado(db):
+    processo = _processo(db, numero="4564564-56.2026.8.11.0113", assistente="DANILO")
+    db.add(EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="OUTRO TIPO FICTÍCIO"))
+    db.commit()
+
+    relatorio = gerar_relatorio_por_empresa(db, "ABSOLUTA", date(2026, 9, 1), date(2026, 9, 30))
+    assert relatorio.tipos_nao_catalogados == ["OUTRO TIPO FICTÍCIO"]
+
+
 def test_relatorio_geral_nao_carrega_processos_fora_do_periodo(db):
     """Regressão de performance (já cobria a versão antiga do relatório):
     confirma que o número de consultas SQL não escala com o total de
@@ -747,7 +784,9 @@ def test_relatorio_geral_nao_carrega_processos_fora_do_periodo(db):
 
     assert len(relatorio.secoes) == 1
     assert relatorio.secoes[0].linhas[0].assistente == "DANILO"  # "JULIA" (fora do período) nem aparece
-    assert len(consultas) <= 3  # processos do período + último evento por processo
+    # processos do período + último evento por processo + catálogo de tipos de
+    # evento (M41, consulta única por chamada, não por processo)
+    assert len(consultas) <= 4
 
 
 def test_formatar_texto_geral_sem_coluna_assistente(db):

@@ -532,6 +532,29 @@ def test_rotulo_do_filtro_de_empresa_em_processos_usa_empresa_cliente(client, db
     assert '<label for="empresa">Empresa-cliente</label>' in resposta.text
 
 
+def test_relatorio_processos_avisa_tipo_de_evento_nao_catalogado(client, db):
+    """Auditoria M41: catálogo TipoEvento, antes nunca lido por nenhuma
+    rota/tela, agora alimenta o mesmo aviso que TipoLaudo já dá em Laudos
+    (tipo fora do catálogo)."""
+    db.add(Usuario(nome="Fulano", email="fulano.m41@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    empresa = EmpresaCliente(nome="ABSOLUTA")
+    db.add(empresa)
+    db.flush()
+    processo = Processo(numero_processo="5012298-14.2025.8.13.0231", empresa_cliente_id=empresa.id, nome_cliente="Fulano")
+    db.add(processo)
+    db.flush()
+    db.add(EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="TIPO FICTÍCIO"))
+    db.commit()
+    client.post("/login", data={"email": "fulano.m41@teste.local", "senha": "certa"})
+
+    resposta = client.get(
+        "/app/processos",
+        params={"periodo_ini": "2026-09-01", "periodo_fim": "2026-09-30", "tipo": "geral"},
+    )
+    assert resposta.status_code == 200
+    assert "Tipo(s) de evento não catalogado(s): TIPO FICTÍCIO" in resposta.text
+
+
 def test_relatorio_processos_por_empresa_filtra_uma_so(client, db):
     """Bloco 1 (2026-09-25): tipo "Por empresa" — só a empresa selecionada.
     Bloco 4 (2026-09-28): sem a coluna Assistente."""
