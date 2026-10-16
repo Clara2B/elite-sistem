@@ -418,6 +418,20 @@ def test_relatorio_processos_geral_mostra_secao_por_empresa(client, db):
     assert "Fulano" in resposta.text  # Parte 2 (resumo por cliente)
 
 
+def test_rotulo_do_filtro_de_empresa_em_processos_usa_empresa_cliente(client, db):
+    """Auditoria M39: o filtro de relatório de Processos usava o rótulo
+    "Empresa", diferente do mesmo campo nas outras 4 telas de filtro
+    (Pendências, Audiências, Correspondências, Laudos), que já usam
+    "Empresa-cliente"."""
+    db.add(Usuario(nome="Fulano", email="fulano.m39@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    db.commit()
+    client.post("/login", data={"email": "fulano.m39@teste.local", "senha": "certa"})
+
+    resposta = client.get("/app/processos")
+    assert resposta.status_code == 200
+    assert '<label for="empresa">Empresa-cliente</label>' in resposta.text
+
+
 def test_relatorio_processos_por_empresa_filtra_uma_so(client, db):
     """Bloco 1 (2026-09-25): tipo "Por empresa" — só a empresa selecionada.
     Bloco 4 (2026-09-28): sem a coluna Assistente."""
