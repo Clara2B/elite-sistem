@@ -58,8 +58,10 @@ def relatorio(
     periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
     try:
         resultado = audiencias_service.gerar_relatorio(db, empresa, periodo_ini, periodo_fim, cnpj)
-    except ValueError as e:
+    except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     registrar(db, usuario, "GEROU_RELATORIO_AUDIENCIAS", entidade="empresa_cliente", entidade_id=empresa)
     return {
         "empresa": resultado.empresa,
@@ -89,8 +91,10 @@ def relatorio_pdf(
     periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
     try:
         resultado = audiencias_service.gerar_relatorio(db, empresa, periodo_ini, periodo_fim, cnpj)
-    except ValueError as e:
+    except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     registrar(db, usuario, "GEROU_RELATORIO_AUDIENCIAS_PDF", entidade="empresa_cliente", entidade_id=empresa)
     pdf_bytes = gerar_pdf_audiencias(resultado)
     nome_arquivo = nome_arquivo_pdf("audiencias", resultado.empresa, f"{ano}-{mes:02d}", f"q{quinzena}")
@@ -113,8 +117,10 @@ def relatorio_xlsx(
     periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
     try:
         resultado = audiencias_service.gerar_relatorio(db, empresa, periodo_ini, periodo_fim, cnpj)
-    except ValueError as e:
+    except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     registrar(db, usuario, "GEROU_RELATORIO_AUDIENCIAS_XLSX", entidade="empresa_cliente", entidade_id=empresa)
     excel_bytes = gerar_excel_audiencias(resultado)
     nome_arquivo = nome_arquivo_xlsx("audiencias", resultado.empresa, f"{ano}-{mes:02d}", f"q{quinzena}")

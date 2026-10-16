@@ -178,7 +178,11 @@ def gerar_relatorio(
             empresa = e
             break
     if empresa is None:
-        raise ValueError(f"A empresa '{empresa_nome}' não foi encontrada.")
+        # LookupError (não ValueError) de propósito — diferencia "recurso
+        # não encontrado" (404) de "erro de regra de negócio" (a falta de
+        # faixa de preço, logo abaixo, continua ValueError -> 422) pra quem
+        # consome a API (auditoria M43, 2026-10-16).
+        raise LookupError(f"A empresa '{empresa_nome}' não foi encontrada.")
 
     clientes = _clientes_no_periodo(db, empresa.id, periodo_ini, periodo_fim)
 

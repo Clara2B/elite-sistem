@@ -382,6 +382,23 @@ def test_funcionarios_pagina_restrita_a_admin(client, db):
     assert resposta.status_code == 403
 
 
+def test_relatorio_audiencias_empresa_nao_encontrada_mostra_erro_na_tela(client, db):
+    """Auditoria M43: gerar_relatorio agora levanta LookupError (não
+    ValueError) pra "empresa não encontrada" — a rota web precisa capturar
+    os dois tipos, senão esse caso vira um 500 não tratado em vez do erro
+    amigável de sempre."""
+    db.add(Usuario(nome="Fulano", email="fulano.m43@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    db.commit()
+    client.post("/login", data={"email": "fulano.m43@teste.local", "senha": "certa"})
+
+    resposta = client.get(
+        "/app/audiencias",
+        params={"empresa": "NÃO EXISTE", "ano": 2026, "mes": 1, "quinzena": 1},
+    )
+    assert resposta.status_code == 200
+    assert "não foi encontrada" in resposta.text
+
+
 def test_relatorio_processos_geral_mostra_secao_por_empresa(client, db):
     """Bloco 1 (2026-09-25): tipo "Geral" — uma seção por empresa, com as
     duas partes (Nº processo/Evento/Fatal e Cliente/Nº processo/Último
