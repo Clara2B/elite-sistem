@@ -41,6 +41,25 @@ class Settings(BaseSettings):
     # em produção, a planilha real.
     google_service_account_json: str | None = None
     google_sheets_id: str | None = None
+    # Envio das Cartas Convite por e-mail (Fase 1, 2026-10-16) — provedor
+    # escolhido pela Clara depois do histórico de três tentativas
+    # fracassadas no pop-up de suporte (ver DISCORD_WEBHOOK_SUPORTE acima):
+    # Postmark é API HTTPS (não depende de porta SMTP, que foi o primeiro
+    # bloqueio) e tem reputação de IP diferente da Resend (não repete
+    # necessariamente o bloqueio do Cloudflare visto antes).
+    # `postmark_remetente` precisa ser um e-mail com Sender Signature (ou
+    # domínio) verificado na conta Postmark.
+    #
+    # Modo de teste (a pedido explícito da Clara: "nenhum email real deve
+    # ser enviado durante o desenvolvimento e os testes") — `False` por
+    # padrão, de propósito: só manda pra destinatário de verdade quando
+    # alguém liga EMAIL_ENVIO_REAL=true explicitamente no Render. Em modo
+    # de teste, o e-mail é enviado de verdade (não só uma simulação) mas
+    # SEMPRE pra `email_destinatario_teste`, nunca pro cliente/banco.
+    postmark_server_token: str | None = None
+    postmark_remetente: str | None = None
+    email_envio_real: bool = False
+    email_destinatario_teste: str | None = None
 
 
 settings = Settings()

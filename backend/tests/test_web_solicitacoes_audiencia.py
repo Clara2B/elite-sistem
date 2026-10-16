@@ -10,9 +10,11 @@ from sqlalchemy import select
 
 from app.auth import hash_senha
 from app.config import settings as app_settings
-from app.models import EmpresaCliente, SolicitacaoAudiencia, Usuario
+from app.models import EmpresaCliente, EnvioEmail, SolicitacaoAudiencia, Usuario
+from app.services import envio_cartas as ec
 from app.services import solicitacoes_audiencia as sa
 from app.services.bancos import criar_banco
+from app.services.email_postmark import ErroEnvioEmail
 
 CNPJ_VALIDO = "11.222.333/0001-81"
 CPF_VALIDO = "529.982.247-25"
@@ -137,6 +139,10 @@ def test_confirmar_grava_quando_ainda_vaga(client, db, monkeypatch):
     solicitacao = db.scalar(select(SolicitacaoAudiencia))
     assert solicitacao.status == "GRAVADA"
     assert solicitacao.linha_planilha == 888
+    # Mostra as prévias dos dois e-mails, prontas pra enviar.
+    assert "Prévia — E-mail ao Cliente" in resposta.text
+    assert "Prévia — E-mail ao Banco" in resposta.text
+    assert f'action="/app/solicitacoes-audiencia/{solicitacao.id}/enviar-emails"' in resposta.text
 
 
 def test_confirmar_com_cpf_invalido_nao_cria_solicitacao(client, db, monkeypatch):
@@ -201,3 +207,65 @@ def test_confirmar_perde_a_corrida_no_banco_busca_proxima(client, db, monkeypatc
     assert resposta.status_code == 409
     assert "18/11/2099" in resposta.text
     assert db.query(SolicitacaoAudiencia).count() == 1
+
+
+def _criar_solicitacao_gravada(db, empresa, banco):
+    usuario = db.scalar(select(Usuario))
+    return sa.reservar_horario(
+        db, usuario, empresa.id, "Fulano de Tal", CPF_VALIDO, "fulano@teste.com", "11988887777",
+        date.today(), "12345", banco.id, "meet.google.com/abc-defg-hij",
+        sa.HorarioVago(numero_linha=888, dia=date(2099, 11, 17), hora="14:30"),
+    )
+
+
+def test_enviar_emails_sucesso(client, db, monkeypatch):
+    empresa, banco = _preparar(db)
+    _logar_admin(db, client)
+    solicitacao = _criar_solicitacao_gravada(db, empresa, banco)
+    monkeypatch.setattr(ec.email_postmark, "enviar_email", lambda *a, **k: None)
+
+    resposta = client.post(f"/app/solicitacoes-audiencia/{solicitacao.id}/enviar-emails")
+
+    assert resposta.status_code == 200
+    assert "enviados" in resposta.text.lower()
+    db.refresh(solicitacao)
+    assert solicitacao.status == "EMAILS_ENVIADOS"
+    assert db.query(EnvioEmail).count() == 2
+
+
+def test_enviar_emails_solicitacao_inexistente(client, db):
+    _preparar(db)
+    _logar_admin(db, client)
+
+    resposta = client.post("/app/solicitacoes-audiencia/99999/enviar-emails")
+
+    assert resposta.status_code == 404
+
+
+def test_enviar_emails_falha_mostra_erro_e_permite_tentar_de_novo(client, db, monkeypatch):
+    empresa, banco = _preparar(db)
+    _logar_admin(db, client)
+    solicitacao = _criar_solicitacao_gravada(db, empresa, banco)
+
+    def _falha(destinatarios, *a, **k):
+        if "fulano@teste.com" in destinatarios:
+            raise ErroEnvioEmail("Postmark indisponível")
+
+    monkeypatch.setattr(ec.email_postmark, "enviar_email", _falha)
+
+    resposta = client.post(f"/app/solicitacoes-audiencia/{solicitacao.id}/enviar-emails")
+
+    assert resposta.status_code == 502
+    assert "Postmark indisponível" in resposta.text
+    assert "Prévia — E-mail ao Cliente" in resposta.text
+    db.refresh(solicitacao)
+    assert solicitacao.status != "EMAILS_ENVIADOS"
+
+    # tenta de novo, agora sem falha — reenvio funciona
+    monkeypatch.setattr(ec.email_postmark, "enviar_email", lambda *a, **k: None)
+    resposta2 = client.post(f"/app/solicitacoes-audiencia/{solicitacao.id}/enviar-emails")
+    assert resposta2.status_code == 200
+    db.refresh(solicitacao)
+    assert solicitacao.status == "EMAILS_ENVIADOS"
+    # 1ª tentativa: cliente ERRO + banco ENVIADO; 2ª tentativa: os dois ENVIADO.
+    assert db.query(EnvioEmail).count() == 4

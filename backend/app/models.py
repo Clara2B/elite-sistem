@@ -424,3 +424,27 @@ class SolicitacaoAudiencia(Base):
     empresa_cliente: Mapped[EmpresaCliente] = relationship()
     banco: Mapped[Banco] = relationship()
     usuario: Mapped[Usuario] = relationship()
+
+
+class EnvioEmail(Base):
+    """Registro de envio das Cartas Convite por e-mail (Fase 1, 2026-10-16,
+    a pedido da Clara: "registrar o envio: data/hora, quem enviou,
+    destinatários e status"). Uma linha por carta enviada (cliente e banco
+    são dois envios separados da mesma `SolicitacaoAudiencia`) — em caso de
+    falha, não marca como concluído e permite reenviar (a tela chama de
+    novo o mesmo serviço, que grava outra linha aqui)."""
+
+    __tablename__ = "envios_email"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    solicitacao_id: Mapped[int] = mapped_column(ForeignKey("solicitacoes_audiencia.id"), index=True)
+    tipo: Mapped[str] = mapped_column(String(10))  # CLIENTE | BANCO
+    destinatarios: Mapped[str] = mapped_column(Text)
+    assunto: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(10))  # ENVIADO | ERRO
+    erro: Mapped[str | None] = mapped_column(Text, nullable=True)
+    enviado_por: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    enviado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    solicitacao: Mapped[SolicitacaoAudiencia] = relationship()
+    usuario: Mapped[Usuario] = relationship()

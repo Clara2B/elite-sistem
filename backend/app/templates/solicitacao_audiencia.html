@@ -11,7 +11,32 @@
   {{ flash.toast('sucesso', mensagem) }}
   {{ flash.toast('erro', erro) }}
 
-  {% if not previa %}
+  {% if previas_email %}
+    <div class="card">
+      <h2>Prévia — E-mail ao Cliente</h2>
+      <p><strong>Destinatário(s):</strong> {{ previas_email.cliente.destinatarios | join(", ") }}</p>
+      <p><strong>Assunto:</strong> {{ previas_email.cliente.assunto }}</p>
+      <div style="border:1px solid var(--border); border-radius:8px; padding:16px; max-height:420px; overflow:auto;">
+        {{ previas_email.cliente.corpo_html | safe }}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Prévia — E-mail ao Banco</h2>
+      <p><strong>Destinatário(s):</strong> {{ previas_email.banco.destinatarios | join(", ") }}</p>
+      <p><strong>Assunto:</strong> {{ previas_email.banco.assunto }}</p>
+      <div style="border:1px solid var(--border); border-radius:8px; padding:16px; max-height:420px; overflow:auto;">
+        {{ previas_email.banco.corpo_html | safe }}
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="subtitulo">Confirma pra enviar os dois e-mails de uma vez (cliente e banco).</p>
+      <form method="post" action="/app/solicitacoes-audiencia/{{ solicitacao_id }}/enviar-emails">
+        <button type="submit">Enviar e-mails</button>
+      </form>
+    </div>
+  {% elif not previa %}
     <div class="card">
       <h2>Dados da solicitação</h2>
       <form class="formulario" method="post" action="/app/solicitacoes-audiencia/buscar-horario">

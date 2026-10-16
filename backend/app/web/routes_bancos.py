@@ -124,6 +124,9 @@ def importar_sheets(
     except ValueError as e:
         contexto["erro"] = str(e)
         return templates.TemplateResponse(request, "bancos.html", contexto, status_code=400)
+    except Exception as e:  # noqa: BLE001 — qualquer falha da API do Google (rede, permissão) vira mensagem amigável, não 500
+        contexto["erro"] = f"Não foi possível consultar a planilha de controle: {e}"
+        return templates.TemplateResponse(request, "bancos.html", contexto, status_code=502)
     registrar(db, usuario, "IMPORTOU_BANCOS_GOOGLE_SHEETS", entidade="banco", detalhes=str(resumo))
     contexto = _contexto_base(db, usuario)
     partes = [f"{resumo.criados} criado(s), {resumo.atualizados} atualizado(s)"]

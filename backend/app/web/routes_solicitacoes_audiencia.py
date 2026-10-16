@@ -14,10 +14,11 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
-from app.models import Usuario
+from app.models import SolicitacaoAudiencia, Usuario
 from app.services.auditoria import registrar
 from app.services.bancos import listar_bancos
 from app.services.empresas import listar_empresas
+from app.services.envio_cartas import enviar_emails, montar_previas
 from app.services.solicitacoes_audiencia import (
     HorarioJaOcupado,
     HorarioVago,
@@ -45,6 +46,8 @@ def _contexto_base(db: Session, usuario: Usuario) -> dict:
         "hoje": date.today(),
         "valores": {},
         "previa": None,
+        "previas_email": None,
+        "solicitacao_id": None,
         "mensagem": None,
         "erro": None,
     }
@@ -79,6 +82,21 @@ def _validar_campos_obrigatorios(valores: dict) -> str | None:
     return None
 
 
+def _buscar_proximo_horario_ou_erro(contexto: dict) -> HorarioVago | None:
+    """Usada depois de perder a corrida pra uma vaga (`HorarioJaOcupado`) —
+    busca a próxima e já marca `contexto["erro"]` em qualquer caso (vaga
+    nenhuma encontrada, ou falha de verdade pra consultar a planilha, ex.:
+    credencial/rede), nunca deixa a página sem explicação."""
+    try:
+        proximo = encontrar_proximo_horario_vago(settings.google_sheets_id, agora_brasil())
+    except Exception as e:  # noqa: BLE001 — qualquer falha da API do Google (credencial, rede, permissão) vira mensagem amigável, não 500
+        contexto["erro"] = f"Não foi possível consultar a planilha de controle: {e}"
+        return None
+    if proximo is None:
+        contexto["erro"] = "Não há nenhum outro horário vago na planilha de controle no momento."
+    return proximo
+
+
 @router.post("/buscar-horario")
 async def buscar_horario(
     request: Request,
@@ -99,7 +117,11 @@ async def buscar_horario(
         contexto["erro"] = "GOOGLE_SHEETS_ID não está configurado."
         return templates.TemplateResponse(request, "solicitacao_audiencia.html", contexto, status_code=400)
 
-    horario = encontrar_proximo_horario_vago(settings.google_sheets_id, agora_brasil())
+    try:
+        horario = encontrar_proximo_horario_vago(settings.google_sheets_id, agora_brasil())
+    except Exception as e:  # noqa: BLE001 — mesmo motivo do helper acima
+        contexto["erro"] = f"Não foi possível consultar a planilha de controle: {e}"
+        return templates.TemplateResponse(request, "solicitacao_audiencia.html", contexto, status_code=502)
     if horario is None:
         contexto["erro"] = "Não há nenhum horário vago na planilha de controle no momento."
         return templates.TemplateResponse(request, "solicitacao_audiencia.html", contexto, status_code=400)
@@ -160,11 +182,9 @@ async def confirmar(
         # novo, sem o usuário precisar redigitar nada.
         if isinstance(e, HorarioJaOcupado):
             contexto["mensagem"] = str(e) + " Buscando o próximo horário disponível..."
-            proximo = encontrar_proximo_horario_vago(settings.google_sheets_id, agora_brasil())
+            proximo = _buscar_proximo_horario_ou_erro(contexto)
             if proximo:
                 contexto["previa"] = {"numero_linha": proximo.numero_linha, "dia": proximo.dia, "hora": proximo.hora}
-            else:
-                contexto["erro"] = "Não há nenhum outro horário vago na planilha de controle no momento."
         else:
             contexto["erro"] = str(e)
         return templates.TemplateResponse(request, "solicitacao_audiencia.html", contexto, status_code=409)
@@ -173,12 +193,13 @@ async def confirmar(
         confirmar_na_planilha(db, settings.google_sheets_id, solicitacao)
     except HorarioJaOcupado as e:
         contexto["mensagem"] = str(e) + " Buscando o próximo horário disponível..."
-        proximo = encontrar_proximo_horario_vago(settings.google_sheets_id, agora_brasil())
+        proximo = _buscar_proximo_horario_ou_erro(contexto)
         if proximo:
             contexto["previa"] = {"numero_linha": proximo.numero_linha, "dia": proximo.dia, "hora": proximo.hora}
-        else:
-            contexto["erro"] = "Não há nenhum outro horário vago na planilha de controle no momento."
         return templates.TemplateResponse(request, "solicitacao_audiencia.html", contexto, status_code=409)
+    except Exception as e:  # noqa: BLE001 — qualquer falha inesperada da API do Google na gravação vira mensagem amigável, não 500
+        contexto["erro"] = f"Não foi possível gravar na planilha de controle: {e}"
+        return templates.TemplateResponse(request, "solicitacao_audiencia.html", contexto, status_code=502)
 
     registrar(
         db, usuario, "CRIOU_SOLICITACAO_AUDIENCIA", entidade="solicitacao_audiencia",
@@ -187,6 +208,45 @@ async def confirmar(
     contexto = _contexto_base(db, usuario)
     contexto["mensagem"] = (
         f"Solicitação gravada na planilha — {solicitacao.data_agendamento.strftime('%d/%m/%Y')} "
-        f"às {solicitacao.hora_agendamento}."
+        f"às {solicitacao.hora_agendamento}. Revise as cartas abaixo antes de enviar."
     )
+    contexto["solicitacao_id"] = solicitacao.id
+    contexto["previas_email"] = montar_previas(db, solicitacao)
     return templates.TemplateResponse(request, "solicitacao_audiencia.html", contexto)
+
+
+@router.post("/{solicitacao_id}/enviar-emails")
+def enviar_emails_rota(
+    request: Request,
+    solicitacao_id: int,
+    usuario: Usuario = Depends(_acesso_eximia),
+    db: Session = Depends(get_db),
+):
+    """Só dispara depois do clique explícito em "Enviar" — a prévia (ver
+    `confirmar` acima) já foi mostrada antes disso, como pedido. Em caso de
+    falha (de um dos dois e-mails ou dos dois), não marca como concluído:
+    mostra o erro e a prévia de novo, pronta pra tentar enviar outra vez."""
+    contexto = _contexto_base(db, usuario)
+    solicitacao = db.get(SolicitacaoAudiencia, solicitacao_id)
+    if solicitacao is None:
+        contexto["erro"] = "Solicitação não encontrada."
+        return templates.TemplateResponse(request, "solicitacao_audiencia.html", contexto, status_code=404)
+
+    resultado = enviar_emails(db, usuario, solicitacao, spreadsheet_id=settings.google_sheets_id)
+    if resultado.cliente_enviado and resultado.banco_enviado:
+        registrar(
+            db, usuario, "ENVIOU_CARTAS_AUDIENCIA", entidade="solicitacao_audiencia",
+            entidade_id=solicitacao.id, detalhes=solicitacao.nome_cliente,
+        )
+        contexto["mensagem"] = f"Os dois e-mails (cliente e banco) de {solicitacao.nome_cliente} foram enviados."
+        return templates.TemplateResponse(request, "solicitacao_audiencia.html", contexto)
+
+    partes = []
+    if not resultado.cliente_enviado:
+        partes.append(f"Cliente: {resultado.cliente_erro}")
+    if not resultado.banco_enviado:
+        partes.append(f"Banco: {resultado.banco_erro}")
+    contexto["erro"] = "Falha ao enviar — " + " | ".join(partes) + ". Pode tentar enviar de novo."
+    contexto["solicitacao_id"] = solicitacao.id
+    contexto["previas_email"] = montar_previas(db, solicitacao)
+    return templates.TemplateResponse(request, "solicitacao_audiencia.html", contexto, status_code=502)
