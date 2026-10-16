@@ -495,6 +495,14 @@ button.perigo:disabled:hover {
   color: var(--danger);
 }
 
+/* Botão de ação dentro de linha de tabela (Salvar/Ativar/Desativar/
+   Excluir/Marcar resolvido etc.) — mesmo padding/font-size copiado em
+   style="" inline em 6+ templates (M40, auditoria), agora numa classe só. */
+button.botao-linha, .botao.botao-linha {
+  padding: 7px 12px;
+  font-size: 0.8rem;
+}
+
 /* ---------- tabelas ---------- */
 
 .tabela-wrap {

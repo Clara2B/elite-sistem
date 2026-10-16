@@ -172,7 +172,7 @@ def test_botao_desativar_usuario_usa_estilo_de_risco(client, db):
 
     resposta = client.get("/app/usuarios")
     assert resposta.status_code == 200
-    assert '<button type="submit" class="perigo"' in resposta.text
+    assert '<button type="submit" class="perigo botao-linha"' in resposta.text
 
 
 def test_admin_edita_usuario_pela_tela(client, db):
