@@ -17,6 +17,7 @@ from app.models import (
     Laudo,
     Processo,
 )
+from app.services.cartas import cnpj_valido
 from app.utils import normalize
 
 # Entidades com FK NOT NULL pra empresa-cliente — todo laudo/audiência/
@@ -170,7 +171,14 @@ def criar_empresa(db: Session, nome: str, cnpj: str | None = None) -> EmpresaCli
     for existente in db.scalars(select(EmpresaCliente)):
         if normalize(existente.nome) == alvo:
             raise ValueError(f"Já existe uma empresa-cliente chamada '{existente.nome}'.")
-    empresa = EmpresaCliente(nome=nome, cnpj=(cnpj or "").strip() or None)
+    cnpj_limpo = (cnpj or "").strip() or None
+    # Reaproveita o mesmo validador já usado em Cartas (2026-10-13,
+    # auditoria M16) — antes, qualquer texto era aceito como CNPJ aqui e
+    # aparecia depois em relatórios/PDFs oficiais sem nenhuma checagem de
+    # dígito verificador.
+    if cnpj_limpo and not cnpj_valido(cnpj_limpo):
+        raise ValueError(f"CNPJ '{cnpj_limpo}' inválido.")
+    empresa = EmpresaCliente(nome=nome, cnpj=cnpj_limpo)
     db.add(empresa)
     db.commit()
     return empresa
@@ -185,8 +193,11 @@ def atualizar_empresa(db: Session, empresa_id: int, nome: str, cnpj: str | None)
     for existente in db.scalars(select(EmpresaCliente)):
         if existente.id != empresa_id and normalize(existente.nome) == alvo:
             raise ValueError(f"Já existe uma empresa-cliente chamada '{existente.nome}'.")
+    cnpj_limpo = (cnpj or "").strip() or None
+    if cnpj_limpo and not cnpj_valido(cnpj_limpo):
+        raise ValueError(f"CNPJ '{cnpj_limpo}' inválido.")
     empresa.nome = nome
-    empresa.cnpj = (cnpj or "").strip() or None
+    empresa.cnpj = cnpj_limpo
     db.commit()
     return empresa
 

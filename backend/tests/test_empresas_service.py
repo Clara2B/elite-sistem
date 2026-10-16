@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from app.models import (
     Audiencia,
     Cobranca,
@@ -10,8 +12,10 @@ from app.models import (
 )
 from app.services.empresas import (
     LISTA_OFICIAL_EMPRESAS,
+    atualizar_empresa,
     contar_vinculos_empresa,
     contar_vinculos_todas_empresas,
+    criar_empresa,
     excluir_empresa,
     excluir_empresas_em_massa,
     excluir_empresas_inativas,
@@ -20,6 +24,39 @@ from app.services.empresas import (
     sincronizar_lista_oficial,
 )
 from app.utils import normalize
+
+
+def test_criar_empresa_com_cnpj_valido(db):
+    empresa = criar_empresa(db, "Nova Empresa", "11.222.333/0001-81")
+    assert empresa.cnpj == "11.222.333/0001-81"
+
+
+def test_criar_empresa_com_cnpj_invalido_eh_rejeitada(db):
+    """Auditoria M16: cnpj_valido() já existe (services/cartas.py) mas não
+    era reaproveitado aqui — qualquer texto era aceito como CNPJ, sem
+    checagem de dígito verificador."""
+    with pytest.raises(ValueError, match="CNPJ"):
+        criar_empresa(db, "Nova Empresa Invalida", "123")
+
+
+def test_criar_empresa_sem_cnpj_funciona(db):
+    empresa = criar_empresa(db, "Empresa Sem Cnpj")
+    assert empresa.cnpj is None
+
+
+def test_atualizar_empresa_com_cnpj_invalido_eh_rejeitada(db):
+    empresa = criar_empresa(db, "Empresa Para Editar")
+    with pytest.raises(ValueError, match="CNPJ"):
+        atualizar_empresa(db, empresa.id, "Empresa Para Editar", "abc")
+    db.refresh(empresa)
+    assert empresa.cnpj is None
+
+
+def test_atualizar_empresa_com_cnpj_valido_funciona(db):
+    empresa = criar_empresa(db, "Empresa Para Editar 2")
+    atualizar_empresa(db, empresa.id, "Empresa Para Editar 2", "11222333000181")
+    db.refresh(empresa)
+    assert empresa.cnpj == "11222333000181"
 
 
 def test_sincroniza_cria_atualiza_e_exclui(db):

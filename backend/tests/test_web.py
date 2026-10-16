@@ -176,17 +176,17 @@ def test_empresas_admin_cria_edita_e_desativa(client, db):
     db.commit()
     client.post("/login", data={"email": "fulano@teste.local", "senha": "certa"})
 
-    resposta = client.post("/app/empresas", data={"nome": "Absoluta Teste", "cnpj": "11.111.111/0001-11"})
+    resposta = client.post("/app/empresas", data={"nome": "Absoluta Teste", "cnpj": "12.345.678/0001-95"})
     assert resposta.status_code == 200
     assert "Absoluta Teste" in resposta.text
-    assert "11.111.111" in resposta.text
+    assert "12.345.678" in resposta.text
 
     empresa_id = client.get("/empresas").json()[0]["id"]
 
-    resposta = client.post(f"/app/empresas/{empresa_id}", data={"nome": "Absoluta Editada", "cnpj": "22.222.222/0001-22"})
+    resposta = client.post(f"/app/empresas/{empresa_id}", data={"nome": "Absoluta Editada", "cnpj": "98.765.432/0001-98"})
     assert resposta.status_code == 200
     assert "Absoluta Editada" in resposta.text
-    assert "22.222.222" in resposta.text
+    assert "98.765.432" in resposta.text
 
     resposta = client.post(f"/app/empresas/{empresa_id}/ativo?ativo=false", follow_redirects=False)
     assert resposta.status_code == 303
