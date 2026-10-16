@@ -15,6 +15,7 @@ from app.pdf_export import gerar_pdf_carta_banco
 from app.services.cartas import (
     ConviteBanco,
     ConviteCliente,
+    formatar_hora,
     formatar_texto_carta_banco,
     formatar_texto_carta_cliente,
     identificar_documento,
@@ -125,6 +126,29 @@ def test_identificar_documento_recusa_quantidade_de_digitos_invalida():
         identificar_documento("123")
 
 
+# --- formatar_hora (M33: mensagem em português, não o ValueError padrão do
+# Python "not enough values to unpack" que escapava daqui) ------------------
+
+
+def test_formatar_hora_formato_valido():
+    assert formatar_hora("14:05") == "14H05"
+
+
+def test_formatar_hora_recusa_texto_sem_dois_pontos():
+    with pytest.raises(ValueError, match="Horário inválido"):
+        formatar_hora("1405")
+
+
+def test_formatar_hora_recusa_texto_com_mais_de_um_dois_pontos():
+    with pytest.raises(ValueError, match="Horário inválido"):
+        formatar_hora("14:05:00")
+
+
+def test_formatar_hora_recusa_vazio():
+    with pytest.raises(ValueError, match="Horário inválido"):
+        formatar_hora("")
+
+
 # --- Rota /app/cartas/convite-cliente/texto ---------------------------------
 
 
@@ -145,6 +169,18 @@ def test_rota_texto_convite_cliente_valida_link(client, db):
     )
     assert resposta.status_code == 400
     assert "Link da audiência inválido" in resposta.json()["erro"]
+
+
+def test_rota_texto_convite_cliente_hora_invalida_mostra_mensagem_amigavel(client, db):
+    """M33: a hora malformada chega até a rota web como erro amigável em
+    português, não a mensagem crua do Python escapando como 500."""
+    _logar_admin(db, client, "admin.cartas.hora@teste.local")
+    resposta = client.post(
+        "/app/cartas/convite-cliente/texto",
+        data={"autor": "A", "reu": "B", "dia": "2026-10-15", "hora": "1405", "link": "meet.google.com/x"},
+    )
+    assert resposta.status_code == 400
+    assert "Horário inválido" in resposta.json()["erro"]
 
 
 def test_rota_texto_convite_cliente_retorna_o_mesmo_texto_do_servico(client, db):
