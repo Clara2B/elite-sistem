@@ -38,7 +38,7 @@
             <td>
               <div class="acoes-linha">
                 <form method="post" action="/app/usuarios/{{ u.id }}/ativo?ativo={{ 'false' if u.ativo else 'true' }}">
-                  <button type="submit" class="secundario" style="padding:6px 10px; font-size:0.8rem;">
+                  <button type="submit" class="secundario botao-linha">
                     {{ "Desativar" if u.ativo else "Ativar" }}
                   </button>
                 </form>

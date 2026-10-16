@@ -29,7 +29,7 @@
                 <td>
                   <form method="post"
                         action="/app/chamados/{{ c.id }}/resolvido?resolvido={{ 'false' if c.resolvido else 'true' }}">
-                    <button type="submit" class="secundario" style="padding:7px 12px; font-size:0.8rem;">
+                    <button type="submit" class="secundario botao-linha">
                       {{ "Reabrir" if c.resolvido else "Marcar resolvido" }}
                     </button>
                   </form>
