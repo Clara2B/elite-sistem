@@ -35,35 +35,35 @@ def test_login_bloqueia_apos_5_tentativas_falhas(client, db):
     """Auditoria M08: sem isso, nenhuma tentativa automatizada de login
     travava — só o custo do bcrypt. 5 falhas seguidas pro mesmo e-mail
     bloqueiam tentativas novas por um tempo, mesmo com a senha certa."""
-    _criar_usuario(db, email="bloqueio@teste.local", senha="senha123")
+    _criar_usuario(db, email="bloqueio@teste.com", senha="senha123")
 
     for _ in range(5):
-        resp = client.post("/auth/login", json={"email": "bloqueio@teste.local", "senha": "errada"})
+        resp = client.post("/auth/login", json={"email": "bloqueio@teste.com", "senha": "errada"})
         assert resp.status_code == 401
 
-    resp = client.post("/auth/login", json={"email": "bloqueio@teste.local", "senha": "senha123"})
+    resp = client.post("/auth/login", json={"email": "bloqueio@teste.com", "senha": "senha123"})
     assert resp.status_code == 429
 
 
 def test_bloqueio_de_login_eh_por_email_nao_global(client, db):
-    _criar_usuario(db, email="vitima@teste.local", senha="senha123")
-    _criar_usuario(db, email="outro.usuario@teste.local", senha="senha456")
+    _criar_usuario(db, email="vitima@teste.com", senha="senha123")
+    _criar_usuario(db, email="outro.usuario@teste.com", senha="senha456")
 
     for _ in range(5):
-        client.post("/auth/login", json={"email": "vitima@teste.local", "senha": "errada"})
+        client.post("/auth/login", json={"email": "vitima@teste.com", "senha": "errada"})
 
-    resp = client.post("/auth/login", json={"email": "outro.usuario@teste.local", "senha": "senha456"})
+    resp = client.post("/auth/login", json={"email": "outro.usuario@teste.com", "senha": "senha456"})
     assert resp.status_code == 200
 
 
 def test_tentativas_fora_da_janela_de_bloqueio_nao_contam(client, db):
-    _criar_usuario(db, email="janela@teste.local", senha="senha123")
+    _criar_usuario(db, email="janela@teste.com", senha="senha123")
     antigo = datetime.utcnow() - timedelta(minutes=30)
     for _ in range(5):
-        db.add(LogAuditoria(acao="LOGIN_FALHOU", entidade="usuario", entidade_id="janela@teste.local", criado_em=antigo))
+        db.add(LogAuditoria(acao="LOGIN_FALHOU", entidade="usuario", entidade_id="janela@teste.com", criado_em=antigo))
     db.commit()
 
-    resp = client.post("/auth/login", json={"email": "janela@teste.local", "senha": "senha123"})
+    resp = client.post("/auth/login", json={"email": "janela@teste.com", "senha": "senha123"})
     assert resp.status_code == 200
 
 
@@ -95,7 +95,7 @@ def test_token_de_sessao_nunca_fica_em_texto_puro_no_banco(client, db):
     """Auditoria M07: `Sessao.token` guarda o hash, não o token de verdade
     — um dump/backup do banco não deve entregar um token pronto pra uso."""
     _criar_usuario(db, senha="senha123")
-    login = client.post("/auth/login", json={"email": "fulano@teste.local", "senha": "senha123"})
+    login = client.post("/auth/login", json={"email": "fulano@teste.com", "senha": "senha123"})
     token = login.json()["token"]
 
     todas_as_sessoes = db.query(Sessao).all()
