@@ -29,15 +29,23 @@ from datetime import datetime, timedelta
 import bcrypt
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Operadora, Sessao, Setor, SetorModulo, Usuario, UsuarioSetor
+from app.models import LogAuditoria, Operadora, Sessao, Setor, SetorModulo, Usuario, UsuarioSetor
 
 SESSAO_DURACAO_HORAS = 12
 PAPEIS_GLOBAIS = {"ADMIN_SUPERIOR", "ADMIN_TI"}
 COOKIE_SESSAO = "sessao"
+
+# Rate limiting de login (2026-10-13, auditoria M08) — nenhuma tentativa
+# automatizada trava hoje, só o custo do bcrypt (lento de propósito, mas
+# não suficiente contra um ataque distribuído). Limite por e-mail, não por
+# IP: mais simples, sem precisar confiar em cabeçalho de proxy, e já cobre
+# o caso real (alguém tentando entrar numa conta específica).
+LIMITE_TENTATIVAS_LOGIN = 5
+JANELA_BLOQUEIO_LOGIN_MINUTOS = 15
 
 # Módulos (abas operacionais) e a operadora dona de cada um — None significa
 # "válido para as duas operadoras" (hoje só Pendências, que mistura cobranças
@@ -103,6 +111,27 @@ def buscar_sessao(db: Session, token: str) -> Sessao | None:
     """Busca a `Sessao` a partir do token recebido (cookie ou Bearer) — só
     pelo hash dele, nunca pelo valor em texto puro (ver `_hash_token`)."""
     return db.get(Sessao, _hash_token(token))
+
+
+def excedeu_tentativas_login(db: Session, email: str) -> bool:
+    """True se `email` já acumulou `LIMITE_TENTATIVAS_LOGIN` falhas (ou
+    mais) nos últimos `JANELA_BLOQUEIO_LOGIN_MINUTOS` minutos (2026-10-13,
+    auditoria M08) — mitigação simples de força bruta, reaproveitando o
+    `LogAuditoria` que já registra `LOGIN_FALHOU` em todo login mal
+    sucedido, sem tabela nova nem dependência externa (ex. slowapi). Quem
+    chama precisa checar isso ANTES de `verificar_senha` e, se exceder,
+    nem tentar — só então registrar outra falha reiniciaria a janela."""
+    desde = datetime.utcnow() - timedelta(minutes=JANELA_BLOQUEIO_LOGIN_MINUTOS)
+    tentativas = db.scalar(
+        select(func.count())
+        .select_from(LogAuditoria)
+        .where(
+            LogAuditoria.acao == "LOGIN_FALHOU",
+            LogAuditoria.entidade_id == email,
+            LogAuditoria.criado_em >= desde,
+        )
+    )
+    return (tentativas or 0) >= LIMITE_TENTATIVAS_LOGIN
 
 
 def criar_sessao(db: Session, usuario: Usuario) -> tuple[Sessao, str]:

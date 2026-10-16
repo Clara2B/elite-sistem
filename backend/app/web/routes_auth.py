@@ -7,7 +7,13 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.auth import buscar_sessao, criar_sessao, verificar_senha
+from app.auth import (
+    JANELA_BLOQUEIO_LOGIN_MINUTOS,
+    buscar_sessao,
+    criar_sessao,
+    excedeu_tentativas_login,
+    verificar_senha,
+)
 from app.db import get_db
 from app.models import Usuario
 from app.services.auditoria import registrar
@@ -35,6 +41,17 @@ def processar_login(
     db: Session = Depends(get_db),
 ):
     email_normalizado = email.strip().lower()
+    if excedeu_tentativas_login(db, email_normalizado):
+        return templates.TemplateResponse(
+            request, "login.html",
+            {
+                "erro": f"Muitas tentativas de login para esse e-mail. Tente novamente em até "
+                f"{JANELA_BLOQUEIO_LOGIN_MINUTOS} minutos.",
+                "email": email,
+            },
+            status_code=429,
+        )
+
     usuario = db.scalar(select(Usuario).where(Usuario.email == email_normalizado))
     if usuario is None or not usuario.ativo or not verificar_senha(senha, usuario.senha_hash):
         registrar(db, usuario, "LOGIN_FALHOU", entidade="usuario", entidade_id=email_normalizado)
