@@ -112,6 +112,27 @@ def test_import_usa_coluna_a_como_data_mesmo_com_coluna_extra_de_data(db):
     assert laudo.data == date(2026, 8, 26)  # coluna A, não a coluna extra (27/08)
 
 
+def test_import_grande_comita_a_cada_2000_linhas_sem_perder_nenhuma(db):
+    """Auditoria M19: mesmo problema já corrigido em
+    app/services/processos.py — sem commit incremental, um import grande
+    fica inteiro numa única transação até o fim do loop. Gera mais de 2000
+    linhas novas pra atravessar o ponto de commit no meio do loop e
+    confirma que nenhuma linha se perde."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["DATA", "EMPRESA", "TIPO DE LAUDO", "NOME DO CLIENTE"])
+    total = 2005
+    for i in range(total):
+        ws.append([date(2026, 1, 1), "ABSOLUTA", "AUTO", f"Cliente {i}"])
+    path = Path(tempfile.mkdtemp()) / "laudos.xlsx"
+    wb.save(path)
+
+    resumo = importar_planilha(db, str(path))
+
+    assert resumo.linhas_novas == total
+    assert db.query(Laudo).count() == total
+
+
 def test_apagar_todos_laudos_remove_tudo_e_devolve_a_contagem(db):
     empresa1 = get_or_create_empresa(db, "ABSOLUTA")
     empresa2 = get_or_create_empresa(db, "ALFA")

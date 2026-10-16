@@ -149,6 +149,18 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
         existentes.add(chave)
         resumo.linhas_novas += 1
 
+        # Mesmo padrão já usado em app/services/processos.py (2026-10-13,
+        # auditoria M19) — sem isso, um import grande fica inteiro numa
+        # única transação até o fim do loop, pesando memória e mantendo
+        # uma transação aberta por muito tempo no pooler do Supabase; se
+        # uma linha no meio do lote tiver um valor longo o bastante pra
+        # violar algum limite de coluna, o lote inteiro é revertido em vez
+        # de só o que já tinha sido comitado. Seguro aqui pelo mesmo
+        # motivo: nenhuma exceção é levantada dentro do loop por dado
+        # ruim (só contadores e "continue").
+        if resumo.linhas_novas % 2000 == 0:
+            db.commit()
+
     db.commit()
     _logger.info("import laudos: %.1fs total — %s", time.perf_counter() - inicio, resumo)
     return resumo
