@@ -157,6 +157,30 @@ def test_import_cpf_com_texto_longo_nao_quebra(db):
     assert db.query(Audiencia).one().cpf == cpf_longo
 
 
+def test_reimportar_mesmo_cpf_com_formatacao_diferente_nao_duplica(db):
+    """Auditoria M14: a chave de deduplicação normalizava o nome (sem
+    acento/maiúscula) mas comparava o CPF em texto cru — reimportar a
+    mesma pessoa com o CPF formatado diferente ("123.456.789-01" vs
+    "12345678901") criava uma duplicata silenciosa."""
+
+    def _planilha_com_cpf(cpf_na_celula):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["EMPRESA", "NOME COMPLETO", "DATA DE RECEBIMENTO", "CPF"])
+        ws.append(["ALFA", "Cliente Teste", date(2026, 9, 1), cpf_na_celula])
+        path = Path(tempfile.mkdtemp()) / "audiencias.xlsx"
+        wb.save(path)
+        return str(path)
+
+    resumo1 = importar_planilha(db, _planilha_com_cpf("123.456.789-01"))
+    assert resumo1.linhas_novas == 1
+
+    resumo2 = importar_planilha(db, _planilha_com_cpf("12345678901"))
+    assert resumo2.linhas_novas == 0
+    assert resumo2.linhas_ja_existentes == 1
+    assert db.query(Audiencia).count() == 1
+
+
 def test_apagar_todas_audiencias_remove_tudo_e_devolve_a_contagem(db):
     empresa1 = get_or_create_empresa(db, "ALFA")
     empresa2 = get_or_create_empresa(db, "BETA")

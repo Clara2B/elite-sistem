@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import calendar
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import date
@@ -22,6 +23,19 @@ from app.models import Audiencia, EmpresaCliente, FaixaAudiencia
 from app.services.cartas import cnpj_valido
 from app.services.empresas import get_or_create_empresa
 from app.utils import cell_text, normalize, parse_date_cell
+
+_RE_SOMENTE_DIGITOS = re.compile(r"\D")
+
+
+def _normalizar_cpf(cpf: str | None) -> str:
+    """Só os dígitos do CPF (2026-10-13, auditoria M14) — usado SÓ na
+    chave de deduplicação, nunca pra sobrescrever o valor gravado. Antes,
+    a chave comparava o nome normalizado (sem acento/maiúscula) mas o CPF
+    em texto cru (só `.strip()`): reimportar a mesma pessoa com o CPF
+    formatado diferente entre uma planilha e outra ("123.456.789-01" vs
+    "12345678901") criava uma duplicata silenciosa, inflando a contagem
+    usada pra calcular a faixa de cobrança."""
+    return _RE_SOMENTE_DIGITOS.sub("", cpf or "")
 
 _logger = logging.getLogger("elite_sistem.import")
 
@@ -80,7 +94,7 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
     col_advogada = _col_optional(df, "ADVOGADA")
 
     existentes = {
-        (a.empresa_cliente_id, a.data_recebimento, normalize(a.nome_cliente), (a.cpf or "").strip())
+        (a.empresa_cliente_id, a.data_recebimento, normalize(a.nome_cliente), _normalizar_cpf(a.cpf))
         for a in db.scalars(select(Audiencia))
     }
     # Cache de empresa-cliente pro import inteiro — ver nota equivalente em
@@ -102,7 +116,7 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
         cpf = cell_text(row.get(col_cpf)) if col_cpf else ""
 
         empresa = get_or_create_empresa(db, empresa_nome, cache=empresa_cache)
-        chave = (empresa.id, data_val, normalize(cliente), cpf)
+        chave = (empresa.id, data_val, normalize(cliente), _normalizar_cpf(cpf))
         if chave in existentes:
             resumo.linhas_ja_existentes += 1
             continue
