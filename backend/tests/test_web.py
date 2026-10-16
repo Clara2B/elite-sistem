@@ -478,6 +478,33 @@ def test_relatorio_processos_sem_resultado_mostra_mensagem_amigavel(client, db):
     assert "Nenhum processo encontrado nesse período." in resposta.text
 
 
+def test_marcar_resolvido_exige_confirmacao_no_modal(client, db):
+    """Auditoria M25: "Marcar resolvido" é irreversível (não existe
+    "reabrir" em nenhum fluxo) e removia o prazo da lista com um único
+    clique, sem aviso — agora abre o mesmo modal de confirmação usado em
+    outras ações perigosas antes de enviar o formulário de verdade."""
+    db.add(Usuario(nome="Fulano", email="fulano.m25@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    empresa = EmpresaCliente(nome="M25 LTDA")
+    db.add(empresa)
+    db.flush()
+    processo = Processo(numero_processo="M25-0001", empresa_cliente_id=empresa.id, nome_cliente="Fulano de Tal")
+    db.add(processo)
+    db.flush()
+    evento = EventoProcesso(
+        processo_id=processo.id, data=date.today(), tipo_evento_nome="CUSTAS",
+        prazo_fatal=True, data_prazo=date.today(),
+    )
+    db.add(evento)
+    db.commit()
+    client.post("/login", data={"email": "fulano.m25@teste.local", "senha": "certa"})
+
+    resposta = client.get("/app/processos")
+    assert resposta.status_code == 200
+    assert f'data-abrir-confirmacao="modal-resolver-{evento.id}"' in resposta.text
+    assert f'id="modal-resolver-{evento.id}" class="modal-confirmacao"' in resposta.text
+    assert f'action="/app/processos/eventos/{evento.id}/resolver"' in resposta.text
+
+
 def test_erro_nao_tratado_em_rota_html_mostra_pagina_estilizada(client, db, monkeypatch):
     """A Clara reportou 'Internal Server Error' em branco ao importar
     audiências (era StringDataRightTruncation, já corrigido) — mas qualquer

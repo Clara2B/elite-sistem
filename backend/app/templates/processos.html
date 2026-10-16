@@ -45,9 +45,10 @@
                 </td>
                 <td>{{ p.assistente or "-" }}</td>
                 <td>
-                  <form method="post" action="/app/processos/eventos/{{ p.evento_id }}/resolver">
-                    <button type="submit" class="secundario" style="padding:6px 10px; font-size:0.8rem;">Marcar resolvido</button>
-                  </form>
+                  <button type="button" class="secundario" style="padding:6px 10px; font-size:0.8rem;"
+                          data-abrir-confirmacao="modal-resolver-{{ p.evento_id }}" data-nome-alvo="{{ p.nome_cliente }}">
+                    Marcar resolvido
+                  </button>
                 </td>
               </tr>
             {% endfor %}
@@ -58,6 +59,26 @@
       <p class="vazio">Nenhum prazo fatal vencendo nos próximos 30 dias. 🎉</p>
     {% endif %}
   </div>
+
+  {% for p in prazos %}
+    <dialog id="modal-resolver-{{ p.evento_id }}" class="modal-confirmacao">
+      <div class="modal-corpo">
+        <div class="modal-icone">{{ icones.icone('alerta') }}</div>
+        <h3>Marcar prazo fatal como resolvido?</h3>
+        <p>
+          Isso remove definitivamente o prazo de <strong data-nome-alvo-destino>{{ p.nome_cliente }}</strong>
+          ({{ p.tipo_evento_nome }}, {{ p.data_prazo.strftime("%d/%m/%Y") }}) da lista de alertas — não
+          existe uma forma de reabrir pelo sistema, só direto no banco.
+        </p>
+      </div>
+      <div class="modal-acoes">
+        <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
+        <form method="post" action="/app/processos/eventos/{{ p.evento_id }}/resolver">
+          <button type="submit" class="perigo">Marcar resolvido</button>
+        </form>
+      </div>
+    </dialog>
+  {% endfor %}
 
   <div class="card">
     <h2>Relatório</h2>
