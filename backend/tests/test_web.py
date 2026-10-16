@@ -160,6 +160,21 @@ def test_checkboxes_de_setor_tem_aria_label(client, db):
     assert resposta.text.count(f'aria-label="Vincular ao setor {setor.nome}"') >= 2
 
 
+def test_botao_desativar_usuario_usa_estilo_de_risco(client, db):
+    """Auditoria M38: "Desativar" usava estilo neutro, diferente do
+    "Desativar" de Empresas/Setores (que já usa estilo de perigo) — corta
+    o acesso de um colega imediatamente, sem nenhum destaque de risco."""
+    db.add(Usuario(nome="Admin", email="admin.m38@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    alvo = Usuario(nome="Fulana", email="fulana.m38@teste.local", senha_hash=hash_senha("certa"))
+    db.add(alvo)
+    db.commit()
+    client.post("/login", data={"email": "admin.m38@teste.local", "senha": "certa"})
+
+    resposta = client.get("/app/usuarios")
+    assert resposta.status_code == 200
+    assert '<button type="submit" class="perigo"' in resposta.text
+
+
 def test_admin_edita_usuario_pela_tela(client, db):
     admin = Usuario(nome="Admin", email="admin.web@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR")
     db.add(admin)
