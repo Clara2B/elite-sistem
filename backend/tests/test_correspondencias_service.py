@@ -172,3 +172,20 @@ def test_gerar_relatorio_sem_correspondencia_devolve_lista_vazia(db):
     r = gerar_relatorio(db, "Eros", "Janeiro")
     assert r.linhas == []
     assert r.total == 0.0
+
+
+def test_gerar_relatorio_mes_sem_acento_na_planilha_bate_com_mes_acentuado(db):
+    """Auditoria M15: a comparação de "mês" era sensível a acento,
+    diferente da de empresa (que já usa normalize()) — "MARCO" (erro de
+    digitação, sem cedilha, no estilo de outros já vistos neste sistema)
+    importado da planilha não batia com "Março" vindo do dropdown da
+    tela, e o relatório mostrava "Nenhuma correspondência encontrada"
+    mesmo havendo a linha."""
+    path = _planilha([
+        ["MARCO", "Dra. A", "Cliente A", "Eros", "ADVOGADO", "R$ 100,00", "PROCON"],
+    ])
+    importar_planilha(db, path)
+
+    r = gerar_relatorio(db, "Eros", "Março")
+    assert len(r.linhas) == 1
+    assert r.linhas[0].autor == "Cliente A"
