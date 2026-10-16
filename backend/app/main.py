@@ -30,6 +30,7 @@ from app.web.routes_configuracao import router as web_configuracao_router
 from app.web.routes_correspondencias import router as web_correspondencias_router
 from app.web.routes_dashboard import router as web_dashboard_router
 from app.web.routes_empresas import router as web_empresas_router
+from app.web.routes_faixas_audiencia import router as web_faixas_audiencia_router
 from app.web.routes_funcionarios import router as web_funcionarios_router
 from app.web.routes_laudos import router as web_laudos_router
 from app.web.routes_pendencias import router as web_pendencias_router
@@ -168,3 +169,4 @@ app.include_router(web_chamados_router)
 app.include_router(web_correspondencias_router)
 app.include_router(web_auditoria_router)
 app.include_router(web_relatorio_assessorias_router)
+app.include_router(web_faixas_audiencia_router)

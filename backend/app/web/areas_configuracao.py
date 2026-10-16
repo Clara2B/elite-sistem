@@ -28,4 +28,8 @@ AREAS_CONFIGURACAO = [
     # Relatórios das Assessorias e Chamados saíram de dentro de Configuração
     # (2026-10-14, a pedido da Clara) — ganharam item próprio na barra
     # lateral (ver app/web/menu.py), não fazem mais parte desta lista.
+    {
+        "url": "/app/faixas-audiencia", "rotulo": "Faixas de Audiências", "icone": "audiencias",
+        "descricao": "Faixas de preço por quantidade de audiências no mês.",
+    },
 ]
