@@ -145,6 +145,21 @@ def test_tela_audiencias_envolve_a_tabela_de_resultado_em_tabela_wrap(client, db
     assert '<div class="tabela-wrap">' in resposta.text
 
 
+def test_checkboxes_de_setor_tem_aria_label(client, db):
+    """Auditoria M28: as caixas de seleção de setor em usuarios.html (tela
+    de edição de usuário e de novo usuário) não tinham <label> nem
+    aria-label — o cabeçalho da coluna é vazio, e um leitor de tela
+    anunciava a caixa sem nenhuma descrição."""
+    db.add(Usuario(nome="Admin", email="admin.m28@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    setor = db.query(Setor).first()
+    db.commit()
+    client.post("/login", data={"email": "admin.m28@teste.local", "senha": "certa"})
+
+    resposta = client.get("/app/usuarios")
+    assert resposta.status_code == 200
+    assert resposta.text.count(f'aria-label="Vincular ao setor {setor.nome}"') >= 2
+
+
 def test_admin_edita_usuario_pela_tela(client, db):
     admin = Usuario(nome="Admin", email="admin.web@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR")
     db.add(admin)
