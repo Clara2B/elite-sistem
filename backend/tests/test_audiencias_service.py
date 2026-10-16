@@ -3,6 +3,7 @@ from datetime import date
 from pathlib import Path
 
 import openpyxl
+import pytest
 from sqlalchemy import Text
 
 from app.models import Audiencia
@@ -71,6 +72,23 @@ def test_mes_anterior_nao_entra_no_acumulado(db):
     ini, fim = periodo_quinzenal(2026, 10, 2)
     result = gerar_relatorio(db, "ALFA", ini, fim)
     assert (result.quantidade_mes, result.valor_unitario, result.total) == (1, 400.0, 400.0)
+
+
+def test_gerar_relatorio_aceita_cnpj_valido_sobrescrito(db):
+    """Auditoria M12: o CNPJ sobrescrito via parâmetro precisa ser um CNPJ
+    de verdade — antes, qualquer texto era aceito e ia pro PDF/Excel/JSON
+    oficial sem checagem."""
+    _planilha(db, "ALFA", 10, 5)
+    ini, fim = periodo_quinzenal(2026, 9, 1)
+    result = gerar_relatorio(db, "ALFA", ini, fim, cnpj="11222333000181")
+    assert result.cnpj == "11222333000181"
+
+
+def test_gerar_relatorio_rejeita_cnpj_invalido_sobrescrito(db):
+    _planilha(db, "ALFA", 10, 5)
+    ini, fim = periodo_quinzenal(2026, 9, 1)
+    with pytest.raises(ValueError, match="CNPJ"):
+        gerar_relatorio(db, "ALFA", ini, fim, cnpj="123")
 
 
 def test_empresa_normalizada_sem_acento_e_caixa(db):

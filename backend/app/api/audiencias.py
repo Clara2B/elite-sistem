@@ -62,7 +62,10 @@ def relatorio(
         resultado = audiencias_service.gerar_relatorio(db, empresa, periodo_ini, periodo_fim, cnpj)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    registrar(db, usuario, "GEROU_RELATORIO_AUDIENCIAS", entidade="empresa_cliente", entidade_id=empresa)
+    registrar(
+        db, usuario, "GEROU_RELATORIO_AUDIENCIAS", entidade="empresa_cliente", entidade_id=empresa,
+        detalhes=f"CNPJ sobrescrito via parâmetro: {cnpj}" if cnpj else None,
+    )
     return {
         "empresa": resultado.empresa,
         "cnpj": resultado.cnpj,
@@ -93,7 +96,10 @@ def relatorio_pdf(
         resultado = audiencias_service.gerar_relatorio(db, empresa, periodo_ini, periodo_fim, cnpj)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    registrar(db, usuario, "GEROU_RELATORIO_AUDIENCIAS_PDF", entidade="empresa_cliente", entidade_id=empresa)
+    registrar(
+        db, usuario, "GEROU_RELATORIO_AUDIENCIAS_PDF", entidade="empresa_cliente", entidade_id=empresa,
+        detalhes=f"CNPJ sobrescrito via parâmetro: {cnpj}" if cnpj else None,
+    )
     pdf_bytes = gerar_pdf_audiencias(resultado)
     nome_arquivo = nome_arquivo_pdf("audiencias", resultado.empresa, f"{ano}-{mes:02d}", f"q{quinzena}")
     return Response(
@@ -117,7 +123,10 @@ def relatorio_xlsx(
         resultado = audiencias_service.gerar_relatorio(db, empresa, periodo_ini, periodo_fim, cnpj)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    registrar(db, usuario, "GEROU_RELATORIO_AUDIENCIAS_XLSX", entidade="empresa_cliente", entidade_id=empresa)
+    registrar(
+        db, usuario, "GEROU_RELATORIO_AUDIENCIAS_XLSX", entidade="empresa_cliente", entidade_id=empresa,
+        detalhes=f"CNPJ sobrescrito via parâmetro: {cnpj}" if cnpj else None,
+    )
     excel_bytes = gerar_excel_audiencias(resultado)
     nome_arquivo = nome_arquivo_xlsx("audiencias", resultado.empresa, f"{ano}-{mes:02d}", f"q{quinzena}")
     return Response(
