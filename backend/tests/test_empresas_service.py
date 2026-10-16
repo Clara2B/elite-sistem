@@ -21,6 +21,7 @@ from app.services.empresas import (
     excluir_empresas_inativas,
     get_or_create_empresa,
     realocar_empresas_em_massa,
+    resolver_empresa_por_nome,
     sincronizar_lista_oficial,
 )
 from app.utils import normalize
@@ -407,6 +408,21 @@ def test_realocar_em_massa_destino_inexistente_e_recusada(db):
         assert False, "deveria ter recusado"
     except ValueError as e:
         assert "não encontrada" in str(e).lower()
+
+
+def test_resolver_empresa_por_nome_ignora_acento_e_caixa(db):
+    """Auditoria M21: esse helper substitui a mesma varredura que estava
+    copiada 3 vezes (Audiências/Pendências/Correspondências) por uma
+    função só, em services/empresas.py."""
+    get_or_create_empresa(db, "São José")
+    db.commit()
+
+    assert resolver_empresa_por_nome(db, "sao jose").nome == "São José"
+    assert resolver_empresa_por_nome(db, "SÃO JOSÉ").nome == "São José"
+
+
+def test_resolver_empresa_por_nome_nao_encontrada_devolve_none(db):
+    assert resolver_empresa_por_nome(db, "Empresa Que Não Existe") is None
 
 
 def test_lista_oficial_tem_48_empresas_sem_duplicidade():

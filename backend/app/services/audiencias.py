@@ -19,9 +19,9 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.excel_reader import load_data_sheets
-from app.models import Audiencia, EmpresaCliente, FaixaAudiencia
+from app.models import Audiencia, FaixaAudiencia
 from app.services.cartas import cnpj_valido
-from app.services.empresas import get_or_create_empresa
+from app.services.empresas import get_or_create_empresa, resolver_empresa_por_nome
 from app.utils import cell_text, normalize, parse_date_cell
 
 _RE_SOMENTE_DIGITOS = re.compile(r"\D")
@@ -192,12 +192,7 @@ def gerar_relatorio(
     periodo_fim: date,
     cnpj: str | None = None,
 ) -> AudienciasResult:
-    alvo_empresa = normalize(empresa_nome)
-    empresa = None
-    for e in db.scalars(select(EmpresaCliente)):
-        if normalize(e.nome) == alvo_empresa:
-            empresa = e
-            break
+    empresa = resolver_empresa_por_nome(db, empresa_nome)
     if empresa is None:
         raise ValueError(f"A empresa '{empresa_nome}' não foi encontrada.")
 
