@@ -30,6 +30,12 @@ CHAVE_DUPLICIDADE = ["DATA DE RECEBIMENTO", "EMPRESA", "NOME COMPLETO", "CPF"]
 
 
 def periodo_quinzenal(ano: int, mes: int, quinzena: int) -> tuple[date, date]:
+    # Validação explícita (2026-10-13, auditoria M13) — antes, qualquer
+    # valor diferente de 1 (ex.: 0, 3, 99) caía silenciosamente no "else" e
+    # devolvia o período da 2ª quinzena, sem erro. A tela só oferece 1/2,
+    # mas a API aceita um inteiro livre.
+    if quinzena not in (1, 2):
+        raise ValueError(f"Quinzena inválida: {quinzena}. Use 1 ou 2.")
     if quinzena == 1:
         return date(ano, mes, 1), date(ano, mes, 15)
     ultimo_dia = calendar.monthrange(ano, mes)[1]

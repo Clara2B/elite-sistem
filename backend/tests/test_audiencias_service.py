@@ -91,6 +91,19 @@ def test_gerar_relatorio_rejeita_cnpj_invalido_sobrescrito(db):
         gerar_relatorio(db, "ALFA", ini, fim, cnpj="123")
 
 
+def test_periodo_quinzenal_aceita_1_e_2():
+    assert periodo_quinzenal(2026, 9, 1) == (date(2026, 9, 1), date(2026, 9, 15))
+    assert periodo_quinzenal(2026, 9, 2) == (date(2026, 9, 16), date(2026, 9, 30))
+
+
+@pytest.mark.parametrize("quinzena", [0, 3, -1, 99])
+def test_periodo_quinzenal_rejeita_valor_invalido(quinzena):
+    """Auditoria M13: antes, qualquer valor != 1 caía no else e devolvia o
+    período da 2ª quinzena silenciosamente, sem erro."""
+    with pytest.raises(ValueError, match="Quinzena inválida"):
+        periodo_quinzenal(2026, 9, quinzena)
+
+
 def test_empresa_normalizada_sem_acento_e_caixa(db):
     _planilha(db, "ALFA", 5, 0)
     ini, fim = periodo_quinzenal(2026, 9, 1)
