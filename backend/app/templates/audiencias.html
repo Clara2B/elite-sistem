@@ -78,17 +78,19 @@
       </p>
       <p class="subtitulo">Acumulado no mês: {{ resultado.quantidade_mes }}</p>
       {% if resultado.clientes %}
-        <table>
-          <thead><tr><th>#</th><th>Cliente</th></tr></thead>
-          <tbody>
-            {% for nome in resultado.clientes %}
-              <tr><td>{{ loop.index }}</td><td>{{ nome }}</td></tr>
-            {% endfor %}
-            {% if resultado.total is not none %}
-              <tr class="total"><td colspan="1">Total</td><td>R$ {{ "%.2f"|format(resultado.total)|replace(".", ",") }}</td></tr>
-            {% endif %}
-          </tbody>
-        </table>
+        <div class="tabela-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Cliente</th></tr></thead>
+            <tbody>
+              {% for nome in resultado.clientes %}
+                <tr><td>{{ loop.index }}</td><td>{{ nome }}</td></tr>
+              {% endfor %}
+              {% if resultado.total is not none %}
+                <tr class="total"><td colspan="1">Total</td><td>R$ {{ "%.2f"|format(resultado.total)|replace(".", ",") }}</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
       {% else %}
         <p class="vazio">Nenhuma audiência encontrada nesse período.</p>
       {% endif %}

@@ -90,6 +90,61 @@ def test_usuario_sem_papel_global_nao_ve_configuracao_no_menu_e_leva_403(client,
     assert "restrit" in resposta.text.lower()
 
 
+def test_tela_usuarios_envolve_as_3_tabelas_em_tabela_wrap(client, db):
+    """Auditoria M26: a lista de Usuários e as duas tabelas de Setores
+    dentro da mesma tela (no painel "Editar" de cada usuário e em "Novo
+    usuário") não tinham rolagem horizontal própria em tela estreita —
+    diferente do resto do sistema, que já envolve toda tabela de listagem
+    num `<div class="tabela-wrap">`."""
+    db.add(Usuario(nome="Admin", email="admin.m26@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    db.commit()
+    client.post("/login", data={"email": "admin.m26@teste.local", "senha": "certa"})
+
+    resposta = client.get("/app/usuarios")
+    assert resposta.status_code == 200
+    assert resposta.text.count('<div class="tabela-wrap">') >= 3
+
+
+def test_tela_laudos_envolve_a_tabela_de_resultado_em_tabela_wrap(client, db):
+    """Auditoria M26: a tabela de resultado do relatório de Laudos (linha a
+    linha, não o resumo por assessoria — esse já tinha o wrap) não tinha
+    rolagem horizontal própria em tela estreita."""
+    db.add(Usuario(nome="Fulano", email="fulano.m26laudos@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    empresa = EmpresaCliente(nome="M26 LAUDOS LTDA")
+    db.add(empresa)
+    db.flush()
+    db.add(Laudo(empresa_cliente_id=empresa.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 25), nome_cliente="Fulano", status="SOLICITAÇÃO"))
+    db.commit()
+    client.post("/login", data={"email": "fulano.m26laudos@teste.local", "senha": "certa"})
+
+    resposta = client.get(
+        "/app/laudos",
+        params={"empresa": "M26 LAUDOS LTDA", "ano": 2026, "mes": 1, "status": "Solicitação + Corrigido (cobrança)"},
+    )
+    assert resposta.status_code == 200
+    assert "Fulano" in resposta.text
+    assert resposta.text.count('<div class="tabela-wrap">') >= 2  # resultado + resumo por assessoria
+
+
+def test_tela_audiencias_envolve_a_tabela_de_resultado_em_tabela_wrap(client, db):
+    """Auditoria M26: mesma coisa, na tabela de resultado de Audiências."""
+    db.add(Usuario(nome="Fulano", email="fulano.m26audiencias@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    empresa = EmpresaCliente(nome="M26 AUDIENCIAS LTDA")
+    db.add(empresa)
+    db.flush()
+    db.add(Audiencia(empresa_cliente_id=empresa.id, nome_cliente="Fulano", data_recebimento=date(2026, 1, 5)))
+    db.commit()
+    client.post("/login", data={"email": "fulano.m26audiencias@teste.local", "senha": "certa"})
+
+    resposta = client.get(
+        "/app/audiencias",
+        params={"empresa": "M26 AUDIENCIAS LTDA", "ano": 2026, "mes": 1, "quinzena": 1},
+    )
+    assert resposta.status_code == 200
+    assert "Fulano" in resposta.text
+    assert '<div class="tabela-wrap">' in resposta.text
+
+
 def test_admin_edita_usuario_pela_tela(client, db):
     admin = Usuario(nome="Admin", email="admin.web@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR")
     db.add(admin)
