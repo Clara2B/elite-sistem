@@ -25,7 +25,7 @@
                 <td>{{ c.assunto }}</td>
                 <td style="max-width:360px; white-space:pre-wrap;">{{ c.descricao }}</td>
                 <td>{{ c.usuario.nome }}<br><span class="subtitulo" style="font-size:0.78rem;">{{ c.usuario.email }}</span></td>
-                <td>{{ c.criado_em.strftime("%d/%m/%Y %H:%M") }}</td>
+                <td>{{ c.criado_em | horario_brasil }}</td>
                 <td>
                   <form method="post"
                         action="/app/chamados/{{ c.id }}/resolvido?resolvido={{ 'false' if c.resolvido else 'true' }}">
