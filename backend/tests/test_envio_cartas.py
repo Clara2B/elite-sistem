@@ -16,6 +16,7 @@ from app.services.email_postmark import ErroEnvioEmail
 from app.services.solicitacoes_audiencia import HorarioVago, reservar_horario
 
 CNPJ_VALIDO = "11.222.333/0001-81"
+CNPJ_VALIDO_2 = "11.444.777/0001-61"
 CPF_VALIDO = "529.982.247-25"
 
 
@@ -68,6 +69,27 @@ def test_montar_previas_sem_logo_nao_tem_tag_de_imagem(db, solicitacao):
 def test_montar_previas_banco_tem_todos_os_emails_separados(db, solicitacao):
     previas = ec.montar_previas(db, solicitacao)
     assert previas.banco.destinatarios == ["juridico@banco.com", "ouvidoria@banco.com"]
+
+
+def test_montar_previas_usa_cnpj_principal_por_padrao(db, solicitacao):
+    previas = ec.montar_previas(db, solicitacao)
+    assert CNPJ_VALIDO in previas.banco.corpo_html
+    assert CNPJ_VALIDO_2 not in previas.banco.corpo_html
+
+
+def test_montar_previas_usa_cnpj_alternativo_quando_escolhido(db, usuario, empresa):
+    banco_dois_cnpjs = criar_banco(db, "Banco Dois CNPJs", CNPJ_VALIDO, "contato@banco.com", cnpj_alternativo=CNPJ_VALIDO_2)
+    solicitacao_alt = reservar_horario(
+        db, usuario, empresa.id, "Fulano de Tal", CPF_VALIDO, "fulano@teste.com", "11988887777",
+        date(2026, 10, 1), "12345", banco_dois_cnpjs.id, "meet.google.com/abc-defg-hij",
+        HorarioVago(numero_linha=889, dia=date(2099, 11, 17), hora="14:30"),
+        usar_cnpj_alternativo=True,
+    )
+
+    previas = ec.montar_previas(db, solicitacao_alt)
+
+    assert CNPJ_VALIDO_2 in previas.banco.corpo_html
+    assert CNPJ_VALIDO not in previas.banco.corpo_html
 
 
 def _mock_envio_sucesso(monkeypatch, chamadas):

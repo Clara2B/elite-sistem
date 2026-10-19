@@ -75,12 +75,24 @@
         </div>
         <div class="campo">
           <label for="banco_id">Banco</label>
-          <select id="banco_id" name="banco_id" required>
+          <select id="banco_id" name="banco_id" required onchange="atualizarEscolhaCnpj()">
             <option value="">Selecione...</option>
             {% for b in bancos %}
-              <option value="{{ b.id }}" {{ "selected" if valores.banco_id == b.id|string else "" }}>{{ b.nome }}</option>
+              <option value="{{ b.id }}" data-cnpj="{{ b.cnpj }}" data-cnpj-alt="{{ b.cnpj_alternativo or '' }}"
+                {{ "selected" if valores.banco_id == b.id|string else "" }}>{{ b.nome }}</option>
             {% endfor %}
           </select>
+        </div>
+        <div class="campo" id="escolha-cnpj" style="display:none;">
+          <label>CNPJ do banco a usar na carta</label>
+          <label style="font-weight:normal;">
+            <input type="radio" name="usar_cnpj_alternativo" value="0" id="cnpj-principal"
+              {{ "" if valores.usar_cnpj_alternativo else "checked" }}> Principal (<span id="cnpj-principal-valor"></span>)
+          </label>
+          <label style="font-weight:normal;">
+            <input type="radio" name="usar_cnpj_alternativo" value="1" id="cnpj-alternativo"
+              {{ "checked" if valores.usar_cnpj_alternativo else "" }}> Alternativo (<span id="cnpj-alternativo-valor"></span>)
+          </label>
         </div>
         <div class="campo">
           <label for="link_audiencia">Link da audiência (Meet ou Teams)</label>
@@ -89,6 +101,23 @@
         <button type="submit">Buscar próximo horário</button>
       </form>
     </div>
+    <script>
+      function atualizarEscolhaCnpj() {
+        var select = document.getElementById("banco_id");
+        var opcao = select.options[select.selectedIndex];
+        var div = document.getElementById("escolha-cnpj");
+        var cnpjAlt = opcao ? opcao.getAttribute("data-cnpj-alt") : "";
+        if (cnpjAlt) {
+          document.getElementById("cnpj-principal-valor").textContent = opcao.getAttribute("data-cnpj");
+          document.getElementById("cnpj-alternativo-valor").textContent = cnpjAlt;
+          div.style.display = "";
+        } else {
+          div.style.display = "none";
+          document.getElementById("cnpj-principal").checked = true;
+        }
+      }
+      atualizarEscolhaCnpj();
+    </script>
   {% else %}
     <div class="card">
       <h2>Horário encontrado</h2>
@@ -105,6 +134,7 @@
         <input type="hidden" name="data_recebimento" value="{{ valores.data_recebimento }}">
         <input type="hidden" name="numero_contrato" value="{{ valores.numero_contrato }}">
         <input type="hidden" name="banco_id" value="{{ valores.banco_id }}">
+        <input type="hidden" name="usar_cnpj_alternativo" value="{{ '1' if valores.usar_cnpj_alternativo else '0' }}">
         <input type="hidden" name="link_audiencia" value="{{ valores.link_audiencia }}">
         <input type="hidden" name="numero_linha" value="{{ previa.numero_linha }}">
         <input type="hidden" name="dia" value="{{ previa.dia.isoformat() }}">

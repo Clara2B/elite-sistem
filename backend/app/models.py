@@ -408,6 +408,12 @@ class SolicitacaoAudiencia(Base):
     data_recebimento: Mapped[date] = mapped_column(Date)
     numero_contrato: Mapped[str] = mapped_column(Text)
     banco_id: Mapped[int] = mapped_column(ForeignKey("bancos.id"), index=True)
+    # Qual CNPJ do banco usar na Carta Banco, quando o banco tem um
+    # `cnpj_alternativo` cadastrado (2026-10-19, a pedido da Clara) — a
+    # escolha é feita na tela antes de buscar o horário. False (padrão) =
+    # sempre o CNPJ principal, igual ao comportamento de antes dessa opção
+    # existir.
+    usar_cnpj_alternativo: Mapped[bool] = mapped_column(default=False)
     link_audiencia: Mapped[str] = mapped_column(Text)
     linha_planilha: Mapped[int] = mapped_column(Integer, unique=True, index=True)
     data_agendamento: Mapped[date] = mapped_column(Date)

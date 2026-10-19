@@ -17,6 +17,7 @@ from app.services.bancos import criar_banco
 from app.services.email_postmark import ErroEnvioEmail
 
 CNPJ_VALIDO = "11.222.333/0001-81"
+CNPJ_VALIDO_2 = "11.444.777/0001-61"
 CPF_VALIDO = "529.982.247-25"
 
 
@@ -68,6 +69,17 @@ def test_tela_mostra_assessorias_e_bancos(client, db):
     assert resposta.status_code == 200
     assert empresa.nome in resposta.text
     assert banco.nome in resposta.text
+
+
+def test_tela_inclui_cnpj_alternativo_do_banco_na_opcao(client, db):
+    _preparar(db)
+    banco_dois_cnpjs = criar_banco(db, "Banco Dois CNPJs", CNPJ_VALIDO, "contato@x.com", cnpj_alternativo=CNPJ_VALIDO_2)
+    _logar_admin(db, client)
+
+    resposta = client.get("/app/solicitacoes-audiencia")
+
+    assert f'data-cnpj-alt="{CNPJ_VALIDO_2}"' in resposta.text
+    assert f'value="{banco_dois_cnpjs.id}"' in resposta.text
 
 
 def test_buscar_horario_sem_vaga_mostra_erro(client, db, monkeypatch):
@@ -143,6 +155,28 @@ def test_confirmar_grava_quando_ainda_vaga(client, db, monkeypatch):
     assert "Prévia — E-mail ao Cliente" in resposta.text
     assert "Prévia — E-mail ao Banco" in resposta.text
     assert f'action="/app/solicitacoes-audiencia/{solicitacao.id}/enviar-emails"' in resposta.text
+
+
+def test_confirmar_com_cnpj_alternativo_grava_a_escolha_e_usa_na_carta(client, db, monkeypatch):
+    empresa, _ = _preparar(db)
+    banco_dois_cnpjs = criar_banco(db, "Banco Dois CNPJs", CNPJ_VALIDO, "contato@x.com", cnpj_alternativo=CNPJ_VALIDO_2)
+    _logar_admin(db, client)
+    monkeypatch.setattr(app_settings, "google_sheets_id", "planilha-fake-id")
+    monkeypatch.setattr(
+        sa.google_sheets, "ler_linha",
+        lambda spreadsheet_id, aba, numero: {"DATA DE AGENDAMENTO": "17/11/2099 - 09:00"},
+    )
+    monkeypatch.setattr(sa.google_sheets, "escrever_valores", lambda *a, **k: None)
+    dados = _dados_confirmar(empresa, banco_dois_cnpjs)
+    dados["usar_cnpj_alternativo"] = "1"
+
+    resposta = client.post("/app/solicitacoes-audiencia/confirmar", data=dados)
+
+    assert resposta.status_code == 200
+    solicitacao = db.scalar(select(SolicitacaoAudiencia))
+    assert solicitacao.usar_cnpj_alternativo is True
+    assert CNPJ_VALIDO_2 in resposta.text
+    assert CNPJ_VALIDO not in resposta.text
 
 
 def test_confirmar_com_cpf_invalido_nao_cria_solicitacao(client, db, monkeypatch):

@@ -58,11 +58,16 @@ def _montar_convites(db: Session, solicitacao: SolicitacaoAudiencia) -> tuple[Co
     convite_cliente = montar_convite_cliente(
         solicitacao.nome_cliente, banco.nome, solicitacao.data_agendamento, hora, solicitacao.link_audiencia,
     )
+    # Qual CNPJ usar na carta — escolhido na tela quando o banco tem um
+    # 2° CNPJ cadastrado (ver reservar_horario); sem alternativo, usa
+    # sempre o principal, igual ao comportamento de antes dessa opção
+    # existir.
+    cnpj = banco.cnpj_alternativo if (solicitacao.usar_cnpj_alternativo and banco.cnpj_alternativo) else banco.cnpj
     # O CPF já foi validado e formatado na reserva (reservar_horario) — mas
     # `montar_convite_banco` espera o valor cru pra rodar `identificar_documento`
     # de novo, então passa normal, ele reconhece CPF formatado sem problema.
     convite_banco = montar_convite_banco(
-        banco.nome, banco.cnpj, solicitacao.nome_cliente, solicitacao.cpf_cliente, solicitacao.numero_contrato,
+        banco.nome, cnpj, solicitacao.nome_cliente, solicitacao.cpf_cliente, solicitacao.numero_contrato,
         solicitacao.data_agendamento, hora, solicitacao.link_audiencia,
     )
     return convite_cliente, convite_banco

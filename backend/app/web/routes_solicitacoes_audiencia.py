@@ -68,6 +68,7 @@ def _ler_valores_do_form(form) -> dict:
         "data_recebimento": str(form.get("data_recebimento", "")),
         "numero_contrato": str(form.get("numero_contrato", "")).strip(),
         "banco_id": str(form.get("banco_id", "")),
+        "usar_cnpj_alternativo": str(form.get("usar_cnpj_alternativo", "")) == "1",
         "link_audiencia": str(form.get("link_audiencia", "")).strip(),
     }
 
@@ -175,6 +176,7 @@ async def confirmar(
             banco_id=int(valores["banco_id"]),
             link_audiencia=valores["link_audiencia"],
             horario=horario,
+            usar_cnpj_alternativo=valores["usar_cnpj_alternativo"],
         )
     except ValueError as e:
         # Inclui HorarioJaOcupado (subclasse de ValueError) perdido no

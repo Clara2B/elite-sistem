@@ -148,18 +148,28 @@ def reservar_horario(
     banco_id: int,
     link_audiencia: str,
     horario: HorarioVago,
+    usar_cnpj_alternativo: bool = False,
 ) -> SolicitacaoAudiencia:
     """Primeira camada do travamento otimista: grava a reserva no próprio
     banco, com `linha_planilha` UNIQUE. Se outra requisição já reservou a
     mesma linha entre a busca e esta chamada, o commit falha com
     `IntegrityError` — convertida em `HorarioJaOcupado` pra quem chama
-    buscar a próxima vaga."""
+    buscar a próxima vaga.
+
+    `usar_cnpj_alternativo` (2026-10-19, a pedido da Clara) escolhe qual
+    CNPJ do banco a Carta Banco vai usar — só faz sentido quando o banco
+    tem um `cnpj_alternativo` cadastrado."""
     if not cpf_valido(cpf_cliente):
         raise ValueError(f"CPF '{cpf_cliente}' inválido.")
     if not email_valido(email_cliente):
         raise ValueError(f"E-mail '{email_cliente}' inválido.")
     if not telefone_valido(telefone_cliente):
         raise ValueError(f"Telefone '{telefone_cliente}' inválido.")
+    banco = db.get(Banco, banco_id)
+    if banco is None:
+        raise ValueError("Banco não encontrado.")
+    if usar_cnpj_alternativo and not banco.cnpj_alternativo:
+        raise ValueError(f"O banco {banco.nome} não tem um 2° CNPJ cadastrado.")
 
     solicitacao = SolicitacaoAudiencia(
         empresa_cliente_id=empresa_cliente_id,
@@ -170,6 +180,7 @@ def reservar_horario(
         data_recebimento=data_recebimento,
         numero_contrato=numero_contrato.strip(),
         banco_id=banco_id,
+        usar_cnpj_alternativo=usar_cnpj_alternativo,
         link_audiencia=link_audiencia.strip(),
         linha_planilha=horario.numero_linha,
         data_agendamento=horario.dia,

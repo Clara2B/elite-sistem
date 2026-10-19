@@ -8,6 +8,7 @@ from app.services import solicitacoes_audiencia as sa
 from app.services.bancos import criar_banco
 
 CNPJ_VALIDO = "11.222.333/0001-81"
+CNPJ_VALIDO_2 = "11.444.777/0001-61"
 CPF_VALIDO = "529.982.247-25"
 
 
@@ -123,6 +124,11 @@ def banco(db):
     return criar_banco(db, "Banco Teste", CNPJ_VALIDO, "contato@banco.com")
 
 
+@pytest.fixture()
+def banco_com_alternativo(db):
+    return criar_banco(db, "Banco Dois CNPJs", CNPJ_VALIDO, "contato@banco.com", cnpj_alternativo=CNPJ_VALIDO_2)
+
+
 def _horario():
     return sa.HorarioVago(numero_linha=888, dia=date(2099, 11, 17), hora="14:30")
 
@@ -144,6 +150,32 @@ def test_reservar_horario_com_cpf_invalido_eh_rejeitado(db, usuario, empresa, ba
             db, usuario, empresa.id, "Fulano", "123", "fulano@teste.com", "11988887777",
             date.today(), "12345", banco.id, "meet.google.com/abc-defg-hij", _horario(),
         )
+
+
+def test_reservar_horario_usar_cnpj_alternativo_sem_banco_ter_cadastrado_eh_rejeitado(db, usuario, empresa, banco):
+    with pytest.raises(ValueError, match="2° CNPJ"):
+        sa.reservar_horario(
+            db, usuario, empresa.id, "Fulano", CPF_VALIDO, "fulano@teste.com", "11988887777",
+            date.today(), "12345", banco.id, "meet.google.com/abc-defg-hij", _horario(),
+            usar_cnpj_alternativo=True,
+        )
+
+
+def test_reservar_horario_usar_cnpj_alternativo_grava_a_escolha(db, usuario, empresa, banco_com_alternativo):
+    solicitacao = sa.reservar_horario(
+        db, usuario, empresa.id, "Fulano", CPF_VALIDO, "fulano@teste.com", "11988887777",
+        date.today(), "12345", banco_com_alternativo.id, "meet.google.com/abc-defg-hij", _horario(),
+        usar_cnpj_alternativo=True,
+    )
+    assert solicitacao.usar_cnpj_alternativo is True
+
+
+def test_reservar_horario_sem_escolher_usa_cnpj_principal_por_padrao(db, usuario, empresa, banco_com_alternativo):
+    solicitacao = sa.reservar_horario(
+        db, usuario, empresa.id, "Fulano", CPF_VALIDO, "fulano@teste.com", "11988887777",
+        date.today(), "12345", banco_com_alternativo.id, "meet.google.com/abc-defg-hij", _horario(),
+    )
+    assert solicitacao.usar_cnpj_alternativo is False
 
 
 def test_reservar_horario_ja_reservado_por_outra_solicitacao_levanta_erro(db, usuario, empresa, banco):
