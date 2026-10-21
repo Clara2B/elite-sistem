@@ -240,6 +240,11 @@ def test_pdf_via_cookie_de_sessao_funciona_sem_bearer(client, db):
     assert resposta.status_code == 200
     assert resposta.headers["content-type"] == "application/pdf"
     assert "attachment" in resposta.headers["content-disposition"]
+    # Bug real reportado pela Clara em 2026-10-21: sem isso, o navegador
+    # podia devolver uma cópia salva de uma URL idêntica (mesma
+    # empresa/período/status) em vez de gerar o PDF de novo — mesmo depois
+    # dos dados mudarem no banco (ver app/main.py::_cabecalhos_de_seguranca).
+    assert resposta.headers["cache-control"] == "no-store"
 
 
 def test_xlsx_via_cookie_de_sessao_funciona_sem_bearer(client, db):
@@ -254,6 +259,19 @@ def test_xlsx_via_cookie_de_sessao_funciona_sem_bearer(client, db):
     assert resposta.status_code == 200
     assert resposta.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     assert "attachment" in resposta.headers["content-disposition"]
+    assert resposta.headers["cache-control"] == "no-store"
+
+
+def test_pagina_html_normal_nao_ganha_cache_control_no_store(client, db):
+    """Só downloads (Content-Disposition: attachment) ganham `no-store` —
+    confirma que a mudança acima não afeta nenhuma outra rota."""
+    db.add(Usuario(nome="Fulano", email="fulano.cache@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    db.commit()
+    client.post("/login", data={"email": "fulano.cache@teste.local", "senha": "certa"})
+
+    resposta = client.get("/")
+    assert resposta.status_code == 200
+    assert "cache-control" not in resposta.headers
 
 
 def test_empresas_admin_cria_edita_e_desativa(client, db):

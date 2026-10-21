@@ -117,6 +117,16 @@ async def _cabecalhos_de_seguranca(request: Request, call_next):
     resposta.headers["X-Frame-Options"] = "DENY"
     resposta.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     resposta.headers["Content-Security-Policy"] = _CSP
+    if "Content-Disposition" in resposta.headers:
+        # Todo download de relatório (PDF/Excel, ver app/api/*.py) usa esse
+        # cabeçalho pra forçar "Salvar como" — nenhuma dessas rotas tinha
+        # Cache-Control, então o navegador podia devolver uma cópia salva
+        # de uma URL idêntica (mesma empresa/período/status) sem nunca
+        # chamar o servidor de novo, mesmo depois dos dados mudarem no
+        # banco (reportado pela Clara em 2026-10-21: PDF de Laudos "vazio"
+        # — era uma versão em cache de antes do bug de urlencode de
+        # 2026-10-13 ter sido corrigido).
+        resposta.headers["Cache-Control"] = "no-store"
     if request.url.scheme == "https":
         # Só em HTTPS (mesmo critério já usado pro cookie de sessão em
         # app/web/auth.py::definir_cookie_sessao) — em HTTP puro (dev
