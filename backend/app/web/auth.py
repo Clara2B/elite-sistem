@@ -19,11 +19,12 @@ from sqlalchemy.orm import Session
 from app.auth import (
     COOKIE_SESSAO,
     PAPEIS_GLOBAIS,
+    buscar_sessao,
     modulos_acessiveis,
     operadoras_acessiveis,
 )
 from app.db import get_db
-from app.models import Sessao, Usuario
+from app.models import Usuario
 
 COOKIE_NOME = COOKIE_SESSAO  # mesmo nome de cookie que app/auth.py::_extrair_token lê
 
@@ -58,7 +59,7 @@ def usuario_logado_web(request: Request, db: Session = Depends(get_db)) -> Usuar
     token = request.cookies.get(COOKIE_NOME)
     if not token:
         raise PrecisaLogin
-    sessao = db.get(Sessao, token)
+    sessao = buscar_sessao(db, token)
     if sessao is None or sessao.expira_em < datetime.utcnow():
         raise PrecisaLogin
     usuario = db.get(Usuario, sessao.usuario_id)

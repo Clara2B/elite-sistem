@@ -108,6 +108,20 @@ def test_colaborador_sem_acesso(client, db):
     assert resposta.status_code == 403
 
 
+def test_tela_upload_usa_o_mesmo_padrao_visual_das_outras_telas(client, db):
+    """Auditoria M23: os 6 campos de arquivo usam a mesma zona de
+    arrastar-arquivo (data-upload/upload-zona) das telas de Laudos,
+    Processos, Audiências, Correspondências e Pendências — não inputs
+    nativos simples."""
+    _logar_admin(db, client)
+    resposta = client.get("/app/relatorios-assessorias")
+    assert resposta.status_code == 200
+    for campo in ("laudo", "iniciais", "agendamento", "extrajudicial", "contrarias", "procon"):
+        assert f'<input type="file" id="{campo}"' in resposta.text
+    assert resposta.text.count("data-upload") >= 6
+    assert resposta.text.count("upload-zona") >= 6
+
+
 def test_fluxo_completo_upload_painel_revisao_download(client, db):
     _logar_admin(db, client)
     db.add(EmpresaCliente(nome="TESTE WEB SA"))

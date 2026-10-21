@@ -30,6 +30,7 @@ from app.web.routes_configuracao import router as web_configuracao_router
 from app.web.routes_correspondencias import router as web_correspondencias_router
 from app.web.routes_dashboard import router as web_dashboard_router
 from app.web.routes_empresas import router as web_empresas_router
+from app.web.routes_faixas_audiencia import router as web_faixas_audiencia_router
 from app.web.routes_funcionarios import router as web_funcionarios_router
 from app.web.routes_laudos import router as web_laudos_router
 from app.web.routes_pendencias import router as web_pendencias_router
@@ -77,6 +78,60 @@ async def _medir_tempo_de_requisicao(request: Request, call_next):
     _logger_requisicoes.info(
         "%s %s -> %s em %.0fms", request.method, request.url.path, resposta.status_code, duracao_ms
     )
+    return resposta
+
+
+# Cabeçalhos de segurança básicos (2026-10-13, auditoria M09) — o sistema
+# não tinha nenhum: sem CORS explícito (não há risco óbvio hoje, já que
+# não existe frontend separado chamando de outra origem — ver Pergunta
+# correspondente da auditoria), e sem nenhum cabeçalho de defesa em
+# profundidade contra clickjacking/sniffing de tipo de conteúdo.
+#
+# O CSP mantém 'unsafe-inline' em script-src/style-src porque os templates
+# já usam `style="..."` em várias linhas e um pequeno script inline
+# (_tema_inline.html, troca de tema antes da primeira pintura da página) —
+# trocar isso por nonce por requisição ou mover tudo pra app.js/style.css
+# é um refactor maior, fora do escopo deste item (ver Pergunta
+# correspondente). As outras diretivas (frame-ancestors, object-src,
+# form-action, default-src) não dependem disso e já cobrem os vetores mais
+# comuns (clickjacking, carregar recurso de origem externa, hijack de
+# formulário) mesmo com unsafe-inline nessas duas.
+_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; "
+    "font-src 'self'; "
+    "connect-src 'self'; "
+    "object-src 'none'; "
+    "base-uri 'none'; "
+    "form-action 'self'; "
+    "frame-ancestors 'none'"
+)
+
+
+@app.middleware("http")
+async def _cabecalhos_de_seguranca(request: Request, call_next):
+    resposta = await call_next(request)
+    resposta.headers["X-Content-Type-Options"] = "nosniff"
+    resposta.headers["X-Frame-Options"] = "DENY"
+    resposta.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    resposta.headers["Content-Security-Policy"] = _CSP
+    if "Content-Disposition" in resposta.headers:
+        # Todo download de relatório (PDF/Excel, ver app/api/*.py) usa esse
+        # cabeçalho pra forçar "Salvar como" — nenhuma dessas rotas tinha
+        # Cache-Control, então o navegador podia devolver uma cópia salva
+        # de uma URL idêntica (mesma empresa/período/status) sem nunca
+        # chamar o servidor de novo, mesmo depois dos dados mudarem no
+        # banco (reportado pela Clara em 2026-10-21: PDF de Laudos "vazio"
+        # — era uma versão em cache de antes do bug de urlencode de
+        # 2026-10-13 ter sido corrigido).
+        resposta.headers["Cache-Control"] = "no-store"
+    if request.url.scheme == "https":
+        # Só em HTTPS (mesmo critério já usado pro cookie de sessão em
+        # app/web/auth.py::definir_cookie_sessao) — em HTTP puro (dev
+        # local) esse cabeçalho não faz sentido e o navegador o ignora.
+        resposta.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return resposta
 
 
@@ -168,3 +223,4 @@ app.include_router(web_chamados_router)
 app.include_router(web_correspondencias_router)
 app.include_router(web_auditoria_router)
 app.include_router(web_relatorio_assessorias_router)
+app.include_router(web_faixas_audiencia_router)

@@ -42,6 +42,21 @@ def test_login_senha_errada_mostra_erro(client, db):
     assert "incorretos" in resposta.text
 
 
+def test_login_web_bloqueia_apos_5_tentativas_falhas(client, db):
+    """Auditoria M08: 5 falhas seguidas pro mesmo e-mail bloqueiam
+    tentativas novas por um tempo, mesmo com a senha certa."""
+    db.add(Usuario(nome="Fulano", email="bloqueio.web@teste.local", senha_hash=hash_senha("certa")))
+    db.commit()
+
+    for _ in range(5):
+        resposta = client.post("/login", data={"email": "bloqueio.web@teste.local", "senha": "errada"})
+        assert resposta.status_code == 401
+
+    resposta = client.post("/login", data={"email": "bloqueio.web@teste.local", "senha": "certa"})
+    assert resposta.status_code == 429
+    assert "Muitas tentativas" in resposta.text
+
+
 def test_login_certo_seta_cookie_e_leva_ao_dashboard(client, db):
     db.add(Usuario(nome="Fulano de Tal", email="fulano@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
     db.commit()
@@ -73,6 +88,91 @@ def test_usuario_sem_papel_global_nao_ve_configuracao_no_menu_e_leva_403(client,
     resposta = client.get("/app/usuarios")
     assert resposta.status_code == 403
     assert "restrit" in resposta.text.lower()
+
+
+def test_tela_usuarios_envolve_as_3_tabelas_em_tabela_wrap(client, db):
+    """Auditoria M26: a lista de Usuários e as duas tabelas de Setores
+    dentro da mesma tela (no painel "Editar" de cada usuário e em "Novo
+    usuário") não tinham rolagem horizontal própria em tela estreita —
+    diferente do resto do sistema, que já envolve toda tabela de listagem
+    num `<div class="tabela-wrap">`."""
+    db.add(Usuario(nome="Admin", email="admin.m26@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    db.commit()
+    client.post("/login", data={"email": "admin.m26@teste.local", "senha": "certa"})
+
+    resposta = client.get("/app/usuarios")
+    assert resposta.status_code == 200
+    assert resposta.text.count('<div class="tabela-wrap">') >= 3
+
+
+def test_tela_laudos_envolve_a_tabela_de_resultado_em_tabela_wrap(client, db):
+    """Auditoria M26: a tabela de resultado do relatório de Laudos (linha a
+    linha, não o resumo por assessoria — esse já tinha o wrap) não tinha
+    rolagem horizontal própria em tela estreita."""
+    db.add(Usuario(nome="Fulano", email="fulano.m26laudos@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    empresa = EmpresaCliente(nome="M26 LAUDOS LTDA")
+    db.add(empresa)
+    db.flush()
+    db.add(Laudo(empresa_cliente_id=empresa.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 25), nome_cliente="Fulano", status="SOLICITAÇÃO"))
+    db.commit()
+    client.post("/login", data={"email": "fulano.m26laudos@teste.local", "senha": "certa"})
+
+    resposta = client.get(
+        "/app/laudos",
+        params={"empresa": "M26 LAUDOS LTDA", "ano": 2026, "mes": 1, "status": "Solicitação + Corrigido (cobrança)"},
+    )
+    assert resposta.status_code == 200
+    assert "Fulano" in resposta.text
+    assert resposta.text.count('<div class="tabela-wrap">') >= 2  # resultado + resumo por assessoria
+
+
+def test_tela_audiencias_envolve_a_tabela_de_resultado_em_tabela_wrap(client, db):
+    """Auditoria M26: mesma coisa, na tabela de resultado de Audiências."""
+    db.add(Usuario(nome="Fulano", email="fulano.m26audiencias@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    empresa = EmpresaCliente(nome="M26 AUDIENCIAS LTDA")
+    db.add(empresa)
+    db.flush()
+    db.add(Audiencia(empresa_cliente_id=empresa.id, nome_cliente="Fulano", data_recebimento=date(2026, 1, 5)))
+    db.commit()
+    client.post("/login", data={"email": "fulano.m26audiencias@teste.local", "senha": "certa"})
+
+    resposta = client.get(
+        "/app/audiencias",
+        params={"empresa": "M26 AUDIENCIAS LTDA", "ano": 2026, "mes": 1, "quinzena": 1},
+    )
+    assert resposta.status_code == 200
+    assert "Fulano" in resposta.text
+    assert '<div class="tabela-wrap">' in resposta.text
+
+
+def test_checkboxes_de_setor_tem_aria_label(client, db):
+    """Auditoria M28: as caixas de seleção de setor em usuarios.html (tela
+    de edição de usuário e de novo usuário) não tinham <label> nem
+    aria-label — o cabeçalho da coluna é vazio, e um leitor de tela
+    anunciava a caixa sem nenhuma descrição."""
+    db.add(Usuario(nome="Admin", email="admin.m28@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    setor = db.query(Setor).first()
+    db.commit()
+    client.post("/login", data={"email": "admin.m28@teste.local", "senha": "certa"})
+
+    resposta = client.get("/app/usuarios")
+    assert resposta.status_code == 200
+    assert resposta.text.count(f'aria-label="Vincular ao setor {setor.nome}"') >= 2
+
+
+def test_botao_desativar_usuario_usa_estilo_de_risco(client, db):
+    """Auditoria M38: "Desativar" usava estilo neutro, diferente do
+    "Desativar" de Empresas/Setores (que já usa estilo de perigo) — corta
+    o acesso de um colega imediatamente, sem nenhum destaque de risco."""
+    db.add(Usuario(nome="Admin", email="admin.m38@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    alvo = Usuario(nome="Fulana", email="fulana.m38@teste.local", senha_hash=hash_senha("certa"))
+    db.add(alvo)
+    db.commit()
+    client.post("/login", data={"email": "admin.m38@teste.local", "senha": "certa"})
+
+    resposta = client.get("/app/usuarios")
+    assert resposta.status_code == 200
+    assert '<button type="submit" class="perigo botao-linha"' in resposta.text
 
 
 def test_admin_edita_usuario_pela_tela(client, db):
@@ -140,6 +240,11 @@ def test_pdf_via_cookie_de_sessao_funciona_sem_bearer(client, db):
     assert resposta.status_code == 200
     assert resposta.headers["content-type"] == "application/pdf"
     assert "attachment" in resposta.headers["content-disposition"]
+    # Bug real reportado pela Clara em 2026-10-21: sem isso, o navegador
+    # podia devolver uma cópia salva de uma URL idêntica (mesma
+    # empresa/período/status) em vez de gerar o PDF de novo — mesmo depois
+    # dos dados mudarem no banco (ver app/main.py::_cabecalhos_de_seguranca).
+    assert resposta.headers["cache-control"] == "no-store"
 
 
 def test_xlsx_via_cookie_de_sessao_funciona_sem_bearer(client, db):
@@ -154,6 +259,19 @@ def test_xlsx_via_cookie_de_sessao_funciona_sem_bearer(client, db):
     assert resposta.status_code == 200
     assert resposta.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     assert "attachment" in resposta.headers["content-disposition"]
+    assert resposta.headers["cache-control"] == "no-store"
+
+
+def test_pagina_html_normal_nao_ganha_cache_control_no_store(client, db):
+    """Só downloads (Content-Disposition: attachment) ganham `no-store` —
+    confirma que a mudança acima não afeta nenhuma outra rota."""
+    db.add(Usuario(nome="Fulano", email="fulano.cache@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    db.commit()
+    client.post("/login", data={"email": "fulano.cache@teste.local", "senha": "certa"})
+
+    resposta = client.get("/")
+    assert resposta.status_code == 200
+    assert "cache-control" not in resposta.headers
 
 
 def test_empresas_admin_cria_edita_e_desativa(client, db):
@@ -161,17 +279,17 @@ def test_empresas_admin_cria_edita_e_desativa(client, db):
     db.commit()
     client.post("/login", data={"email": "fulano@teste.local", "senha": "certa"})
 
-    resposta = client.post("/app/empresas", data={"nome": "Absoluta Teste", "cnpj": "11.111.111/0001-11"})
+    resposta = client.post("/app/empresas", data={"nome": "Absoluta Teste", "cnpj": "12.345.678/0001-95"})
     assert resposta.status_code == 200
     assert "Absoluta Teste" in resposta.text
-    assert "11.111.111" in resposta.text
+    assert "12.345.678" in resposta.text
 
     empresa_id = client.get("/empresas").json()[0]["id"]
 
-    resposta = client.post(f"/app/empresas/{empresa_id}", data={"nome": "Absoluta Editada", "cnpj": "22.222.222/0001-22"})
+    resposta = client.post(f"/app/empresas/{empresa_id}", data={"nome": "Absoluta Editada", "cnpj": "98.765.432/0001-98"})
     assert resposta.status_code == 200
     assert "Absoluta Editada" in resposta.text
-    assert "22.222.222" in resposta.text
+    assert "98.765.432" in resposta.text
 
     resposta = client.post(f"/app/empresas/{empresa_id}/ativo?ativo=false", follow_redirects=False)
     assert resposta.status_code == 303
@@ -382,6 +500,23 @@ def test_funcionarios_pagina_restrita_a_admin(client, db):
     assert resposta.status_code == 403
 
 
+def test_relatorio_audiencias_empresa_nao_encontrada_mostra_erro_na_tela(client, db):
+    """Auditoria M43: gerar_relatorio agora levanta LookupError (não
+    ValueError) pra "empresa não encontrada" — a rota web precisa capturar
+    os dois tipos, senão esse caso vira um 500 não tratado em vez do erro
+    amigável de sempre."""
+    db.add(Usuario(nome="Fulano", email="fulano.m43@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    db.commit()
+    client.post("/login", data={"email": "fulano.m43@teste.local", "senha": "certa"})
+
+    resposta = client.get(
+        "/app/audiencias",
+        params={"empresa": "NÃO EXISTE", "ano": 2026, "mes": 1, "quinzena": 1},
+    )
+    assert resposta.status_code == 200
+    assert "não foi encontrada" in resposta.text
+
+
 def test_relatorio_processos_geral_mostra_secao_por_empresa(client, db):
     """Bloco 1 (2026-09-25): tipo "Geral" — uma seção por empresa, com as
     duas partes (Nº processo/Evento/Fatal e Cliente/Nº processo/Último
@@ -416,6 +551,43 @@ def test_relatorio_processos_geral_mostra_secao_por_empresa(client, db):
     assert "<td>Sim</td>" in resposta.text  # fatal da ABSOLUTA
     assert "<td>Não</td>" in resposta.text  # fatal da ALFA
     assert "Fulano" in resposta.text  # Parte 2 (resumo por cliente)
+
+
+def test_rotulo_do_filtro_de_empresa_em_processos_usa_empresa_cliente(client, db):
+    """Auditoria M39: o filtro de relatório de Processos usava o rótulo
+    "Empresa", diferente do mesmo campo nas outras 4 telas de filtro
+    (Pendências, Audiências, Correspondências, Laudos), que já usam
+    "Empresa-cliente"."""
+    db.add(Usuario(nome="Fulano", email="fulano.m39@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    db.commit()
+    client.post("/login", data={"email": "fulano.m39@teste.local", "senha": "certa"})
+
+    resposta = client.get("/app/processos")
+    assert resposta.status_code == 200
+    assert '<label for="empresa">Empresa-cliente</label>' in resposta.text
+
+
+def test_relatorio_processos_avisa_tipo_de_evento_nao_catalogado(client, db):
+    """Auditoria M41: catálogo TipoEvento, antes nunca lido por nenhuma
+    rota/tela, agora alimenta o mesmo aviso que TipoLaudo já dá em Laudos
+    (tipo fora do catálogo)."""
+    db.add(Usuario(nome="Fulano", email="fulano.m41@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    empresa = EmpresaCliente(nome="ABSOLUTA")
+    db.add(empresa)
+    db.flush()
+    processo = Processo(numero_processo="5012298-14.2025.8.13.0231", empresa_cliente_id=empresa.id, nome_cliente="Fulano")
+    db.add(processo)
+    db.flush()
+    db.add(EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="TIPO FICTÍCIO"))
+    db.commit()
+    client.post("/login", data={"email": "fulano.m41@teste.local", "senha": "certa"})
+
+    resposta = client.get(
+        "/app/processos",
+        params={"periodo_ini": "2026-09-01", "periodo_fim": "2026-09-30", "tipo": "geral"},
+    )
+    assert resposta.status_code == 200
+    assert "Tipo(s) de evento não catalogado(s): TIPO FICTÍCIO" in resposta.text
 
 
 def test_relatorio_processos_por_empresa_filtra_uma_so(client, db):
@@ -461,6 +633,33 @@ def test_relatorio_processos_sem_resultado_mostra_mensagem_amigavel(client, db):
     )
     assert resposta.status_code == 200
     assert "Nenhum processo encontrado nesse período." in resposta.text
+
+
+def test_marcar_resolvido_exige_confirmacao_no_modal(client, db):
+    """Auditoria M25: "Marcar resolvido" é irreversível (não existe
+    "reabrir" em nenhum fluxo) e removia o prazo da lista com um único
+    clique, sem aviso — agora abre o mesmo modal de confirmação usado em
+    outras ações perigosas antes de enviar o formulário de verdade."""
+    db.add(Usuario(nome="Fulano", email="fulano.m25@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR"))
+    empresa = EmpresaCliente(nome="M25 LTDA")
+    db.add(empresa)
+    db.flush()
+    processo = Processo(numero_processo="M25-0001", empresa_cliente_id=empresa.id, nome_cliente="Fulano de Tal")
+    db.add(processo)
+    db.flush()
+    evento = EventoProcesso(
+        processo_id=processo.id, data=date.today(), tipo_evento_nome="CUSTAS",
+        prazo_fatal=True, data_prazo=date.today(),
+    )
+    db.add(evento)
+    db.commit()
+    client.post("/login", data={"email": "fulano.m25@teste.local", "senha": "certa"})
+
+    resposta = client.get("/app/processos")
+    assert resposta.status_code == 200
+    assert f'data-abrir-confirmacao="modal-resolver-{evento.id}"' in resposta.text
+    assert f'id="modal-resolver-{evento.id}" class="modal-confirmacao"' in resposta.text
+    assert f'action="/app/processos/eventos/{evento.id}/resolver"' in resposta.text
 
 
 def test_erro_nao_tratado_em_rota_html_mostra_pagina_estilizada(client, db, monkeypatch):
@@ -728,6 +927,24 @@ def test_configuracao_lista_as_4_areas_administrativas(client, db):
     assert resposta.status_code == 200
     for rotulo in ("Usuários", "Empresas-clientes", "Assistentes", "Setores"):
         assert rotulo in resposta.text
+
+
+def test_relatorios_e_chamados_tem_item_proprio_no_menu_fora_de_configuracao(client, db):
+    """2026-10-14, a pedido da Clara: Relatórios das Assessorias e Chamados
+    saíram de dentro de Configuração e ganharam item próprio na barra
+    lateral."""
+    admin = Usuario(nome="Admin", email="admin.menu.novo@teste.local", senha_hash=hash_senha("certa"), papel_global="ADMIN_SUPERIOR")
+    db.add(admin)
+    db.commit()
+    client.post("/login", data={"email": "admin.menu.novo@teste.local", "senha": "certa"})
+
+    resposta = client.get("/")
+    assert 'href="/app/relatorios-assessorias"' in resposta.text
+    assert 'href="/app/chamados"' in resposta.text
+
+    resposta_config = client.get("/app/configuracao")
+    assert 'class="modulo" href="/app/relatorios-assessorias"' not in resposta_config.text
+    assert 'class="modulo" href="/app/chamados"' not in resposta_config.text
 
 
 def test_configuracao_bloqueada_para_nao_admin(client, db):

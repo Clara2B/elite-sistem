@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api._shared import salvar_temp
+from app.api._shared import remover_temp, salvar_temp
 from app.auth import require_admin, require_modulo
 from app.db import get_db
 from app.excel_export import gerar_excel_audiencias
@@ -29,6 +29,8 @@ def importar(
         resumo = audiencias_service.importar_planilha(db, path)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        remover_temp(path)
     registrar(db, usuario, "IMPORTOU_AUDIENCIAS", entidade="audiencia", detalhes=str(resumo))
     return resumo
 
@@ -55,12 +57,17 @@ def relatorio(
     usuario: Usuario = Depends(_acesso_eximia),
     db: Session = Depends(get_db),
 ):
-    periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
     try:
+        periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
         resultado = audiencias_service.gerar_relatorio(db, empresa, periodo_ini, periodo_fim, cnpj)
-    except ValueError as e:
+    except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    registrar(db, usuario, "GEROU_RELATORIO_AUDIENCIAS", entidade="empresa_cliente", entidade_id=empresa)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    registrar(
+        db, usuario, "GEROU_RELATORIO_AUDIENCIAS", entidade="empresa_cliente", entidade_id=empresa,
+        detalhes=f"CNPJ sobrescrito via parâmetro: {cnpj}" if cnpj else None,
+    )
     return {
         "empresa": resultado.empresa,
         "cnpj": resultado.cnpj,
@@ -69,7 +76,6 @@ def relatorio(
         "valor_unitario": resultado.valor_unitario,
         "clientes": resultado.clientes,
         "total": resultado.total,
-        "valor_cadastrado": resultado.valor_cadastrado,
         "quantidade_mes_anterior": resultado.quantidade_mes_anterior,
         "quantidade_mes": resultado.quantidade_mes,
         "texto": audiencias_service.formatar_texto(resultado),
@@ -86,12 +92,17 @@ def relatorio_pdf(
     usuario: Usuario = Depends(_acesso_eximia),
     db: Session = Depends(get_db),
 ):
-    periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
     try:
+        periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
         resultado = audiencias_service.gerar_relatorio(db, empresa, periodo_ini, periodo_fim, cnpj)
-    except ValueError as e:
+    except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    registrar(db, usuario, "GEROU_RELATORIO_AUDIENCIAS_PDF", entidade="empresa_cliente", entidade_id=empresa)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    registrar(
+        db, usuario, "GEROU_RELATORIO_AUDIENCIAS_PDF", entidade="empresa_cliente", entidade_id=empresa,
+        detalhes=f"CNPJ sobrescrito via parâmetro: {cnpj}" if cnpj else None,
+    )
     pdf_bytes = gerar_pdf_audiencias(resultado)
     nome_arquivo = nome_arquivo_pdf("audiencias", resultado.empresa, f"{ano}-{mes:02d}", f"q{quinzena}")
     return Response(
@@ -110,12 +121,17 @@ def relatorio_xlsx(
     usuario: Usuario = Depends(_acesso_eximia),
     db: Session = Depends(get_db),
 ):
-    periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
     try:
+        periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
         resultado = audiencias_service.gerar_relatorio(db, empresa, periodo_ini, periodo_fim, cnpj)
-    except ValueError as e:
+    except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    registrar(db, usuario, "GEROU_RELATORIO_AUDIENCIAS_XLSX", entidade="empresa_cliente", entidade_id=empresa)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    registrar(
+        db, usuario, "GEROU_RELATORIO_AUDIENCIAS_XLSX", entidade="empresa_cliente", entidade_id=empresa,
+        detalhes=f"CNPJ sobrescrito via parâmetro: {cnpj}" if cnpj else None,
+    )
     excel_bytes = gerar_excel_audiencias(resultado)
     nome_arquivo = nome_arquivo_xlsx("audiencias", resultado.empresa, f"{ano}-{mes:02d}", f"q{quinzena}")
     return Response(

@@ -60,6 +60,13 @@ async def criar(
     if not nome or not email or not senha:
         contexto["erro"] = "Nome, e-mail e senha são obrigatórios."
         return templates.TemplateResponse(request, "usuarios.html", contexto, status_code=400)
+    if papel_global is not None and papel_global not in PAPEIS_GLOBAIS:
+        # Mesma validação que app/api/usuarios.py já faz (2026-10-13,
+        # auditoria M10) — a tela só oferece os valores válidos no
+        # <select>, mas um POST manual não passava por nenhuma checagem
+        # aqui, podendo gravar um papel_global fora de PAPEIS_GLOBAIS/None.
+        contexto["erro"] = f"papel_global precisa ser um de {sorted(PAPEIS_GLOBAIS)} ou vazio."
+        return templates.TemplateResponse(request, "usuarios.html", contexto, status_code=400)
     if db.scalar(select(Usuario).where(Usuario.email == email)) is not None:
         contexto["erro"] = "Já existe um usuário com esse e-mail."
         return templates.TemplateResponse(request, "usuarios.html", contexto, status_code=400)
@@ -103,6 +110,9 @@ async def editar(
 
     if not nome or not email:
         contexto["erro"] = "Nome e e-mail são obrigatórios."
+        return templates.TemplateResponse(request, "usuarios.html", contexto, status_code=400)
+    if papel_global is not None and papel_global not in PAPEIS_GLOBAIS:
+        contexto["erro"] = f"papel_global precisa ser um de {sorted(PAPEIS_GLOBAIS)} ou vazio."
         return templates.TemplateResponse(request, "usuarios.html", contexto, status_code=400)
     if db.scalar(select(Usuario).where(Usuario.email == email, Usuario.id != usuario_id)) is not None:
         contexto["erro"] = "Já existe um usuário com esse e-mail."

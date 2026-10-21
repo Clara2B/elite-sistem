@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.api._shared import salvar_temp
+from app.api._shared import remover_temp, salvar_temp
 from app.auth import PAPEIS_GLOBAIS
 from app.db import get_db
 from app.models import Usuario
@@ -111,6 +111,8 @@ async def importar(
             f"{resumo.linhas_atualizadas} desses com dado atualizado agora)."
         )
         contexto["prazos"] = processos_service.prazos_proximos(db, dias=30)
+    finally:
+        remover_temp(path)
     return templates.TemplateResponse(request, "processos.html", contexto)
 
 

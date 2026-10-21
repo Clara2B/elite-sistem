@@ -17,6 +17,7 @@ from app.models import (
     Laudo,
     Processo,
 )
+from app.services.cartas import cnpj_valido
 from app.utils import normalize
 
 # Entidades com FK NOT NULL pra empresa-cliente — todo laudo/audiência/
@@ -47,6 +48,22 @@ def contar_vinculos_empresa(db: Session, empresa_id: int) -> dict[str, int]:
     }
 
 
+def contar_vinculos_por_tipo_todas_empresas(db: Session) -> dict[int, dict[str, int]]:
+    """Versão em lote de `contar_vinculos_empresa`, mas pra TODAS as
+    empresas de uma vez, mantendo o detalhe por tipo de vínculo — 5
+    consultas no total (uma por tipo), não 5 × N empresas. Base de
+    `contar_vinculos_todas_empresas` (só o total) e de
+    `excluir_empresas_em_massa` (2026-10-14, auditoria M22: precisava do
+    detalhe por tipo, igual `excluir_empresa` usa pra montar a mensagem de
+    erro, sem reconsultar uma empresa por vez)."""
+    por_empresa: dict[int, dict[str, int]] = {}
+    for nome, modelo in _ENTIDADES_VINCULADAS.items():
+        linhas = db.execute(select(modelo.empresa_cliente_id, func.count()).group_by(modelo.empresa_cliente_id))
+        for empresa_id, quantidade in linhas:
+            por_empresa.setdefault(empresa_id, {})[nome] = quantidade
+    return por_empresa
+
+
 def contar_vinculos_todas_empresas(db: Session) -> dict[int, int]:
     """Versão em lote de `contar_vinculos_empresa` pra telas que precisam do
     total de TODAS as empresas de uma vez (2026-10-08, varredura de
@@ -54,17 +71,14 @@ def contar_vinculos_todas_empresas(db: Session) -> dict[int, int]:
     empresa` uma vez por empresa cadastrada, ou seja 5 consultas × N
     empresas a cada carga de página: com as 48 da lista oficial, até 240
     consultas só pra montar a coluna de "quantas são excluídas direto").
-    Aqui é uma consulta agregada por tipo de vínculo — 5 no total, sempre,
-    não importa quantas empresas existam. Resultado: {empresa_id: total de
-    vínculos somando os 5 tipos}; empresa sem nenhum vínculo simplesmente
-    não aparece no dict (quem usa trata ausência como 0, ex.: `.get(id, 0)`
-    em empresas.html — nenhuma mudança de template foi necessária)."""
-    totais: dict[int, int] = {}
-    for modelo in _ENTIDADES_VINCULADAS.values():
-        linhas = db.execute(select(modelo.empresa_cliente_id, func.count()).group_by(modelo.empresa_cliente_id))
-        for empresa_id, quantidade in linhas:
-            totais[empresa_id] = totais.get(empresa_id, 0) + quantidade
-    return totais
+    Resultado: {empresa_id: total de vínculos somando os 5 tipos}; empresa
+    sem nenhum vínculo simplesmente não aparece no dict (quem usa trata
+    ausência como 0, ex.: `.get(id, 0)` em empresas.html — nenhuma mudança
+    de template foi necessária)."""
+    return {
+        empresa_id: sum(tipos.values())
+        for empresa_id, tipos in contar_vinculos_por_tipo_todas_empresas(db).items()
+    }
 
 # Lista oficial de empresas-clientes (nome curto usado em todo o sistema —
 # não a razão social) + CNPJ, a partir do PDF "INFOS ASSESSORIAS" que a
@@ -125,6 +139,20 @@ LISTA_OFICIAL_EMPRESAS: list[tuple[str, str | None]] = [
 ]
 
 
+def resolver_empresa_por_nome(db: Session, nome: str) -> EmpresaCliente | None:
+    """Busca uma empresa-cliente pelo nome normalizado (sem acento/caixa) —
+    usada por Audiências, Pendências e Correspondências pra resolver o
+    nome de empresa vindo do filtro da tela (2026-10-14, auditoria M21):
+    a mesma varredura estava copiada 3 vezes, cada módulo com sua própria
+    cópia. `None` se não encontrar (quem chama decide a mensagem de erro —
+    cada módulo tem a sua própria, ex. "laudo"/"audiência"/"relatório")."""
+    alvo = normalize(nome)
+    for empresa in db.scalars(select(EmpresaCliente)):
+        if normalize(empresa.nome) == alvo:
+            return empresa
+    return None
+
+
 def get_or_create_empresa(
     db: Session, nome: str, cache: dict[str, EmpresaCliente] | None = None
 ) -> EmpresaCliente:
@@ -167,10 +195,24 @@ def criar_empresa(db: Session, nome: str, cnpj: str | None = None) -> EmpresaCli
     claro em vez de deixar o banco recusar sem contexto)."""
     nome = nome.strip()
     alvo = normalize(nome)
-    for existente in db.scalars(select(EmpresaCliente)):
-        if normalize(existente.nome) == alvo:
-            raise ValueError(f"Já existe uma empresa-cliente chamada '{existente.nome}'.")
-    empresa = EmpresaCliente(nome=nome, cnpj=(cnpj or "").strip() or None)
+    # Só id/nome, não os objetos EmpresaCliente completos (2026-10-14,
+    # auditoria M20) — ainda é uma varredura em Python (normalize() não é
+    # uma expressão SQL simples, então não dá pra empurrar a comparação
+    # pro banco sem uma coluna nova, que traria risco de migração se já
+    # existir duplicata hoje — fora do escopo deste item, ver Pergunta
+    # correspondente), mas evita montar e trazer o objeto ORM inteiro
+    # (todas as colunas) só pra olhar o nome.
+    for _, existente_nome in db.execute(select(EmpresaCliente.id, EmpresaCliente.nome)):
+        if normalize(existente_nome) == alvo:
+            raise ValueError(f"Já existe uma empresa-cliente chamada '{existente_nome}'.")
+    cnpj_limpo = (cnpj or "").strip() or None
+    # Reaproveita o mesmo validador já usado em Cartas (2026-10-13,
+    # auditoria M16) — antes, qualquer texto era aceito como CNPJ aqui e
+    # aparecia depois em relatórios/PDFs oficiais sem nenhuma checagem de
+    # dígito verificador.
+    if cnpj_limpo and not cnpj_valido(cnpj_limpo):
+        raise ValueError(f"CNPJ '{cnpj_limpo}' inválido.")
+    empresa = EmpresaCliente(nome=nome, cnpj=cnpj_limpo)
     db.add(empresa)
     db.commit()
     return empresa
@@ -182,11 +224,14 @@ def atualizar_empresa(db: Session, empresa_id: int, nome: str, cnpj: str | None)
         raise ValueError(f"Empresa-cliente {empresa_id} não encontrada.")
     nome = nome.strip()
     alvo = normalize(nome)
-    for existente in db.scalars(select(EmpresaCliente)):
-        if existente.id != empresa_id and normalize(existente.nome) == alvo:
-            raise ValueError(f"Já existe uma empresa-cliente chamada '{existente.nome}'.")
+    for existente_id, existente_nome in db.execute(select(EmpresaCliente.id, EmpresaCliente.nome)):
+        if existente_id != empresa_id and normalize(existente_nome) == alvo:
+            raise ValueError(f"Já existe uma empresa-cliente chamada '{existente_nome}'.")
+    cnpj_limpo = (cnpj or "").strip() or None
+    if cnpj_limpo and not cnpj_valido(cnpj_limpo):
+        raise ValueError(f"CNPJ '{cnpj_limpo}' inválido.")
     empresa.nome = nome
-    empresa.cnpj = (cnpj or "").strip() or None
+    empresa.cnpj = cnpj_limpo
     db.commit()
     return empresa
 
@@ -200,7 +245,12 @@ def alterar_ativo_empresa(db: Session, empresa_id: int, ativo: bool) -> EmpresaC
     return empresa
 
 
-def excluir_empresa(db: Session, empresa_id: int, empresa_destino_id: int | None = None) -> None:
+def excluir_empresa(
+    db: Session,
+    empresa_id: int,
+    empresa_destino_id: int | None = None,
+    vinculos: dict[str, int] | None = None,
+) -> None:
     """Exclusão definitiva (a pedido da Clara — a tela pede confirmação
     antes de chamar isso). Bloqueada se a empresa tiver laudo/audiência/
     cobrança/processo vinculado, A MENOS que `empresa_destino_id` seja
@@ -211,12 +261,19 @@ def excluir_empresa(db: Session, empresa_id: int, empresa_destino_id: int | None
     sem autorização explícita" do prompt mestre — o histórico em si nunca é
     destruído, só passa a apontar pra outra empresa-cliente). Sem
     `empresa_destino_id`, o comportamento é o de sempre: desativar
-    (`alterar_ativo_empresa`) é o caminho seguro pra quem tem vínculo."""
+    (`alterar_ativo_empresa`) é o caminho seguro pra quem tem vínculo.
+
+    `vinculos`: opcional (2026-10-14, auditoria M22) — quem já tem a
+    contagem em mãos (ex.: `excluir_empresas_em_massa`, usando
+    `contar_vinculos_por_tipo_todas_empresas` pra todo o lote de uma vez)
+    passa aqui pra não reconsultar o banco por empresa; sem isso, calcula
+    sozinha (comportamento de sempre, chamada direta/individual)."""
     empresa = db.get(EmpresaCliente, empresa_id)
     if empresa is None:
         raise ValueError(f"Empresa-cliente {empresa_id} não encontrada.")
 
-    vinculos = contar_vinculos_empresa(db, empresa_id)
+    if vinculos is None:
+        vinculos = contar_vinculos_empresa(db, empresa_id)
     presentes = [f"{qtd} {nome}" for nome, qtd in vinculos.items() if qtd]
 
     if presentes and empresa_destino_id is None:
@@ -263,6 +320,14 @@ def excluir_empresas_em_massa(
         if db.get(EmpresaCliente, empresa_destino_id) is None:
             raise ValueError(f"Empresa-cliente de destino {empresa_destino_id} não encontrada.")
 
+    # Uma única consulta em lote pra todos os vínculos (2026-10-14,
+    # auditoria M22), não 5 por empresa selecionada — a contagem de cada
+    # empresa aqui não muda durante o loop: vínculo só se move de uma
+    # empresa sendo excluída PRA `empresa_destino_id` (nunca entre duas
+    # empresas do próprio lote, já que `empresa_destino_id` foi validado
+    # acima como de fora da seleção).
+    vinculos_por_empresa = contar_vinculos_por_tipo_todas_empresas(db)
+
     resumo = ResumoExclusaoEmMassa()
     for empresa_id in dict.fromkeys(empresa_ids):
         empresa = db.get(EmpresaCliente, empresa_id)
@@ -270,7 +335,7 @@ def excluir_empresas_em_massa(
             continue
         nome = empresa.nome
         try:
-            excluir_empresa(db, empresa_id, empresa_destino_id)
+            excluir_empresa(db, empresa_id, empresa_destino_id, vinculos=vinculos_por_empresa.get(empresa_id, {}))
             resumo.excluidas.append(nome)
         except ValueError:
             resumo.nao_excluidas_por_vinculo.append(nome)
