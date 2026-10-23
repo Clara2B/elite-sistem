@@ -41,14 +41,16 @@ class Settings(BaseSettings):
     # em produção, a planilha real.
     google_service_account_json: str | None = None
     google_sheets_id: str | None = None
-    # Envio das Cartas Convite por e-mail (Fase 1, 2026-10-16) — provedor
-    # escolhido pela Clara depois do histórico de três tentativas
-    # fracassadas no pop-up de suporte (ver DISCORD_WEBHOOK_SUPORTE acima):
-    # Postmark é API HTTPS (não depende de porta SMTP, que foi o primeiro
-    # bloqueio) e tem reputação de IP diferente da Resend (não repete
-    # necessariamente o bloqueio do Cloudflare visto antes).
-    # `postmark_remetente` precisa ser um e-mail com Sender Signature (ou
-    # domínio) verificado na conta Postmark.
+    # Envio das Cartas Convite por e-mail (Fase 1, 2026-10-16). Provedor
+    # trocado de Postmark pra Resend em 2026-10-23, a pedido da Clara — a
+    # conta da Postmark ficou presa em "pendente de aprovação" sem resposta
+    # por dias. A Resend já tinha causado um bloqueio do Cloudflare (erro
+    # 1010) num uso anterior deste mesmo sistema (pop-up de suporte,
+    # DECISIONS.md 2026-09-29) — o motivo era a ausência de um User-Agent
+    # próprio nas chamadas; `email_resend.py` já manda o mesmo User-Agent
+    # usado em `suporte.py` desde o início, pra não repetir esse bloqueio.
+    # `resend_remetente` precisa ser um e-mail de um domínio verificado na
+    # conta Resend.
     #
     # Modo de teste (a pedido explícito da Clara: "nenhum email real deve
     # ser enviado durante o desenvolvimento e os testes") — `False` por
@@ -56,8 +58,8 @@ class Settings(BaseSettings):
     # alguém liga EMAIL_ENVIO_REAL=true explicitamente no Render. Em modo
     # de teste, o e-mail é enviado de verdade (não só uma simulação) mas
     # SEMPRE pra `email_destinatario_teste`, nunca pro cliente/banco.
-    postmark_server_token: str | None = None
-    postmark_remetente: str | None = None
+    resend_api_key: str | None = None
+    resend_remetente: str | None = None
     email_envio_real: bool = False
     email_destinatario_teste: str | None = None
 

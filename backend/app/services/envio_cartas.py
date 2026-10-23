@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Banco, EnvioEmail, SolicitacaoAudiencia, Usuario
 from app.pdf_export import gerar_pdf_carta_banco, gerar_pdf_carta_cliente
-from app.services import email_postmark, google_sheets
+from app.services import email_resend, google_sheets
 from app.services.cartas import (
     ConviteBanco,
     ConviteCliente,
@@ -129,8 +129,8 @@ def _enviar_uma_carta(
     anexos: list[tuple[str, bytes, str]], imagens_inline: list[tuple[str, bytes, str]] | None,
 ) -> tuple[bool, str | None]:
     try:
-        email_postmark.enviar_email(destinatarios, assunto, corpo_html, corpo_texto, anexos, imagens_inline)
-    except email_postmark.ErroEnvioEmail as e:
+        email_resend.enviar_email(destinatarios, assunto, corpo_html, corpo_texto, anexos, imagens_inline)
+    except email_resend.ErroEnvioEmail as e:
         _registrar_envio(db, usuario, solicitacao, tipo, destinatarios, assunto, "ERRO", str(e))
         return False, str(e)
     _registrar_envio(db, usuario, solicitacao, tipo, destinatarios, assunto, "ENVIADO", None)

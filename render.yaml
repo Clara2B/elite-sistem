@@ -47,16 +47,17 @@ services:
         sync: false
       - key: GOOGLE_SHEETS_ID
         sync: false
-      # Envio das Cartas Convite por e-mail (Fase 1, 2026-10-16) — Postmark
-      # (ver app/services/email_postmark.py e DECISIONS.md). POSTMARK_REMETENTE
-      # precisa ser um e-mail com Sender Signature (ou domínio) verificado
-      # na conta Postmark. EMAIL_ENVIO_REAL fica de fora de propósito — sem
-      # ela (ausente = false), todo e-mail vai só pra EMAIL_DESTINATARIO_TESTE,
+      # Envio das Cartas Convite por e-mail (Fase 1, 2026-10-16) — Resend
+      # (ver app/services/email_resend.py e DECISIONS.md; trocado da
+      # Postmark em 2026-10-23, conta presa em aprovação pendente).
+      # RESEND_REMETENTE precisa ser um e-mail de um domínio verificado na
+      # conta Resend. EMAIL_ENVIO_REAL fica de fora de propósito — sem ela
+      # (ausente = false), todo e-mail vai só pra EMAIL_DESTINATARIO_TESTE,
       # nunca pro cliente/banco real; só ligar EMAIL_ENVIO_REAL=true quando
       # a Clara decidir ir pra produção de verdade.
-      - key: POSTMARK_SERVER_TOKEN
+      - key: RESEND_API_KEY
         sync: false
-      - key: POSTMARK_REMETENTE
+      - key: RESEND_REMETENTE
         sync: false
       - key: EMAIL_DESTINATARIO_TESTE
         sync: false

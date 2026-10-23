@@ -14,7 +14,7 @@ from app.models import EmpresaCliente, EnvioEmail, SolicitacaoAudiencia, Usuario
 from app.services import envio_cartas as ec
 from app.services import solicitacoes_audiencia as sa
 from app.services.bancos import criar_banco
-from app.services.email_postmark import ErroEnvioEmail
+from app.services.email_resend import ErroEnvioEmail
 
 CNPJ_VALIDO = "11.222.333/0001-81"
 CNPJ_VALIDO_2 = "11.444.777/0001-61"
@@ -256,7 +256,7 @@ def test_enviar_emails_sucesso(client, db, monkeypatch):
     empresa, banco = _preparar(db)
     _logar_admin(db, client)
     solicitacao = _criar_solicitacao_gravada(db, empresa, banco)
-    monkeypatch.setattr(ec.email_postmark, "enviar_email", lambda *a, **k: None)
+    monkeypatch.setattr(ec.email_resend, "enviar_email", lambda *a, **k: None)
 
     resposta = client.post(f"/app/solicitacoes-audiencia/{solicitacao.id}/enviar-emails")
 
@@ -283,20 +283,20 @@ def test_enviar_emails_falha_mostra_erro_e_permite_tentar_de_novo(client, db, mo
 
     def _falha(destinatarios, *a, **k):
         if "fulano@teste.com" in destinatarios:
-            raise ErroEnvioEmail("Postmark indisponível")
+            raise ErroEnvioEmail("Resend indisponível")
 
-    monkeypatch.setattr(ec.email_postmark, "enviar_email", _falha)
+    monkeypatch.setattr(ec.email_resend, "enviar_email", _falha)
 
     resposta = client.post(f"/app/solicitacoes-audiencia/{solicitacao.id}/enviar-emails")
 
     assert resposta.status_code == 502
-    assert "Postmark indisponível" in resposta.text
+    assert "Resend indisponível" in resposta.text
     assert "Prévia — E-mail ao Cliente" in resposta.text
     db.refresh(solicitacao)
     assert solicitacao.status != "EMAILS_ENVIADOS"
 
     # tenta de novo, agora sem falha — reenvio funciona
-    monkeypatch.setattr(ec.email_postmark, "enviar_email", lambda *a, **k: None)
+    monkeypatch.setattr(ec.email_resend, "enviar_email", lambda *a, **k: None)
     resposta2 = client.post(f"/app/solicitacoes-audiencia/{solicitacao.id}/enviar-emails")
     assert resposta2.status_code == 200
     db.refresh(solicitacao)

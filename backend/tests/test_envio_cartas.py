@@ -1,6 +1,6 @@
 """Geração e envio das duas Cartas Convite de uma SolicitacaoAudiencia
 (Fase 1, 2026-10-16) — e-mail sempre mockado aqui, sem chamada de rede
-real nos testes automatizados (ver app/services/email_postmark.py)."""
+real nos testes automatizados (ver app/services/email_resend.py)."""
 from __future__ import annotations
 
 from datetime import date
@@ -12,7 +12,7 @@ from app.auth import hash_senha
 from app.models import EmpresaCliente, EnvioEmail, Usuario
 from app.services import envio_cartas as ec
 from app.services.bancos import criar_banco
-from app.services.email_postmark import ErroEnvioEmail
+from app.services.email_resend import ErroEnvioEmail
 from app.services.solicitacoes_audiencia import HorarioVago, reservar_horario
 
 CNPJ_VALIDO = "11.222.333/0001-81"
@@ -96,7 +96,7 @@ def _mock_envio_sucesso(monkeypatch, chamadas):
     def _fake(destinatarios, assunto, corpo_html, corpo_texto, anexos=None, imagens_inline=None):
         chamadas.append({"destinatarios": destinatarios, "anexos": anexos, "imagens_inline": imagens_inline})
 
-    monkeypatch.setattr(ec.email_postmark, "enviar_email", _fake)
+    monkeypatch.setattr(ec.email_resend, "enviar_email", _fake)
 
 
 def test_enviar_emails_sucesso_registra_dois_envios_e_atualiza_status(db, solicitacao, usuario, monkeypatch):
@@ -130,9 +130,9 @@ def test_enviar_emails_inclui_pdf_anexado_nos_dois(db, solicitacao, usuario, mon
 def test_enviar_emails_falha_no_cliente_nao_impede_envio_do_banco(db, solicitacao, usuario, monkeypatch):
     def _fake(destinatarios, assunto, corpo_html, corpo_texto, anexos=None, imagens_inline=None):
         if "fulano@teste.com" in destinatarios:
-            raise ErroEnvioEmail("Postmark recusou (simulado)")
+            raise ErroEnvioEmail("Resend recusou (simulado)")
 
-    monkeypatch.setattr(ec.email_postmark, "enviar_email", _fake)
+    monkeypatch.setattr(ec.email_resend, "enviar_email", _fake)
 
     resultado = ec.enviar_emails(db, usuario, solicitacao)
 
@@ -142,7 +142,7 @@ def test_enviar_emails_falha_no_cliente_nao_impede_envio_do_banco(db, solicitaca
     assert solicitacao.status != "EMAILS_ENVIADOS"
     envio_cliente = db.scalar(select(EnvioEmail).where(EnvioEmail.tipo == "CLIENTE"))
     assert envio_cliente.status == "ERRO"
-    assert envio_cliente.erro == "Postmark recusou (simulado)"
+    assert envio_cliente.erro == "Resend recusou (simulado)"
 
 
 def test_enviar_emails_sucesso_atualiza_notificacao_na_planilha(db, solicitacao, usuario, monkeypatch):
@@ -166,7 +166,7 @@ def test_enviar_emails_falha_parcial_nao_toca_notificacao(db, solicitacao, usuar
         if "fulano@teste.com" in destinatarios:
             raise ErroEnvioEmail("falhou")
 
-    monkeypatch.setattr(ec.email_postmark, "enviar_email", _fake_envio)
+    monkeypatch.setattr(ec.email_resend, "enviar_email", _fake_envio)
     monkeypatch.setattr(
         ec.google_sheets, "escrever_valores",
         lambda spreadsheet_id, aba, numero, valores: chamou_sheets.append(1),

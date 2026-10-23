@@ -2334,3 +2334,40 @@ Polimento: nenhum TODO pendente no módulo; 1 regra de CSS que faltava
 reais), lint limpo.
 
 **Reversível:** sim.
+
+## 2026-10-23 — Fase 1 (Solicitação de Audiência): Postmark trocada por Resend
+
+**Contexto:** a conta da Postmark (ver DECISIONS.md 2026-10-16, "Postmark é API HTTPS... e tem
+reputação de IP diferente da Resend") ficou presa em "pendente de aprovação" por mais de 24h, sem
+resposta mesmo depois da Clara contatar o suporte deles. Sem aprovação, a conta só envia pra
+endereços do mesmo domínio do remetente — bloqueia o teste de ponta a ponta da Solicitação de
+Audiência (cliente e banco são sempre de domínios diferentes do remetente).
+
+**Decisão:** trocar pra Resend, avisando a Clara antes do histórico real deste mesmo projeto com
+esse provedor (ver 2026-09-29, duas entradas: bloqueio do Cloudflare por assinatura de bot, erro
+"1010"; e verificação de domínio não completando, mesmo em duas tentativas da Clara, no pop-up de
+suporte — abandonado em favor de Discord/sistema por causa disso). A Clara confirmou que queria
+seguir mesmo assim.
+
+**Mitigação do risco já conhecido:** `email_resend.py` manda desde o início o mesmo `User-Agent`
+que resolveu o bloqueio do Cloudflare em suporte.py (`EliteSistem/1.0 (+https://elite-sistem.onrender.com)`)
+— não é uma tentativa nova de diagnosticar o mesmo bloqueio, é aplicar a correção já validada antes
+dele acontecer de novo.
+
+**Implementado:** `app/services/email_postmark.py` removido, substituído por
+`app/services/email_resend.py` (mesma assinatura de `enviar_email`, mesmo padrão de modo de teste/
+EMAIL_ENVIO_REAL). `app/config.py`: `postmark_server_token`/`postmark_remetente` viram
+`resend_api_key`/`resend_remetente`. `render.yaml`/`.env.example` atualizados. Nenhuma outra parte
+do fluxo (Sheets, cartas, prévia) mudou.
+
+**Testado:** `tests/test_email_resend.py` (antigo `test_email_postmark.py`, adaptado pro formato
+JSON da Resend — `to`/`from`/`html`/`text`, `attachments[].content_id` pra imagem inline, cabeçalho
+`Authorization: Bearer` em vez de `X-Postmark-Server-Token`). 641 testes, lint limpo. Não validado
+contra a API real ainda — pendente a Clara verificar o domínio `camaraeximia.com` na Resend e gerar
+a chave de API.
+
+**Pendência da Clara:** verificar o domínio na Resend (registros DNS já adicionados, aguardando
+propagação) e gerar a `RESEND_API_KEY`, pra eu testar o envio de ponta a ponta.
+
+**Reversível:** sim — troca de provedor isolada neste único serviço; nada do resto do sistema
+depende de qual provedor de e-mail está configurado.
