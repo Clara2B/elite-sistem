@@ -43,7 +43,7 @@ def test_formatar_texto_carta_cliente_contem_os_dados_do_convite():
     assert "15/10/2026, às 14H05" in texto
     assert "pela plataforma GOOGLE MEET" in texto
     assert "meet.google.com/abc-defg-hij" in texto
-    assert "agendamento@camaraeximia.com" in texto
+    assert "conciliacao@camaraeximia.com" in texto
     assert texto.startswith("Pré-Processual")
     assert texto.rstrip().endswith("Eximia Câmara de Mediação Conciliação e Arbitragem.")
     # Sem marcação do PDF (a Paragraph do reportlab), só texto puro.

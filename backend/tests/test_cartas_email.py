@@ -61,7 +61,7 @@ def test_html_carta_cliente_tem_o_mesmo_conteudo_do_texto():
     assert LINK in corpo
     assert "GOOGLE MEET" in corpo
     assert "NÃO ESQUECER DO DOCUMENTO COM FOTO" in corpo
-    assert "agendamento@camaraeximia.com" in corpo
+    assert "conciliacao@camaraeximia.com" in corpo
 
 
 def test_html_carta_cliente_link_eh_clicavel():

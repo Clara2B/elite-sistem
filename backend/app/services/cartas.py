@@ -181,7 +181,7 @@ def formatar_texto_carta_cliente(convite: ConviteCliente) -> str:
         f"(Segue link abaixo, pela plataforma {convite.plataforma.upper()})\n{convite.link}",
         (
             "Colocamo-nos à disposição por meio dos contatos:\n"
-            "E-mail: agendamento@camaraeximia.com\n"
+            "E-mail: conciliacao@camaraeximia.com\n"
             "Telefone: 55 11 93234-6989"
         ),
         "Certos da atenção e colaboração, renovamos votos de elevada estima e consideração.",
@@ -254,7 +254,7 @@ def formatar_texto_carta_banco(convite: ConviteBanco) -> str:
             "para negociar e transigir, a fim de possibilitar a efetiva resolução do "
             "conflito."
         ),
-        "Colocamo-nos à disposição por meio do e-mail: agendamento@camaraeximia.com.",
+        "Colocamo-nos à disposição por meio do e-mail: conciliacao@camaraeximia.com.",
         "Certos da atenção e colaboração, renovamos votos de elevada estima e consideração.",
         "Atenciosamente,",
         "EXÍMIA CÂMARA DE CONCILIAÇÃO, MEDIAÇÃO E ARBITRAGEM",
@@ -365,7 +365,7 @@ def formatar_html_carta_cliente(convite: ConviteCliente, logo_cid: str | None = 
         ),
         _p(
             "Colocamo-nos à disposição por meio dos contatos:<br>"
-            "<b>E-mail: agendamento@camaraeximia.com</b><br>"
+            "<b>E-mail: conciliacao@camaraeximia.com</b><br>"
             "<b>Telefone: 55 11 93234-6989</b>",
             fechamento,
         ),
@@ -439,7 +439,7 @@ def formatar_html_carta_banco(convite: ConviteBanco, logo_cid: str | None = None
             "conflito.",
             corpo,
         ),
-        _p("Colocamo-nos à disposição por meio do e-mail: <b>agendamento@camaraeximia.com.</b>", contato_destaque),
+        _p("Colocamo-nos à disposição por meio do e-mail: <b>conciliacao@camaraeximia.com.</b>", contato_destaque),
         _p("Certos da atenção e colaboração, renovamos votos de elevada estima e consideração.", fechamento),
         _p("Atenciosamente,", fechamento),
         _p("EXÍMIA CÂMARA DE CONCILIAÇÃO, MEDIAÇÃO E ARBITRAGEM", fechamento_caps),

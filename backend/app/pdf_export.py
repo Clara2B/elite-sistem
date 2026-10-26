@@ -412,7 +412,7 @@ def gerar_pdf_carta_cliente(convite: ConviteCliente) -> bytes:
         ),
         Paragraph(
             "Colocamo-nos à disposição por meio dos contatos:<br/>"
-            "<b>E-mail: agendamento@camaraeximia.com</b><br/>"
+            "<b>E-mail: conciliacao@camaraeximia.com</b><br/>"
             "<b>Telefone: 55 11 93234-6989</b>",
             estilos["contato_cliente"],
         ),
@@ -498,7 +498,7 @@ def gerar_pdf_carta_banco(convite: ConviteBanco) -> bytes:
         ),
         Paragraph(
             "Colocamo-nos à disposição por meio do e-mail: "
-            "<b>agendamento@camaraeximia.com.</b>",
+            "<b>conciliacao@camaraeximia.com.</b>",
             estilos["contato_destaque"],
         ),
         Paragraph(
