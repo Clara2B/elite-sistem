@@ -89,7 +89,7 @@ def test_banco_aceita_multiplos_emails_separados_por_ponto_e_virgula(db):
     assert banco.email == varios
 
 
-def _planilha(linhas, cabecalho=("BANCO", "CNPJ", "EMAIL")):
+def _planilha(linhas, cabecalho=("BANCOS", "CNPJ", "E-MAIL")):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.append(list(cabecalho))
@@ -148,9 +148,57 @@ def test_importar_planilha_rejeita_linha_com_cnpj_invalido_mas_continua(db):
 
 
 def test_importar_planilha_sem_coluna_banco_eh_rejeitada(db):
-    path = _planilha([("11.222.333/0001-81", "contato@xpto.com.br")], cabecalho=("CNPJ", "EMAIL"))
-    with pytest.raises(ValueError, match="BANCO"):
+    path = _planilha([("11.222.333/0001-81", "contato@xpto.com.br")], cabecalho=("CNPJ", "E-MAIL"))
+    with pytest.raises(ValueError, match="BANCOS"):
         importar_planilha_bancos(db, path)
+
+
+def test_importar_planilha_ignora_outras_abas_com_coluna_banco_sem_s(db):
+    """Bug real reportado pela Clara em 2026-10-26: a planilha de controle
+    tem outras abas (AGENDAMENTO, meses) com uma coluna "BANCO" (sem S) —
+    só o nome do banco de cada audiência, sem CNPJ/e-mail do banco. Essas
+    abas não podem ser confundidas com a aba real de cadastro de bancos
+    ("E-MAIL BANCO", coluna "BANCOS", no plural)."""
+    wb = openpyxl.Workbook()
+    aba_errada = wb.active
+    aba_errada.title = "AGENDAMENTO"
+    aba_errada.append(["EMPRESA", "BANCO", "E-MAIL"])
+    aba_errada.append(["Cliente X", "Banco Que Nao Deve Entrar", "cliente@x.com"])
+    aba_certa = wb.create_sheet("E-MAIL BANCO")
+    aba_certa.append(["BANCOS", "E-MAIL", "CNPJ"])
+    aba_certa.append(["Banco XPTO", "contato@xpto.com.br", CNPJ_VALIDO])
+    path = Path(tempfile.mkdtemp()) / "bancos.xlsx"
+    wb.save(path)
+
+    resumo = importar_planilha_bancos(db, str(path))
+
+    assert resumo.criados == 1
+    banco = listar_bancos(db)[0]
+    assert banco.nome == "Banco XPTO"
+    assert banco.cnpj == CNPJ_VALIDO
+    assert banco.email == "contato@xpto.com.br"
+
+
+def test_importar_planilha_le_cnpj_alternativo_e_ignora_formula_de_ia(db):
+    """Mesmo filtro do caminho Google Sheets: a coluna "2° OPÇÃO CNPJ" da
+    planilha real quase sempre tem uma fórmula de sugestão de IA nunca
+    aceita (=AI("Preencha com...")) — isso não pode rejeitar o banco
+    inteiro como "CNPJ alternativo inválido"."""
+    path = _planilha(
+        [
+            ("Banco Com Alternativo", CNPJ_VALIDO, "um@x.com", CNPJ_VALIDO_2),
+            ("Banco Com Formula De IA", CNPJ_VALIDO, "dois@x.com", '=AI("Preencha com um valor adequado")'),
+        ],
+        cabecalho=("BANCOS", "CNPJ", "E-MAIL", "2° OPÇÃO CNPJ"),
+    )
+
+    resumo = importar_planilha_bancos(db, path)
+
+    assert resumo.criados == 2
+    assert resumo.rejeitados == []
+    bancos = {b.nome: b for b in listar_bancos(db)}
+    assert bancos["Banco Com Alternativo"].cnpj_alternativo == CNPJ_VALIDO_2
+    assert bancos["Banco Com Formula De IA"].cnpj_alternativo is None
 
 
 def _linha_sheets(banco="", email="", cnpj="", cnpj_alt=""):

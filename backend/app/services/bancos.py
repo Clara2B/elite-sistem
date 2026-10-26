@@ -18,7 +18,7 @@ from app.services import google_sheets
 from app.services.cartas import cnpj_valido, formatar_cnpj
 from app.utils import cell_text, normalize
 
-REQUIRED_HEADERS = ["BANCO"]
+REQUIRED_HEADERS = ["BANCOS"]
 
 # Aba e colunas da planilha de controle real da Clara (ver DECISIONS.md) —
 # a aba se chama "E-MAIL BANCO", mas a coluna do nome do banco é "BANCOS"
@@ -165,13 +165,24 @@ def _upsert_banco_de_linha(
 
 
 def importar_planilha_bancos(db: Session, path: str) -> ImportResumoBancos:
+    """Bug encontrado em 2026-10-26 (a Clara reportou CNPJ/e-mail vindo
+    vazios ao importar a planilha real): `REQUIRED_HEADERS`/os nomes de
+    coluna aqui usavam "BANCO"/"EMAIL", que não existem na planilha real
+    — a coluna certa é "BANCOS" (ver `importar_do_google_sheets` abaixo,
+    que sempre usou o nome certo). Como "BANCO" (sem S) também é uma
+    coluna de outras abas da planilha real (AGENDAMENTO e os meses, onde
+    é só o banco de cada audiência, sem CNPJ/e-mail do banco), o import
+    pegava linhas dessas abas erradas em vez da aba "E-MAIL BANCO" — daí
+    CNPJ sempre vazio (essas abas não têm essa coluna) e e-mail também
+    vazio ("EMAIL" sem hífen não bate com a coluna real "E-MAIL")."""
     df = load_data_sheets(path, REQUIRED_HEADERS)
     if df.empty:
-        raise ValueError("Não encontrei nenhuma aba com a coluna 'BANCO' nesta planilha.")
+        raise ValueError("Não encontrei nenhuma aba com a coluna 'BANCOS' nesta planilha.")
 
-    col_nome = _col(df, "BANCO")
+    col_nome = _col(df, "BANCOS")
     col_cnpj = _col_optional(df, "CNPJ")
-    col_email = _col_optional(df, "EMAIL")
+    col_cnpj_alt = _col_optional(df, "2° OPÇÃO CNPJ")
+    col_email = _col_optional(df, "E-MAIL")
 
     existentes = {normalize(nome): banco for nome, banco in ((b.nome, b) for b in db.scalars(select(Banco)))}
 
@@ -180,8 +191,16 @@ def importar_planilha_bancos(db: Session, path: str) -> ImportResumoBancos:
         resumo.linhas_lidas += 1
         nome = cell_text(row.get(col_nome))
         cnpj = cell_text(row.get(col_cnpj)) if col_cnpj else ""
+        cnpj_alternativo = cell_text(row.get(col_cnpj_alt)) if col_cnpj_alt else ""
+        # Mesmo filtro do caminho Google Sheets (`eh_valor_real`): a coluna
+        # "2° OPÇÃO CNPJ" quase sempre tem uma fórmula de sugestão de IA
+        # nunca aceita (`=AI("Preencha com...")`), lida como texto cru
+        # aqui — sem isso, quase todo banco seria rejeitado por "CNPJ
+        # alternativo inválido".
+        if not google_sheets.eh_valor_real(cnpj_alternativo):
+            cnpj_alternativo = ""
         email = cell_text(row.get(col_email)) if col_email else ""
-        _upsert_banco_de_linha(db, existentes, resumo, nome, cnpj, "", email)
+        _upsert_banco_de_linha(db, existentes, resumo, nome, cnpj, cnpj_alternativo, email)
 
     db.commit()
     return resumo

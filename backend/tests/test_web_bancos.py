@@ -118,7 +118,7 @@ def test_excluir_banco_pela_tela(client, db):
     assert db.get(Banco, banco.id) is None
 
 
-def _planilha_bytes(linhas, cabecalho=("BANCO", "CNPJ", "EMAIL")) -> bytes:
+def _planilha_bytes(linhas, cabecalho=("BANCOS", "CNPJ", "E-MAIL")) -> bytes:
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.append(list(cabecalho))
