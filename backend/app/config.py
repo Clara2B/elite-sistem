@@ -29,6 +29,39 @@ class Settings(BaseSettings):
     # opcional: sem ele, o chamado continua sendo salvo normalmente, só não
     # avisa ninguém na hora.
     discord_webhook_suporte: str | None = None
+    # Fase 1 — Solicitação de Audiência (2026-10-16): acesso à planilha de
+    # controle (Google Sheets) via conta de serviço do Google, a pedido da
+    # Clara. `google_service_account_json` é o conteúdo inteiro do arquivo
+    # .json da conta de serviço (não um caminho de arquivo); gerado pela
+    # própria Clara no Google Cloud Console (ver ARCHITECTURE.md/DECISIONS.md
+    # — não existia nenhuma integração com Google antes disso). O e-mail da
+    # conta de serviço (dentro do .json) precisa estar com permissão de
+    # Editor na planilha. `google_sheets_id` é o ID da planilha (o trecho
+    # entre /d/ e /edit na URL) — em dev/teste, a cópia com dados fictícios;
+    # em produção, a planilha real.
+    google_service_account_json: str | None = None
+    google_sheets_id: str | None = None
+    # Envio das Cartas Convite por e-mail (Fase 1, 2026-10-16). Provedor
+    # trocado de Postmark pra Resend em 2026-10-23, a pedido da Clara — a
+    # conta da Postmark ficou presa em "pendente de aprovação" sem resposta
+    # por dias. A Resend já tinha causado um bloqueio do Cloudflare (erro
+    # 1010) num uso anterior deste mesmo sistema (pop-up de suporte,
+    # DECISIONS.md 2026-09-29) — o motivo era a ausência de um User-Agent
+    # próprio nas chamadas; `email_resend.py` já manda o mesmo User-Agent
+    # usado em `suporte.py` desde o início, pra não repetir esse bloqueio.
+    # `resend_remetente` precisa ser um e-mail de um domínio verificado na
+    # conta Resend.
+    #
+    # Modo de teste (a pedido explícito da Clara: "nenhum email real deve
+    # ser enviado durante o desenvolvimento e os testes") — `False` por
+    # padrão, de propósito: só manda pra destinatário de verdade quando
+    # alguém liga EMAIL_ENVIO_REAL=true explicitamente no Render. Em modo
+    # de teste, o e-mail é enviado de verdade (não só uma simulação) mas
+    # SEMPRE pra `email_destinatario_teste`, nunca pro cliente/banco.
+    resend_api_key: str | None = None
+    resend_remetente: str | None = None
+    email_envio_real: bool = False
+    email_destinatario_teste: str | None = None
 
 
 settings = Settings()

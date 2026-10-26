@@ -3,6 +3,7 @@ Carta Convite Banco. Sem persistência: cada geração é validada e montada
 aqui, e vira PDF direto em app/pdf_export.py — nada é salvo no banco."""
 from __future__ import annotations
 
+import html
 import re
 from dataclasses import dataclass
 from datetime import date
@@ -180,7 +181,7 @@ def formatar_texto_carta_cliente(convite: ConviteCliente) -> str:
         f"(Segue link abaixo, pela plataforma {convite.plataforma.upper()})\n{convite.link}",
         (
             "Colocamo-nos à disposição por meio dos contatos:\n"
-            "E-mail: conciliacao@camaraeximia.com\n"
+            "E-mail: agendamento@camaraeximia.com\n"
             "Telefone: 55 11 93234-6989"
         ),
         "Certos da atenção e colaboração, renovamos votos de elevada estima e consideração.",
@@ -253,9 +254,195 @@ def formatar_texto_carta_banco(convite: ConviteBanco) -> str:
             "para negociar e transigir, a fim de possibilitar a efetiva resolução do "
             "conflito."
         ),
-        "Colocamo-nos à disposição por meio do e-mail: conciliacao@camaraeximia.com.",
+        "Colocamo-nos à disposição por meio do e-mail: agendamento@camaraeximia.com.",
         "Certos da atenção e colaboração, renovamos votos de elevada estima e consideração.",
         "Atenciosamente,",
         "EXÍMIA CÂMARA DE CONCILIAÇÃO, MEDIAÇÃO E ARBITRAGEM",
     ]
     return "\n\n".join(paragrafos)
+
+
+_MESES_POR_EXTENSO = {
+    1: "JANEIRO", 2: "FEVEREIRO", 3: "MARÇO", 4: "ABRIL", 5: "MAIO", 6: "JUNHO",
+    7: "JULHO", 8: "AGOSTO", 9: "SETEMBRO", 10: "OUTUBRO", 11: "NOVEMBRO", 12: "DEZEMBRO",
+}
+
+
+def montar_assunto_email(dia: date, hora: str, nome_cliente: str) -> str:
+    """"AUDIÊNCIA DE TENTATIVA DE CONCILIAÇÃO: 05 DE NOVEMBRO DE 2026 ÀS
+    15H00 - MARCILENE DALBEM DE OLIVEIRA" — mesmo assunto pros e-mails do
+    cliente e do banco (confirmado pela Clara, 2026-10-16). Tudo em
+    maiúsculas (acentos preservados — `str.upper()` já faz isso), dia com
+    dois dígitos, mês por extenso em português, hora no formato "15H00"."""
+    h, m = hora.split(":")
+    return (
+        f"AUDIÊNCIA DE TENTATIVA DE CONCILIAÇÃO: {dia.day:02d} DE {_MESES_POR_EXTENSO[dia.month]} "
+        f"DE {dia.year} ÀS {h}H{m} - {nome_cliente.strip().upper()}"
+    )
+
+
+# Mesma paleta de cores de app/pdf_export.py (NAVY/VERMELHO_DESTAQUE) — só
+# os valores hex são copiados aqui pra não criar uma dependência de
+# pdf_export.py (que importa DESTE módulo) dentro de cartas.py.
+_NAVY = "#152A40"
+_VERMELHO_DESTAQUE = "#C0392B"
+_AZUL_LINK = "#1A5276"
+_CINZA_TEXTO = "#1A1A1A"
+
+_FONTE = "font-family: Helvetica, Arial, sans-serif;"
+_ESTILO_BASE = f"{_FONTE} font-style: italic; font-size: 14px; line-height: 20px; color: {_CINZA_TEXTO}; margin: 0 0 14px 0;"
+
+
+def _esc(texto: str) -> str:
+    return html.escape(str(texto), quote=False)
+
+
+def _p(texto_html: str, estilo: str) -> str:
+    return f'<p style="{estilo}">{texto_html}</p>'
+
+
+def _rodape_html(logo_cid: str | None) -> str:
+    """Logotipo no rodapé do corpo do e-mail (2026-10-26, a pedido da
+    Clara: a imagem usada antes era a folha inteira do timbrado do PDF —
+    cabeçalho de verdade seguido de uma página inteira em branco —, o que
+    deixava o e-mail com um espaço vazio enorme antes do texto. Usa um
+    recorte só do logotipo (audiencias_logo_rodape.jpeg, sem a área em
+    branco), pequeno, depois do texto."""
+    if not logo_cid:
+        return ""
+    return (
+        f'<div style="margin-top: 24px; text-align: center;">'
+        f'<img src="cid:{logo_cid}" alt="" style="max-width: 280px; height: auto;">'
+        f"</div>"
+    )
+
+
+def formatar_html_carta_cliente(convite: ConviteCliente, logo_cid: str | None = None) -> str:
+    """Mesmo texto de `formatar_texto_carta_cliente`/`gerar_pdf_carta_cliente`
+    — só os campos variáveis (autor/réu/dia/hora/link/plataforma) mudam, o
+    resto é texto fixo. `logo_cid` é o Content-ID da imagem de timbrado
+    anexada inline ao e-mail (confirmado pela Clara: o logotipo deve
+    aparecer no corpo do e-mail, não só no PDF) — None pra gerar sem logo
+    (ex.: pré-visualização antes do anexo existir)."""
+    titulo = f"{_FONTE} font-style: italic; font-weight: bold; font-size: 16px; line-height: 20px; color: {_NAVY}; text-align: center; margin: 0 0 10px 0;"
+    centralizado_negrito = f"{_FONTE} font-style: italic; font-weight: bold; font-size: 15px; line-height: 20px; color: {_CINZA_TEXTO}; text-align: center; margin: 0 0 14px 0;"
+    corpo = f"{_ESTILO_BASE} text-align: justify;"
+    destaque = f"{_FONTE} font-weight: bold; font-size: 14px; line-height: 20px; color: {_CINZA_TEXTO}; margin: 0 0 14px 0; text-align: justify;"
+    aviso = f"{_FONTE} font-style: italic; font-weight: bold; font-size: 13px; line-height: 18px; color: {_CINZA_TEXTO}; margin: 0 0 10px 0; text-align: justify;"
+    link_intro = f"{_FONTE} font-style: italic; font-weight: bold; font-size: 14px; line-height: 20px; color: {_VERMELHO_DESTAQUE}; margin: 0 0 14px 0;"
+    fechamento = f"{_ESTILO_BASE}"
+
+    href = _esc(href_absoluto(convite.link))
+    link_texto = _esc(convite.link)
+    partes = [
+        _p("Pré-Processual", f"{_FONTE} font-style: italic; font-size: 14px; text-align: center; margin: 0 0 6px 0; color: {_CINZA_TEXTO};"),
+        _p("Métodos Consensuais de Solução de Conflitos", f"{_FONTE} font-style: italic; font-size: 14px; text-align: center; margin: 0 0 6px 0; color: {_CINZA_TEXTO};"),
+        _p("Convite para Audiência Extrajudicial Administrativa – Ação Revisional", titulo),
+        _p(f"AUTOR: {_esc(convite.autor)}<br>REU: {_esc(convite.reu)},", centralizado_negrito),
+        _p(
+            "Pela presente, solicitamos o seu comparecimento a participar de "
+            "<b>AUDIÊNCIA EXTRAJUDICIAL ADMINISTRATIVA</b>, a ser realizada com a "
+            "finalidade de tentativa de composição amigável",
+            corpo,
+        ),
+        _p(
+            "A audiência de Tentativa de Conciliação está sugerida para o dia "
+            f'<span style="color: {_VERMELHO_DESTAQUE};">{convite.dia.strftime("%d/%m/%Y")}, às {_esc(convite.hora)}</span>, '
+            "a ser realizada na modalidade Virtual, podendo haver ajustes, mediante prévio contato.",
+            destaque,
+        ),
+        _p("NÃO ESQUECER DO DOCUMENTO COM FOTO", aviso),
+        _p(
+            "É OBRIGATÓRIO A PRESENÇA DO TITULAR DO CONTRATO, NÃO SERÁ PERMITIDO A "
+            "ENTRADA DE TERCEIROS EM AUDIÊNCIA SEM A PROCURAÇÃO PÚBLICA",
+            aviso,
+        ),
+        _p("A ENTRADA DE TERCEIROS SEM A PROCURAÇÃO A AUDIÊNCIA SERÁ CANCELADA", aviso),
+        _p(
+            f"(Segue link abaixo, pela plataforma {_esc(convite.plataforma.upper())})<br>"
+            f'<a href="{href}" style="color: {_AZUL_LINK}; text-decoration: underline;">{link_texto}</a>',
+            link_intro,
+        ),
+        _p(
+            "Colocamo-nos à disposição por meio dos contatos:<br>"
+            "<b>E-mail: agendamento@camaraeximia.com</b><br>"
+            "<b>Telefone: 55 11 93234-6989</b>",
+            fechamento,
+        ),
+        _p("Certos da atenção e colaboração, renovamos votos de elevada estima e consideração.", fechamento),
+        _p("Atenciosamente,", fechamento),
+        _p("Eximia Câmara de Mediação Conciliação e Arbitragem.", fechamento),
+        _rodape_html(logo_cid),
+    ]
+    return "\n".join(p for p in partes if p)
+
+
+def formatar_html_carta_banco(convite: ConviteBanco, logo_cid: str | None = None) -> str:
+    """Mesmo texto de `formatar_texto_carta_banco`/`gerar_pdf_carta_banco` —
+    ver docstring de `formatar_html_carta_cliente`."""
+    titulo = f"{_FONTE} font-weight: bold; font-size: 17px; line-height: 21px; color: {_NAVY}; text-align: center; margin: 0 0 14px 0;"
+    titulo_simples = f"{_FONTE} font-style: italic; font-size: 14px; text-align: center; margin: 0 0 6px 0; color: {_CINZA_TEXTO};"
+    centralizado_negrito = f"{_FONTE} font-style: italic; font-weight: bold; font-size: 15px; line-height: 20px; color: {_CINZA_TEXTO}; text-align: center; margin: 0 0 14px 0;"
+    corpo = f"{_ESTILO_BASE} text-align: justify;"
+    destaque = f"{_FONTE} font-weight: bold; font-size: 14px; line-height: 20px; color: {_CINZA_TEXTO}; margin: 0 0 14px 0; text-align: justify;"
+    link_estilo = f"{_FONTE} font-size: 14px; line-height: 20px; color: {_CINZA_TEXTO}; margin: 0 0 14px 0;"
+    contato_destaque = f"{_FONTE} font-weight: bold; font-size: 14px; line-height: 22px; color: {_VERMELHO_DESTAQUE}; margin: 18px 0 16px 0;"
+    fechamento = f"{_ESTILO_BASE}"
+    fechamento_caps = f"{_FONTE} font-size: 14px; line-height: 22px; color: {_CINZA_TEXTO}; margin: 0 0 6px 0;"
+
+    href = _esc(href_absoluto(convite.link))
+    link_texto = _esc(convite.link)
+    plataforma_caps = _esc(convite.plataforma.upper())
+    partes = [
+        _p("Convite para Audiência Extrajudicial Administrativa – Ação Revisional", titulo),
+        _p("Ao", titulo_simples),
+        _p(f"{_esc(convite.banco_nome)} – CNPJ: {_esc(convite.banco_cnpj)},", centralizado_negrito),
+        _p("Prezados Senhores,", titulo_simples),
+        _p(
+            f"Por meio da presente, o(a) Sr.(a) <b>{_esc(convite.nome)},</b> inscrito(a) no "
+            f"<b>{_esc(convite.tipo_documento)}: {_esc(convite.documento)},</b> titular da unidade de n° "
+            f"<b>{_esc(convite.contrato)},</b> "
+            "vem, respeitosamente, CONVIDAR essa instituição financeira para participar de "
+            "<b>AUDIÊNCIA EXTRAJUDICIAL ADMINISTRATIVA</b>, a ser realizada com a finalidade "
+            "de tentativa de composição amigável.",
+            corpo,
+        ),
+        _p(
+            "Esclarece-se que, encontra-se em nosso escritório o contrato de financiamento do "
+            "Reclamante, acima citado, cujo objetivo consiste na revisão de cláusulas "
+            "contratuais reputadas abusivas, notadamente quanto a <b>juros, encargos, "
+            "capitalização, tarifas etc</b>.",
+            corpo,
+        ),
+        _p(
+            "Não obstante, antes da judicialização da demanda, a parte Reclamante demonstra "
+            "pleno interesse na solução consensual, em consonância com os princípios da "
+            "boa-fé objetiva, da cooperação e da autocomposição, motivo pelo qual propõe a "
+            "realização da referida audiência extrajudicial.",
+            corpo,
+        ),
+        _p(
+            f'A audiência está sugerida para o dia {convite.data.strftime("%d/%m/%Y")}, às '
+            f"{_esc(convite.hora)}, a ser realizada na modalidade Virtual, podendo haver ajustes, "
+            "mediante prévio contato.",
+            destaque,
+        ),
+        _p(f'<a href="{href}" style="color: {_AZUL_LINK}; text-decoration: underline;">{link_texto}</a>', link_estilo),
+        _p(
+            "A Audiência de Tentativa de Conciliação será realizada de forma virtual, através "
+            f"do aplicativo {plataforma_caps}.",
+            destaque,
+        ),
+        _p(
+            "Solicita-se, desde já, que essa Instituição indique representante com poderes "
+            "para negociar e transigir, a fim de possibilitar a efetiva resolução do "
+            "conflito.",
+            corpo,
+        ),
+        _p("Colocamo-nos à disposição por meio do e-mail: <b>agendamento@camaraeximia.com.</b>", contato_destaque),
+        _p("Certos da atenção e colaboração, renovamos votos de elevada estima e consideração.", fechamento),
+        _p("Atenciosamente,", fechamento),
+        _p("EXÍMIA CÂMARA DE CONCILIAÇÃO, MEDIAÇÃO E ARBITRAGEM", fechamento_caps),
+        _rodape_html(logo_cid),
+    ]
+    return "\n".join(p for p in partes if p)

@@ -59,6 +59,28 @@ class Funcionario(Base):
     ativo: Mapped[bool] = mapped_column(default=True)
 
 
+class Banco(Base):
+    """Cadastro de bancos (Fase 1 — Solicitação de Audiência, 2026-10-16) —
+    alimenta o seletor "Banco" da tela de Nova Solicitação de Audiência e
+    resolve nome/CNPJ/e-mail pra Carta Convite Banco sem digitar de novo.
+    Mesmo padrão de EmpresaCliente/Funcionario."""
+
+    __tablename__ = "bancos"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    nome: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    cnpj: Mapped[str] = mapped_column(String(20))
+    # Alguns bancos têm um segundo CNPJ válido (ex.: Itaú, na planilha real
+    # de bancos) — quem monta a Carta Banco escolhe qual se aplica a cada
+    # caso. `None` pra quem só tem um.
+    cnpj_alternativo: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Text, não VARCHAR (mesmo motivo já conhecido no projeto — ver
+    # DECISIONS.md M02): a planilha real tem bancos com vários e-mails
+    # separados por ponto-e-vírgula, alguns bem longos.
+    email: Mapped[str] = mapped_column(Text)
+    ativo: Mapped[bool] = mapped_column(default=True)
+
+
 class Laudo(Base):
     __tablename__ = "laudos"
 
@@ -354,3 +376,81 @@ class EventoProcesso(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     processo: Mapped[Processo] = relationship(back_populates="eventos")
+
+
+class SolicitacaoAudiencia(Base):
+    """Fase 1 — Solicitação de Audiência (2026-10-16, a pedido da Clara): o
+    mesmo dado hoje é digitado 3x (planilha de controle, aba Cartas, corpo
+    dos 2 e-mails) — esta tabela guarda a solicitação em si, pra digitar
+    uma vez só.
+
+    `linha_planilha` (o número da linha na aba AGENDAMENTO da planilha de
+    controle) tem `unique=True` de propósito: é o travamento otimista que
+    impede duas solicitações simultâneas de ocuparem o mesmo horário — a
+    linha só é escrita na planilha de verdade depois que o INSERT aqui
+    (com a constraint UNIQUE) é confirmado pelo banco; se duas requisições
+    concorrentes acharem a mesma "próxima vaga" ao mesmo tempo, só uma
+    consegue inserir, a outra recebe erro de integridade e busca a vaga
+    seguinte. Ver app/services/solicitacoes_audiencia.py.
+
+    Clientes podem solicitar 2ª, 3ª... audiências (confirmado pela Clara —
+    não é duplicidade): não há nenhuma constraint de unicidade por CPF ou
+    número de contrato aqui."""
+
+    __tablename__ = "solicitacoes_audiencia"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    empresa_cliente_id: Mapped[int] = mapped_column(ForeignKey("empresas_clientes.id"), index=True)
+    nome_cliente: Mapped[str] = mapped_column(Text)
+    cpf_cliente: Mapped[str] = mapped_column(String(20))
+    email_cliente: Mapped[str] = mapped_column(Text)
+    telefone_cliente: Mapped[str] = mapped_column(String(30))
+    data_recebimento: Mapped[date] = mapped_column(Date)
+    numero_contrato: Mapped[str] = mapped_column(Text)
+    banco_id: Mapped[int] = mapped_column(ForeignKey("bancos.id"), index=True)
+    # Qual CNPJ do banco usar na Carta Banco, quando o banco tem um
+    # `cnpj_alternativo` cadastrado (2026-10-19, a pedido da Clara) — a
+    # escolha é feita na tela antes de buscar o horário. False (padrão) =
+    # sempre o CNPJ principal, igual ao comportamento de antes dessa opção
+    # existir.
+    usar_cnpj_alternativo: Mapped[bool] = mapped_column(default=False)
+    link_audiencia: Mapped[str] = mapped_column(Text)
+    linha_planilha: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    data_agendamento: Mapped[date] = mapped_column(Date)
+    hora_agendamento: Mapped[str] = mapped_column(String(10))
+    # RESERVADA (ganhou a linha no banco, ainda não escreveu na planilha) ->
+    # GRAVADA (escreveu na planilha de controle com sucesso) ->
+    # CARTAS_GERADAS -> EMAILS_ENVIADOS. FALHOU em qualquer etapa que não
+    # dê pra concluir (ex.: a linha não estava mais vaga na planilha de
+    # verdade no momento de escrever).
+    status: Mapped[str] = mapped_column(String(20), default="RESERVADA")
+    criado_por: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    empresa_cliente: Mapped[EmpresaCliente] = relationship()
+    banco: Mapped[Banco] = relationship()
+    usuario: Mapped[Usuario] = relationship()
+
+
+class EnvioEmail(Base):
+    """Registro de envio das Cartas Convite por e-mail (Fase 1, 2026-10-16,
+    a pedido da Clara: "registrar o envio: data/hora, quem enviou,
+    destinatários e status"). Uma linha por carta enviada (cliente e banco
+    são dois envios separados da mesma `SolicitacaoAudiencia`) — em caso de
+    falha, não marca como concluído e permite reenviar (a tela chama de
+    novo o mesmo serviço, que grava outra linha aqui)."""
+
+    __tablename__ = "envios_email"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    solicitacao_id: Mapped[int] = mapped_column(ForeignKey("solicitacoes_audiencia.id"), index=True)
+    tipo: Mapped[str] = mapped_column(String(10))  # CLIENTE | BANCO
+    destinatarios: Mapped[str] = mapped_column(Text)
+    assunto: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(10))  # ENVIADO | ERRO
+    erro: Mapped[str | None] = mapped_column(Text, nullable=True)
+    enviado_por: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    enviado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    solicitacao: Mapped[SolicitacaoAudiencia] = relationship()
+    usuario: Mapped[Usuario] = relationship()
