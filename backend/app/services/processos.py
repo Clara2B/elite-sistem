@@ -353,6 +353,12 @@ def apagar_todos_processos(db: Session) -> int:
 
 
 def tipos_evento_cadastrados(db: Session) -> set[str]:
+    """Usada por gerar_relatorio_geral/gerar_relatorio_por_empresa pra
+    avisar quando o "último evento" de um processo tem um tipo fora do
+    catálogo — mesmo padrão de TipoLaudo em Laudos (ver
+    services/laudos.py::_valor_tipo/tipos_sem_valor), completado aqui
+    2026-10-16, auditoria M41 (a Clara confirmou que a ideia original era
+    essa, só tinha ficado pela metade: modelo/seed existiam, nada lia)."""
     return {normalize(t.nome) for t in db.scalars(select(TipoEvento))}
 
 
@@ -406,6 +412,7 @@ class RelatorioGeral:
     periodo_ini: date
     periodo_fim: date
     secoes: list[SecaoEmpresaGeral] = field(default_factory=list)
+    tipos_nao_catalogados: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -424,6 +431,7 @@ class RelatorioPorEmpresa:
     periodo_fim: date
     total_processos: int
     linhas: list[LinhaProcessoPorEmpresa] = field(default_factory=list)
+    tipos_nao_catalogados: list[str] = field(default_factory=list)
 
 
 def _processos_em_escopo(
@@ -508,6 +516,8 @@ def gerar_relatorio_geral(
     no topo bate com o número de linhas)."""
     processos = _filtrar_por_assistente(_processos_em_escopo(db, periodo_ini, periodo_fim), filtro_assistente)
     ultimos = _ultimo_evento_por_processo(db, {p.id for p in processos})
+    tipos_cadastrados = tipos_evento_cadastrados(db)
+    tipos_nao_catalogados: set[str] = set()
 
     por_empresa: dict[str, list[Processo]] = {}
     for p in processos:
@@ -516,6 +526,9 @@ def gerar_relatorio_geral(
     secoes = []
     for empresa_nome in sorted(por_empresa, key=normalize):
         procs = por_empresa[empresa_nome]
+        for p in procs:
+            if p.id in ultimos and normalize(ultimos[p.id].tipo_evento_nome) not in tipos_cadastrados:
+                tipos_nao_catalogados.add(ultimos[p.id].tipo_evento_nome)
         linhas_geral = [
             LinhaProcessoGeral(
                 assistente=p.assistente or "(sem assistente informado)",
@@ -540,7 +553,10 @@ def gerar_relatorio_geral(
             )
         )
 
-    return RelatorioGeral(periodo_ini=periodo_ini, periodo_fim=periodo_fim, secoes=secoes)
+    return RelatorioGeral(
+        periodo_ini=periodo_ini, periodo_fim=periodo_fim, secoes=secoes,
+        tipos_nao_catalogados=sorted(tipos_nao_catalogados),
+    )
 
 
 def gerar_relatorio_por_empresa(
@@ -564,6 +580,13 @@ def gerar_relatorio_por_empresa(
     ultimos = _ultimo_evento_por_processo(db, {p.id for p in processos})
     processos.sort(key=lambda p: (normalize(p.assistente or ""), p.numero_processo))
 
+    tipos_cadastrados = tipos_evento_cadastrados(db)
+    tipos_nao_catalogados = {
+        ultimos[p.id].tipo_evento_nome
+        for p in processos
+        if p.id in ultimos and normalize(ultimos[p.id].tipo_evento_nome) not in tipos_cadastrados
+    }
+
     linhas = [
         LinhaProcessoPorEmpresa(
             assistente=p.assistente or "(sem assistente informado)",
@@ -578,6 +601,7 @@ def gerar_relatorio_por_empresa(
     return RelatorioPorEmpresa(
         empresa=empresa.nome, periodo_ini=periodo_ini, periodo_fim=periodo_fim,
         total_processos=len(processos), linhas=linhas,
+        tipos_nao_catalogados=sorted(tipos_nao_catalogados),
     )
 
 

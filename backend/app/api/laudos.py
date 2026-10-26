@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api._shared import salvar_temp
+from app.api._shared import remover_temp, salvar_temp
 from app.auth import require_admin, require_modulo
 from app.db import get_db
 from app.excel_export import gerar_excel_laudos
@@ -31,6 +31,8 @@ def importar(
         resumo = laudos_service.importar_planilha(db, path)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        remover_temp(path)
     registrar(db, usuario, "IMPORTOU_LAUDOS", entidade="laudo", detalhes=str(resumo))
     return resumo
 

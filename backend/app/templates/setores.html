@@ -74,13 +74,13 @@
                 </td>
                 <td>
                   <div class="acoes-linha">
-                    <button type="submit" form="setor-{{ s.id }}" class="secundario" style="padding:7px 12px; font-size:0.8rem;">Salvar</button>
+                    <button type="submit" form="setor-{{ s.id }}" class="secundario botao-linha">Salvar</button>
                     <form method="post" action="/app/setores/{{ s.id }}/ativo?ativo={{ 'false' if s.ativo else 'true' }}">
-                      <button type="submit" class="{{ 'perigo' if s.ativo else 'secundario' }}" style="padding:7px 12px; font-size:0.8rem;">
+                      <button type="submit" class="{{ 'perigo' if s.ativo else 'secundario' }} botao-linha">
                         {{ "Desativar" if s.ativo else "Ativar" }}
                       </button>
                     </form>
-                    <button type="button" class="perigo" style="padding:7px 10px; font-size:0.8rem;"
+                    <button type="button" class="perigo botao-linha"
                             data-abrir-confirmacao="modal-excluir-setor-{{ s.id }}" data-nome-alvo="{{ s.nome }}"
                             aria-label="Excluir {{ s.nome }}">
                       {{ icones.icone('lixeira') }}

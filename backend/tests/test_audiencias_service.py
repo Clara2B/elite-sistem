@@ -3,6 +3,7 @@ from datetime import date
 from pathlib import Path
 
 import openpyxl
+import pytest
 from sqlalchemy import Text
 
 from app.models import Audiencia
@@ -65,12 +66,71 @@ def test_proxima_faixa(db):
     assert (result.quantidade_mes, result.valor_unitario, result.total) == (40, 300.0, 6000.0)
 
 
+# --- M43: diferencia LookupError (empresa não encontrada, 404 na API) de
+# ValueError (regra de negócio, 422 na API) ----------------------------------
+
+
+def test_empresa_nao_encontrada_levanta_lookup_error(db):
+    ini, fim = periodo_quinzenal(2026, 9, 1)
+    try:
+        gerar_relatorio(db, "NÃO EXISTE", ini, fim)
+        assert False, "deveria ter levantado LookupError"
+    except LookupError as e:
+        assert "NÃO EXISTE" in str(e)
+
+
+def test_faixa_nao_cadastrada_continua_value_error_puro(db):
+    """Acima de 100 audiências acumuladas não tem faixa cadastrada
+    (DEFAULT_FAIXAS_AUDIENCIA vai até 100) — regra de negócio, não "recurso
+    não encontrado": deve continuar ValueError puro (não LookupError, que
+    agora é só pra "empresa não encontrada" — auditoria M43)."""
+    _planilha(db, "ALFA", 101, 0)
+    ini, fim = periodo_quinzenal(2026, 9, 1)
+    try:
+        gerar_relatorio(db, "ALFA", ini, fim)
+        assert False, "deveria ter levantado ValueError"
+    except LookupError:
+        assert False, "faixa não cadastrada não deve ser LookupError"
+    except ValueError as e:
+        assert "faixa de preço" in str(e)
+
+
 def test_mes_anterior_nao_entra_no_acumulado(db):
     _planilha(db, "ALFA", 20, 20, ano=2026, mes=9)
     _planilha(db, "ALFA", 0, 1, ano=2026, mes=10)
     ini, fim = periodo_quinzenal(2026, 10, 2)
     result = gerar_relatorio(db, "ALFA", ini, fim)
     assert (result.quantidade_mes, result.valor_unitario, result.total) == (1, 400.0, 400.0)
+
+
+def test_gerar_relatorio_aceita_cnpj_valido_sobrescrito(db):
+    """Auditoria M12: o CNPJ sobrescrito via parâmetro precisa ser um CNPJ
+    de verdade — antes, qualquer texto era aceito e ia pro PDF/Excel/JSON
+    oficial sem checagem."""
+    _planilha(db, "ALFA", 10, 5)
+    ini, fim = periodo_quinzenal(2026, 9, 1)
+    result = gerar_relatorio(db, "ALFA", ini, fim, cnpj="11222333000181")
+    assert result.cnpj == "11222333000181"
+
+
+def test_gerar_relatorio_rejeita_cnpj_invalido_sobrescrito(db):
+    _planilha(db, "ALFA", 10, 5)
+    ini, fim = periodo_quinzenal(2026, 9, 1)
+    with pytest.raises(ValueError, match="CNPJ"):
+        gerar_relatorio(db, "ALFA", ini, fim, cnpj="123")
+
+
+def test_periodo_quinzenal_aceita_1_e_2():
+    assert periodo_quinzenal(2026, 9, 1) == (date(2026, 9, 1), date(2026, 9, 15))
+    assert periodo_quinzenal(2026, 9, 2) == (date(2026, 9, 16), date(2026, 9, 30))
+
+
+@pytest.mark.parametrize("quinzena", [0, 3, -1, 99])
+def test_periodo_quinzenal_rejeita_valor_invalido(quinzena):
+    """Auditoria M13: antes, qualquer valor != 1 caía no else e devolvia o
+    período da 2ª quinzena silenciosamente, sem erro."""
+    with pytest.raises(ValueError, match="Quinzena inválida"):
+        periodo_quinzenal(2026, 9, quinzena)
 
 
 def test_empresa_normalizada_sem_acento_e_caixa(db):
@@ -124,6 +184,30 @@ def test_import_cpf_com_texto_longo_nao_quebra(db):
     resumo = importar_planilha(db, str(path))
     assert resumo.linhas_novas == 1
     assert db.query(Audiencia).one().cpf == cpf_longo
+
+
+def test_reimportar_mesmo_cpf_com_formatacao_diferente_nao_duplica(db):
+    """Auditoria M14: a chave de deduplicação normalizava o nome (sem
+    acento/maiúscula) mas comparava o CPF em texto cru — reimportar a
+    mesma pessoa com o CPF formatado diferente ("123.456.789-01" vs
+    "12345678901") criava uma duplicata silenciosa."""
+
+    def _planilha_com_cpf(cpf_na_celula):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["EMPRESA", "NOME COMPLETO", "DATA DE RECEBIMENTO", "CPF"])
+        ws.append(["ALFA", "Cliente Teste", date(2026, 9, 1), cpf_na_celula])
+        path = Path(tempfile.mkdtemp()) / "audiencias.xlsx"
+        wb.save(path)
+        return str(path)
+
+    resumo1 = importar_planilha(db, _planilha_com_cpf("123.456.789-01"))
+    assert resumo1.linhas_novas == 1
+
+    resumo2 = importar_planilha(db, _planilha_com_cpf("12345678901"))
+    assert resumo2.linhas_novas == 0
+    assert resumo2.linhas_ja_existentes == 1
+    assert db.query(Audiencia).count() == 1
 
 
 def test_apagar_todas_audiencias_remove_tudo_e_devolve_a_contagem(db):

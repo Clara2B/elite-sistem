@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.api._shared import salvar_temp
+from app.api._shared import remover_temp, salvar_temp
 from app.auth import PAPEIS_GLOBAIS, operadoras_acessiveis
 from app.db import get_db
 from app.models import Usuario
@@ -81,6 +81,8 @@ async def importar(
             f"{resumo.linhas_novas} linha(s) nova(s) importada(s) "
             f"({resumo.linhas_ja_existentes} já existiam de antes)."
         )
+    finally:
+        remover_temp(path)
     return templates.TemplateResponse(request, "pendencias.html", contexto)
 
 

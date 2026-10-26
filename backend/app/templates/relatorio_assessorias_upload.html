@@ -1,12 +1,7 @@
 {% extends "base.html" %}
 {% block titulo %}Relatórios das Assessorias — Elite Sistem{% endblock %}
-{% block voltar %}
-  {% import "_icones.html" as icones %}
-  {% from "_config_subnav.html" import subnav %}
-  <a href="/app/configuracao" class="link-voltar">{{ icones.icone('voltar') }} Voltar à Configuração</a>
-  {{ subnav(areas_configuracao, request.url.path) }}
-{% endblock %}
 {% block conteudo %}
+  {% import "_icones.html" as icones %}
   {% from "_flash.html" import toast %}
   <h1>Relatórios das Assessorias</h1>
   <p class="subtitulo">
@@ -38,27 +33,63 @@
 
       <div class="campo">
         <label for="laudo">Planilha de Laudos</label>
-        <input type="file" id="laudo" name="laudo" accept=".xlsx" required>
+        <div class="upload-zona" data-upload>
+          <input type="file" id="laudo" name="laudo" accept=".xlsx" required class="upload-input" data-upload-input>
+          <label for="laudo" class="upload-label">
+            <span class="icone-wrap">{{ icones.icone('upload') }}</span>
+            <span data-upload-texto>Clique para escolher a planilha (.xlsx)</span>
+          </label>
+        </div>
       </div>
       <div class="campo">
         <label for="iniciais">Planilha de Iniciais</label>
-        <input type="file" id="iniciais" name="iniciais" accept=".xlsx" required>
+        <div class="upload-zona" data-upload>
+          <input type="file" id="iniciais" name="iniciais" accept=".xlsx" required class="upload-input" data-upload-input>
+          <label for="iniciais" class="upload-label">
+            <span class="icone-wrap">{{ icones.icone('upload') }}</span>
+            <span data-upload-texto>Clique para escolher a planilha (.xlsx)</span>
+          </label>
+        </div>
       </div>
       <div class="campo">
         <label for="agendamento">Planilha 2026 (Judicial + Pauta da Semana Contrária)</label>
-        <input type="file" id="agendamento" name="agendamento" accept=".xlsx" required>
+        <div class="upload-zona" data-upload>
+          <input type="file" id="agendamento" name="agendamento" accept=".xlsx" required class="upload-input" data-upload-input>
+          <label for="agendamento" class="upload-label">
+            <span class="icone-wrap">{{ icones.icone('upload') }}</span>
+            <span data-upload-texto>Clique para escolher a planilha (.xlsx)</span>
+          </label>
+        </div>
       </div>
       <div class="campo">
         <label for="extrajudicial">Planilha de Agendamento (Extrajudicial)</label>
-        <input type="file" id="extrajudicial" name="extrajudicial" accept=".xlsx" required>
+        <div class="upload-zona" data-upload>
+          <input type="file" id="extrajudicial" name="extrajudicial" accept=".xlsx" required class="upload-input" data-upload-input>
+          <label for="extrajudicial" class="upload-label">
+            <span class="icone-wrap">{{ icones.icone('upload') }}</span>
+            <span data-upload-texto>Clique para escolher a planilha (.xlsx)</span>
+          </label>
+        </div>
       </div>
       <div class="campo">
         <label for="contrarias">Planilha Contrárias - Novo</label>
-        <input type="file" id="contrarias" name="contrarias" accept=".xlsx" required>
+        <div class="upload-zona" data-upload>
+          <input type="file" id="contrarias" name="contrarias" accept=".xlsx" required class="upload-input" data-upload-input>
+          <label for="contrarias" class="upload-label">
+            <span class="icone-wrap">{{ icones.icone('upload') }}</span>
+            <span data-upload-texto>Clique para escolher a planilha (.xlsx)</span>
+          </label>
+        </div>
       </div>
       <div class="campo">
         <label for="procon">Planilha Procon e Extrajudicial</label>
-        <input type="file" id="procon" name="procon" accept=".xlsx" required>
+        <div class="upload-zona" data-upload>
+          <input type="file" id="procon" name="procon" accept=".xlsx" required class="upload-input" data-upload-input>
+          <label for="procon" class="upload-label">
+            <span class="icone-wrap">{{ icones.icone('upload') }}</span>
+            <span data-upload-texto>Clique para escolher a planilha (.xlsx)</span>
+          </label>
+        </div>
       </div>
 
       <button type="submit">Processar</button>

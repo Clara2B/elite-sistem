@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block titulo %}Bancos — Elite Sistem{% endblock %}
+{% block conteudo %}
+  {% import "_icones.html" as icones %}
+  {% import "_flash.html" as flash %}
+  <h1>Bancos</h1>
+  <p class="subtitulo">
+    Cadastro de bancos — alimenta o seletor "Banco" da Solicitação de Audiência e a Carta Convite Banco.
+  </p>
+
+  {{ flash.toast('sucesso', mensagem) }}
+  {{ flash.toast('erro', erro) }}
+
+  <div class="card">
+    <h2>Importar da planilha de controle</h2>
+    <form method="post" action="/app/bancos/importar-da-planilha">
+      <button type="submit">Importar da aba "E-MAIL BANCO"</button>
+    </form>
+    <p class="subtitulo" style="margin-top: 8px;">
+      Lê direto da planilha de controle (Google Sheets), aba "E-MAIL BANCO" — sem precisar
+      exportar/subir arquivo. Banco já cadastrado (mesmo nome, sem acento/caixa) tem CNPJ/e-mail
+      atualizados; nome novo cria um cadastro novo. Nada é apagado numa reimportação parcial.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Importar planilha (.xlsx)</h2>
+    <form class="formulario" method="post" action="/app/bancos/import" enctype="multipart/form-data">
+      <div class="campo upload-zona" data-upload>
+        <input type="file" id="arquivo" name="arquivo" accept=".xlsx" required class="upload-input" data-upload-input>
+        <label for="arquivo" class="upload-label">
+          <span class="icone-wrap">{{ icones.icone('upload') }}</span>
+          <span data-upload-texto>Clique para escolher a planilha (.xlsx)</span>
+        </label>
+      </div>
+      <button type="submit">Importar</button>
+    </form>
+    <p class="subtitulo" style="margin-top: 8px;">
+      Colunas esperadas: BANCO (obrigatória), CNPJ e EMAIL (opcionais). Mesmo upsert do botão acima.
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Cadastrados ({{ bancos|length }})</h2></div>
+    {% if bancos %}
+      {% for b in bancos %}
+        <form id="banco-{{ b.id }}" method="post" action="/app/bancos/{{ b.id }}"></form>
+      {% endfor %}
+      <div class="tabela-wrap">
+        <table>
+          <thead><tr><th>Nome</th><th>CNPJ</th><th>2° opção CNPJ</th><th>E-mail</th><th>Status</th><th style="width:1%;"></th></tr></thead>
+          <tbody>
+            {% for b in bancos %}
+              <tr>
+                <td>
+                  <input type="text" name="nome" value="{{ b.nome }}" required form="banco-{{ b.id }}"
+                         style="min-width:180px; padding:6px 9px; border:1px solid var(--border); border-radius:7px; font-size:0.86rem;">
+                </td>
+                <td>
+                  <input type="text" name="cnpj" value="{{ b.cnpj }}" required form="banco-{{ b.id }}"
+                         style="min-width:160px; padding:6px 9px; border:1px solid var(--border); border-radius:7px; font-size:0.86rem;">
+                </td>
+                <td>
+                  <input type="text" name="cnpj_alternativo" value="{{ b.cnpj_alternativo or '' }}" form="banco-{{ b.id }}"
+                         placeholder="Opcional" style="min-width:160px; padding:6px 9px; border:1px solid var(--border); border-radius:7px; font-size:0.86rem;">
+                </td>
+                <td>
+                  <input type="text" name="email" value="{{ b.email }}" required form="banco-{{ b.id }}"
+                         style="min-width:200px; padding:6px 9px; border:1px solid var(--border); border-radius:7px; font-size:0.86rem;">
+                </td>
+                <td>
+                  {% if b.ativo %}<span class="badge ativo">Ativo</span>{% else %}<span class="badge inativo">Inativo</span>{% endif %}
+                </td>
+                <td>
+                  <div class="acoes-linha">
+                    <button type="submit" form="banco-{{ b.id }}" class="secundario botao-linha">Salvar</button>
+                    <form method="post" action="/app/bancos/{{ b.id }}/ativo?ativo={{ 'false' if b.ativo else 'true' }}">
+                      <button type="submit" class="{{ 'perigo' if b.ativo else 'secundario' }} botao-linha">
+                        {{ "Desativar" if b.ativo else "Ativar" }}
+                      </button>
+                    </form>
+                    <button type="button" class="perigo botao-linha"
+                            data-abrir-confirmacao="modal-excluir-{{ b.id }}" data-nome-alvo="{{ b.nome }}"
+                            aria-label="Excluir {{ b.nome }}">
+                      {{ icones.icone('lixeira') }}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% for b in bancos %}
+        <dialog id="modal-excluir-{{ b.id }}" class="modal-confirmacao">
+          <div class="modal-corpo">
+            <div class="modal-icone">{{ icones.icone('alerta') }}</div>
+            <h3>Excluir banco?</h3>
+            <p>
+              Isso vai apagar <strong data-nome-alvo-destino>{{ b.nome }}</strong> definitivamente do
+              cadastro — só tira o banco do seletor, não mexe em nenhuma solicitação ou carta já gerada.
+            </p>
+          </div>
+          <div class="modal-acoes">
+            <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
+            <form method="post" action="/app/bancos/{{ b.id }}/excluir">
+              <button type="submit" class="perigo">Excluir definitivamente</button>
+            </form>
+          </div>
+        </dialog>
+      {% endfor %}
+    {% else %}
+      <p class="vazio">Nenhum banco cadastrado ainda.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Novo banco</h2></div>
+    <form class="formulario" method="post" action="/app/bancos">
+      <div class="campo">
+        <label for="nome">Nome</label>
+        <input type="text" id="nome" name="nome" required placeholder="Ex.: BANCO XPTO S.A.">
+      </div>
+      <div class="campo">
+        <label for="cnpj">CNPJ</label>
+        <input type="text" id="cnpj" name="cnpj" required placeholder="00.000.000/0000-00">
+      </div>
+      <div class="campo">
+        <label for="cnpj_alternativo">2° opção de CNPJ (opcional)</label>
+        <input type="text" id="cnpj_alternativo" name="cnpj_alternativo" placeholder="00.000.000/0000-00">
+      </div>
+      <div class="campo">
+        <label for="email">E-mail</label>
+        <input type="text" id="email" name="email" required placeholder="contato@banco.com.br">
+      </div>
+      <button type="submit">Cadastrar</button>
+    </form>
+  </div>
+{% endblock %}

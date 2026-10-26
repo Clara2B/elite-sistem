@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.api._shared import salvar_temp
+from app.api._shared import remover_temp, salvar_temp
 from app.auth import PAPEIS_GLOBAIS
 from app.db import get_db
 from app.models import Usuario
@@ -91,6 +91,8 @@ async def importar(
             f"{resumo.linhas_novas} linha(s) nova(s) importada(s) "
             f"({resumo.linhas_ja_existentes} já existiam de antes)."
         )
+    finally:
+        remover_temp(path)
     # _contexto_base DEPOIS do import (não antes): a planilha pode trazer
     # empresa nova, que só existe no banco depois de importar_planilha
     # rodar — calculado antes, o dropdown de empresa saía sem a que acabou

@@ -24,6 +24,14 @@ function mostrarToast(texto, tipo) {
   return div;
 }
 
+// Filtra uma lista (array ou NodeList) de elementos pelos que estão
+// visíveis no momento (M40: era implementado duas vezes, quase idêntico,
+// em iniciarSelecionarTodosModulos e iniciarSelecaoEmMassaDeEmpresas —
+// extraído aqui como helper único).
+function caixasVisiveis(lista) {
+  return Array.prototype.filter.call(lista, function (caixa) { return caixa.offsetParent !== null; });
+}
+
 function iniciarZonasDeUpload() {
   document.querySelectorAll("[data-upload]").forEach(function (zona) {
     var input = zona.querySelector("[data-upload-input]");
@@ -263,17 +271,11 @@ function iniciarModulosPorOperadora() {
 // mexe nas caixas que estão visíveis no momento (as escondidas pela
 // operadora escolhida, via `iniciarModulosPorOperadora`, ficam de fora).
 function iniciarSelecionarTodosModulos() {
-  function caixasVisiveis(bloco) {
-    return Array.prototype.filter.call(bloco.querySelectorAll("input[type=checkbox]"), function (caixa) {
-      return caixa.offsetParent !== null;
-    });
-  }
-
   document.querySelectorAll("[data-marcar-todos-modulos]").forEach(function (botao) {
     var alvo = document.getElementById(botao.getAttribute("data-marcar-todos-modulos"));
     if (!alvo) return;
     botao.addEventListener("click", function () {
-      caixasVisiveis(alvo).forEach(function (caixa) {
+      caixasVisiveis(alvo.querySelectorAll("input[type=checkbox]")).forEach(function (caixa) {
         caixa.checked = true;
       });
     });
@@ -283,7 +285,7 @@ function iniciarSelecionarTodosModulos() {
     var alvo = document.getElementById(botao.getAttribute("data-limpar-modulos"));
     if (!alvo) return;
     botao.addEventListener("click", function () {
-      caixasVisiveis(alvo).forEach(function (caixa) {
+      caixasVisiveis(alvo.querySelectorAll("input[type=checkbox]")).forEach(function (caixa) {
         caixa.checked = false;
       });
     });
@@ -428,10 +430,8 @@ function iniciarSelecaoEmMassaDeEmpresas() {
   // todas" não marcar (sem a pessoa ver) empresas escondidas pela busca
   // (`iniciarBuscaDeEmpresas`). A seleção em si (`selecionadas()`) continua
   // contando tudo marcado, visível ou não — filtrar a lista não deve
-  // desmarcar nada escondido por engano.
-  function caixasVisiveis() {
-    return caixas.filter(function (caixa) { return caixa.offsetParent !== null; });
-  }
+  // desmarcar nada escondido por engano. (`caixasVisiveis` compartilhado,
+  // ver topo do arquivo.)
 
   // Causa real do bug "seleciono várias mas só apaga uma" (2026-10-06, 3ª
   // rodada — a própria Clara encontrou): com várias caixinhas marcadas, o
@@ -447,7 +447,7 @@ function iniciarSelecaoEmMassaDeEmpresas() {
     barra.style.display = sel.length ? "" : "none";
     if (contador) contador.textContent = sel.length + " selecionada(s)";
     if (caixaTodas) {
-      var visiveis = caixasVisiveis();
+      var visiveis = caixasVisiveis(caixas);
       var selVisiveis = visiveis.filter(function (c) { return c.checked; });
       caixaTodas.checked = visiveis.length > 0 && selVisiveis.length === visiveis.length;
       caixaTodas.indeterminate = selVisiveis.length > 0 && selVisiveis.length < visiveis.length;
@@ -466,7 +466,7 @@ function iniciarSelecaoEmMassaDeEmpresas() {
   document.addEventListener("empresas:busca-atualizada", atualizarBarra);
   if (caixaTodas) {
     caixaTodas.addEventListener("change", function () {
-      caixasVisiveis().forEach(function (caixa) { caixa.checked = caixaTodas.checked; });
+      caixasVisiveis(caixas).forEach(function (caixa) { caixa.checked = caixaTodas.checked; });
       atualizarBarra();
     });
   }

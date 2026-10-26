@@ -69,13 +69,13 @@
                 </td>
                 <td>
                   <div class="acoes-linha">
-                    <button type="submit" form="empresa-{{ e.id }}" class="secundario" style="padding:7px 12px; font-size:0.8rem;">Salvar</button>
+                    <button type="submit" form="empresa-{{ e.id }}" class="secundario botao-linha">Salvar</button>
                     <form method="post" action="/app/empresas/{{ e.id }}/ativo?ativo={{ 'false' if e.ativo else 'true' }}">
-                      <button type="submit" class="{{ 'perigo' if e.ativo else 'secundario' }}" style="padding:7px 12px; font-size:0.8rem;">
+                      <button type="submit" class="{{ 'perigo' if e.ativo else 'secundario' }} botao-linha">
                         {{ "Desativar" if e.ativo else "Ativar" }}
                       </button>
                     </form>
-                    <button type="button" class="perigo botao-excluir-linha" style="padding:7px 10px; font-size:0.8rem;"
+                    <button type="button" class="perigo botao-excluir-linha botao-linha"
                             data-abrir-confirmacao="modal-excluir-{{ e.id }}" data-nome-alvo="{{ e.nome }}"
                             title="Excluir {{ e.nome }}" aria-label="Excluir {{ e.nome }}">
                       {{ icones.icone('lixeira') }}
@@ -148,12 +148,17 @@
               {% endfor %}
             </select>
           </div>
+          <div class="campo" style="margin-top: 14px;">
+            <label for="confirmar-excluir-em-massa">Digite EXCLUIR para confirmar</label>
+            <input type="text" id="confirmar-excluir-em-massa" autocomplete="off"
+                   data-confirmar-texto="EXCLUIR" placeholder="EXCLUIR">
+          </div>
         </div>
         <div class="modal-acoes">
           <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
           <form id="form-excluir-em-massa" method="post" action="/app/empresas/excluir-em-massa">
             <span data-ids-selecionados></span>
-            <button type="submit" class="perigo">Excluir selecionadas</button>
+            <button type="submit" class="perigo" data-confirmar-alvo>Excluir selecionadas</button>
           </form>
         </div>
       </dialog>
@@ -176,12 +181,17 @@
               {% endfor %}
             </select>
           </div>
+          <div class="campo" style="margin-top: 14px;">
+            <label for="confirmar-realocar-em-massa">Digite REALOCAR para confirmar</label>
+            <input type="text" id="confirmar-realocar-em-massa" autocomplete="off"
+                   data-confirmar-texto="REALOCAR" placeholder="REALOCAR">
+          </div>
         </div>
         <div class="modal-acoes">
           <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
           <form id="form-realocar-em-massa" method="post" action="/app/empresas/realocar-em-massa">
             <span data-ids-selecionados></span>
-            <button type="submit" class="perigo">Realocar selecionadas</button>
+            <button type="submit" class="perigo" data-confirmar-alvo>Realocar selecionadas</button>
           </form>
         </div>
       </dialog>

@@ -57,7 +57,7 @@
           <tbody>
             {% for r in resultado.registros %}
               <tr>
-                <td style="white-space:nowrap;">{{ r.criado_em.strftime("%d/%m/%Y %H:%M") }}</td>
+                <td style="white-space:nowrap;">{{ r.criado_em | horario_brasil }}</td>
                 <td>{{ r.usuario.nome if r.usuario else "—" }}</td>
                 <td>{{ humanizar_acao(r.acao) }}</td>
                 <td>

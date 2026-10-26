@@ -24,3 +24,8 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: ruff check .
       - run: pytest
+      - name: pip-audit (vulnerabilidades conhecidas nas dependências)
+        # Só os arquivos declarados, não o ambiente inteiro — pip/setuptools
+        # do próprio runner aparecem como "vulneráveis" sem ter nada a ver
+        # com as dependências do projeto (2026-10-13, auditoria M17).
+        run: pip-audit -r requirements.txt -r requirements-dev.txt
