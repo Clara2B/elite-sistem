@@ -181,7 +181,7 @@ def formatar_texto_carta_cliente(convite: ConviteCliente) -> str:
         f"(Segue link abaixo, pela plataforma {convite.plataforma.upper()})\n{convite.link}",
         (
             "Colocamo-nos à disposição por meio dos contatos:\n"
-            "E-mail: conciliacao@camaraeximia.com\n"
+            "E-mail: agendamento@camaraeximia.com\n"
             "Telefone: 55 11 93234-6989"
         ),
         "Certos da atenção e colaboração, renovamos votos de elevada estima e consideração.",
@@ -254,7 +254,7 @@ def formatar_texto_carta_banco(convite: ConviteBanco) -> str:
             "para negociar e transigir, a fim de possibilitar a efetiva resolução do "
             "conflito."
         ),
-        "Colocamo-nos à disposição por meio do e-mail: conciliacao@camaraeximia.com.",
+        "Colocamo-nos à disposição por meio do e-mail: agendamento@camaraeximia.com.",
         "Certos da atenção e colaboração, renovamos votos de elevada estima e consideração.",
         "Atenciosamente,",
         "EXÍMIA CÂMARA DE CONCILIAÇÃO, MEDIAÇÃO E ARBITRAGEM",
@@ -301,10 +301,20 @@ def _p(texto_html: str, estilo: str) -> str:
     return f'<p style="{estilo}">{texto_html}</p>'
 
 
-def _cabecalho_html(logo_cid: str | None) -> str:
+def _rodape_html(logo_cid: str | None) -> str:
+    """Logotipo no rodapé do corpo do e-mail (2026-10-26, a pedido da
+    Clara: a imagem usada antes era a folha inteira do timbrado do PDF —
+    cabeçalho de verdade seguido de uma página inteira em branco —, o que
+    deixava o e-mail com um espaço vazio enorme antes do texto. Usa um
+    recorte só do logotipo (audiencias_logo_rodape.jpeg, sem a área em
+    branco), pequeno, depois do texto."""
     if not logo_cid:
         return ""
-    return f'<img src="cid:{logo_cid}" alt="" style="max-width: 100%; height: auto; margin-bottom: 18px;">'
+    return (
+        f'<div style="margin-top: 24px; text-align: center;">'
+        f'<img src="cid:{logo_cid}" alt="" style="max-width: 280px; height: auto;">'
+        f"</div>"
+    )
 
 
 def formatar_html_carta_cliente(convite: ConviteCliente, logo_cid: str | None = None) -> str:
@@ -325,7 +335,6 @@ def formatar_html_carta_cliente(convite: ConviteCliente, logo_cid: str | None = 
     href = _esc(href_absoluto(convite.link))
     link_texto = _esc(convite.link)
     partes = [
-        _cabecalho_html(logo_cid),
         _p("Pré-Processual", f"{_FONTE} font-style: italic; font-size: 14px; text-align: center; margin: 0 0 6px 0; color: {_CINZA_TEXTO};"),
         _p("Métodos Consensuais de Solução de Conflitos", f"{_FONTE} font-style: italic; font-size: 14px; text-align: center; margin: 0 0 6px 0; color: {_CINZA_TEXTO};"),
         _p("Convite para Audiência Extrajudicial Administrativa – Ação Revisional", titulo),
@@ -356,13 +365,14 @@ def formatar_html_carta_cliente(convite: ConviteCliente, logo_cid: str | None = 
         ),
         _p(
             "Colocamo-nos à disposição por meio dos contatos:<br>"
-            "<b>E-mail: conciliacao@camaraeximia.com</b><br>"
+            "<b>E-mail: agendamento@camaraeximia.com</b><br>"
             "<b>Telefone: 55 11 93234-6989</b>",
             fechamento,
         ),
         _p("Certos da atenção e colaboração, renovamos votos de elevada estima e consideração.", fechamento),
         _p("Atenciosamente,", fechamento),
         _p("Eximia Câmara de Mediação Conciliação e Arbitragem.", fechamento),
+        _rodape_html(logo_cid),
     ]
     return "\n".join(p for p in partes if p)
 
@@ -384,7 +394,6 @@ def formatar_html_carta_banco(convite: ConviteBanco, logo_cid: str | None = None
     link_texto = _esc(convite.link)
     plataforma_caps = _esc(convite.plataforma.upper())
     partes = [
-        _cabecalho_html(logo_cid),
         _p("Convite para Audiência Extrajudicial Administrativa – Ação Revisional", titulo),
         _p("Ao", titulo_simples),
         _p(f"{_esc(convite.banco_nome)} – CNPJ: {_esc(convite.banco_cnpj)},", centralizado_negrito),
@@ -430,9 +439,10 @@ def formatar_html_carta_banco(convite: ConviteBanco, logo_cid: str | None = None
             "conflito.",
             corpo,
         ),
-        _p("Colocamo-nos à disposição por meio do e-mail: <b>conciliacao@camaraeximia.com.</b>", contato_destaque),
+        _p("Colocamo-nos à disposição por meio do e-mail: <b>agendamento@camaraeximia.com.</b>", contato_destaque),
         _p("Certos da atenção e colaboração, renovamos votos de elevada estima e consideração.", fechamento),
         _p("Atenciosamente,", fechamento),
         _p("EXÍMIA CÂMARA DE CONCILIAÇÃO, MEDIAÇÃO E ARBITRAGEM", fechamento_caps),
+        _rodape_html(logo_cid),
     ]
     return "\n".join(p for p in partes if p)

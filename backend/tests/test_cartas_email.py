@@ -61,7 +61,7 @@ def test_html_carta_cliente_tem_o_mesmo_conteudo_do_texto():
     assert LINK in corpo
     assert "GOOGLE MEET" in corpo
     assert "NÃO ESQUECER DO DOCUMENTO COM FOTO" in corpo
-    assert "conciliacao@camaraeximia.com" in corpo
+    assert "agendamento@camaraeximia.com" in corpo
 
 
 def test_html_carta_cliente_link_eh_clicavel():
@@ -80,6 +80,17 @@ def test_html_carta_cliente_com_logo_referencia_o_content_id():
     convite = montar_convite_cliente("Fulano de Tal", "Banco XPTO", date(2026, 11, 5), "15:00", LINK)
     corpo = formatar_html_carta_cliente(convite, logo_cid="logo-carta")
     assert 'src="cid:logo-carta"' in corpo
+
+
+def test_html_carta_cliente_logo_fica_no_rodape_depois_do_texto():
+    """A imagem usada antes era a folha inteira do timbrado do PDF
+    (cabeçalho + página em branco), deixando um espaço vazio enorme no
+    topo do e-mail (reportado pela Clara em 2026-10-26). Agora é um
+    logotipo pequeno, no rodapé — depois do fechamento da carta, não
+    antes do texto."""
+    convite = montar_convite_cliente("Fulano de Tal", "Banco XPTO", date(2026, 11, 5), "15:00", LINK)
+    corpo = formatar_html_carta_cliente(convite, logo_cid="logo-carta")
+    assert corpo.index('src="cid:logo-carta"') > corpo.index("Eximia Câmara de Mediação")
 
 
 def test_html_carta_cliente_sem_logo_nao_tem_tag_de_imagem():
@@ -126,3 +137,12 @@ def test_html_carta_banco_com_logo_referencia_o_content_id():
     )
     corpo = formatar_html_carta_banco(convite, logo_cid="logo-carta")
     assert 'src="cid:logo-carta"' in corpo
+
+
+def test_html_carta_banco_logo_fica_no_rodape_depois_do_texto():
+    convite = montar_convite_banco(
+        "Banco XPTO", "11.222.333/0001-81", "Fulano de Tal", "529.982.247-25", "12345",
+        date(2026, 11, 5), "15:00", LINK,
+    )
+    corpo = formatar_html_carta_banco(convite, logo_cid="logo-carta")
+    assert corpo.index('src="cid:logo-carta"') > corpo.index("EXÍMIA CÂMARA DE CONCILIAÇÃO")

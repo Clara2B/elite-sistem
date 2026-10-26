@@ -34,7 +34,7 @@ from app.services.solicitacoes_audiencia import ABA_AGENDAMENTO
 from app.utils import nome_arquivo_pdf
 
 _logger = logging.getLogger("elite_sistem.email")
-_LOGO_PATH = Path(__file__).resolve().parent.parent / "assets" / "audiencias_logo_0.jpeg"
+_LOGO_PATH = Path(__file__).resolve().parent.parent / "assets" / "audiencias_logo_rodape.jpeg"
 _LOGO_CID = "logo-carta"
 
 
