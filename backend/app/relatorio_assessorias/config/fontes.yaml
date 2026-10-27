@@ -65,15 +65,19 @@ audiencias_judiciais:
     data: 0  # coluna A (índice 0), sem título no cabeçalho
 
 audiencias_contrarias:
-  arquivo_campo_upload: "agendamento"  # arquivo "PLANILHA 2026"
+  # Arquivo novo "PAUTA DE AUDIÊNCIAS CONTRÁRIAS" (substituiu a aba "PAUTA
+  # DA SEMANA CONTRARIA" de dentro de PLANILHA 2026 — mudança confirmada
+  # pela Clara, 2026-10-27). Diferente da aba antiga (só a semana
+  # corrente, sobrescrita toda semana), esse arquivo acumula várias
+  # semanas na mesma aba — dá pra filtrar por mês de verdade.
+  arquivo_campo_upload: "pauta_contrarias"
   padrao_leitura: aba_unica
-  aba: "PAUTA DA SEMANA CONTRARIA"
+  aba: "PAUTAS"
   colunas:
-    data: ["DATA"]
-    nome_cliente: ["NOME DO CLIENTE"]
-    estado: ["ESTADO", "ESTADOS", "UF"]
+    data: ["DATA DA AUDIÊNCIA"]
+    nome_cliente: ["CLIENTE"]
     processo: ["PROCESSO"]
-    empresa: ["EMPRESA"]
+    empresa: ["ASSESSORIA"]
 
 extrajudiciais:
   arquivo_campo_upload: "extrajudicial"  # arquivo "AGENDAMENTO"

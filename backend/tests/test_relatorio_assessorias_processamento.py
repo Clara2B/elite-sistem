@@ -45,10 +45,16 @@ def _workbook_agendamento():
     ws_judicial = wb.create_sheet("JUDICIAL")
     ws_judicial.append([None, "NOME DO CLIENTE", "PROCESSO", "EMPRESA"])
     ws_judicial.append(["10/08/2026", "Fulano", "0001", "TESTE SA"])
-    ws_pauta = wb.create_sheet("PAUTA DA SEMANA CONTRARIA")
-    ws_pauta.append(["PAUTA DA SEMANA CONTRARIA"])
-    ws_pauta.append(["DATA", "NOME DO CLIENTE", "ESTADO", "PROCESSO", "EMPRESA"])
-    ws_pauta.append(["15/08/2026", "Beltrano", "SP", "0002", "TESTE SA"])
+    return _salvar(wb)
+
+
+def _workbook_pauta_contrarias():
+    wb = Workbook()
+    wb.remove(wb.active)
+    ws = wb.create_sheet("PAUTAS")
+    ws.append(["PAUTA DA SEMANA 10 DE AGOSTO ATE 14 DE AGOSTO DE 2026"])
+    ws.append(["DATA DA AUDIÊNCIA", "HORÁRIO", "CLIENTE", "PROCESSO", "TIPO", "ASSESSORIA"])
+    ws.append(["15/08/2026", "10:00", "Beltrano", "0002", "JUDICIAL", "TESTE SA"])
     return _salvar(wb)
 
 
@@ -95,6 +101,7 @@ def test_processar_upload_salva_um_resultado_por_assessoria(db):
         "extrajudicial": _workbook_extrajudicial(),
         "contrarias": _workbook_contrarias(),
         "procon": _workbook_procon(),
+        "pauta_contrarias": _workbook_pauta_contrarias(),
     }
 
     resultados, desconhecidas = processamento.processar_upload(
@@ -128,6 +135,7 @@ def test_processar_upload_assessoria_sem_movimento_fica_zerada(db):
         "extrajudicial": _workbook_extrajudicial(),
         "contrarias": _workbook_contrarias(),
         "procon": _workbook_procon(),
+        "pauta_contrarias": _workbook_pauta_contrarias(),
     }
 
     resultados, _ = processamento.processar_upload(

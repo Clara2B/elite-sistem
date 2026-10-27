@@ -86,12 +86,14 @@ async def processar(
     extrajudicial: UploadFile = None,
     contrarias: UploadFile = None,
     procon: UploadFile = None,
+    pauta_contrarias: UploadFile = None,
     usuario: Usuario = Depends(admin_logado_web),
     db: Session = Depends(get_db),
 ):
     arquivos = {
         "laudo": laudo, "iniciais": iniciais, "agendamento": agendamento,
         "extrajudicial": extrajudicial, "contrarias": contrarias, "procon": procon,
+        "pauta_contrarias": pauta_contrarias,
     }
     faltando = [campo for campo, arquivo in arquivos.items() if arquivo is None or not arquivo.filename]
     if faltando:

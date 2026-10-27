@@ -5,7 +5,7 @@
   {% from "_flash.html" import toast %}
   <h1>Relatórios das Assessorias</h1>
   <p class="subtitulo">
-    Envie as 6 planilhas do mês uma vez — o sistema calcula o relatório de todas as assessorias
+    Envie as 7 planilhas do mês uma vez — o sistema calcula o relatório de todas as assessorias
     cadastradas de uma vez só.
   </p>
 
@@ -67,6 +67,16 @@
           <div class="upload-zona" data-upload>
             <input type="file" id="extrajudicial" name="extrajudicial" accept=".xlsx" required class="upload-input" data-upload-input>
             <label for="extrajudicial" class="upload-label">
+              <span class="icone-wrap">{{ icones.icone('upload') }}</span>
+              <span data-upload-texto>Clique para escolher a planilha (.xlsx)</span>
+            </label>
+          </div>
+        </div>
+        <div class="campo">
+          <label for="pauta_contrarias">Planilha Pauta de Audiências Contrárias</label>
+          <div class="upload-zona" data-upload>
+            <input type="file" id="pauta_contrarias" name="pauta_contrarias" accept=".xlsx" required class="upload-input" data-upload-input>
+            <label for="pauta_contrarias" class="upload-label">
               <span class="icone-wrap">{{ icones.icone('upload') }}</span>
               <span data-upload-texto>Clique para escolher a planilha (.xlsx)</span>
             </label>
