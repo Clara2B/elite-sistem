@@ -134,6 +134,38 @@ def test_processo_mesma_chave_comparacao_para_formatos_diferentes():
     assert a.chave_comparacao == b.chave_comparacao
 
 
+# --- processo.normalizar_protocolo_administrativo (Procon) ------------
+
+@pytest.mark.parametrize("bruto", ["0470905/2025", "123", "0001"])
+def test_protocolo_administrativo_formato_livre_nao_avisa(bruto):
+    """Bug real (planilha de Procon de produção, 2026-10-27): protocolo
+    administrativo não é processo CNJ — não deve gerar aviso de 'dígito
+    faltando' por não ter 20 dígitos."""
+    resultado = processo.normalizar_protocolo_administrativo(bruto)
+    assert resultado.valor == bruto
+    assert resultado.aviso is None
+
+
+def test_protocolo_administrativo_texto_livre_sem_digito_mantem_original_sem_aviso():
+    resultado = processo.normalizar_protocolo_administrativo("XERIFE DO CONSUMIDOR")
+    assert resultado.valor == "XERIFE DO CONSUMIDOR"
+    assert resultado.chave_comparacao == ""
+    assert resultado.aviso is None
+
+
+def test_protocolo_administrativo_vazio_avisa():
+    for bruto in ("", None, "   "):
+        resultado = processo.normalizar_protocolo_administrativo(bruto)
+        assert resultado.chave_comparacao == ""
+        assert resultado.aviso == "número de processo vazio"
+
+
+def test_protocolo_administrativo_mesma_chave_comparacao_para_formatos_diferentes():
+    a = processo.normalizar_protocolo_administrativo("0470905/2025")
+    b = processo.normalizar_protocolo_administrativo("0470905 / 2025")
+    assert a.chave_comparacao == b.chave_comparacao == "04709052025"
+
+
 # --- texto.py -----------------------------------------------------------
 
 def test_normalizar_nome_remove_espacos_extras_mantem_grafia():

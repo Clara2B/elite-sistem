@@ -372,17 +372,17 @@ def test_procons_recebido_depois_do_fim_do_mes_fica_fora():
     assert resultado.lista == []
 
 
-def test_procons_duplicata_por_cnj_mantem_a_primeira():
+def test_procons_duplicata_por_protocolo_mantem_a_primeira():
     linhas = [
         LinhaBruta(
             {"data_recebimento": date(2026, 8, 1), "nome_autor": "Fulano",
-             "numero_processo": "0813055-21.2026.8.10.0001", "estado": "RJ",
+             "numero_processo": "0470905/2025", "estado": "RJ",
              "status_atual": "EM ANDAMENTO", "tipo_acao": "PROCON"},
             Origem("procon", "SW", 10),
         ),
         LinhaBruta(
             {"data_recebimento": date(2026, 8, 1), "nome_autor": "Fulano",
-             "numero_processo": "0813055-21.2026.8.10.0001", "estado": "RJ",
+             "numero_processo": "0470905/2025", "estado": "RJ",
              "status_atual": "EM ANDAMENTO", "tipo_acao": "PROCON"},
             Origem("procon", "EWS", 25),
         ),
@@ -390,6 +390,26 @@ def test_procons_duplicata_por_cnj_mantem_a_primeira():
     resultado = procons.calcular(linhas, mes=8, ano=2026, regras=REGRAS["procons"])
     assert len(resultado.lista) == 1
     assert any("duplicado" in a.mensagem for a in resultado.avisos)
+
+
+def test_procons_numero_protocolo_fora_do_padrao_cnj_nao_avisa():
+    """Bug real (planilha de Procon de produção, 2026-10-27): protocolo
+    administrativo (não CNJ) não deve gerar aviso de 'dígito faltando'."""
+    linhas = [
+        LinhaBruta(
+            {"data_recebimento": date(2026, 8, 10), "nome_autor": "Fulano", "numero_processo": "0470905/2025",
+             "estado": "RJ", "status_atual": "EM ANDAMENTO", "tipo_acao": "PROCON"},
+            _origem(1),
+        ),
+        LinhaBruta(
+            {"data_recebimento": date(2026, 8, 10), "nome_autor": "Beltrano", "numero_processo": "XERIFE DO CONSUMIDOR",
+             "estado": "RJ", "status_atual": "EM ANDAMENTO", "tipo_acao": "PROCON"},
+            _origem(2),
+        ),
+    ]
+    resultado = procons.calcular(linhas, mes=8, ano=2026, regras=REGRAS["procons"])
+    assert len(resultado.lista) == 2
+    assert resultado.avisos == []
 
 
 # ---------- manuais.py ----------

@@ -59,7 +59,7 @@ def calcular(linhas: list[LinhaBruta], mes: int, ano: int, regras: dict) -> Resu
         if normalizar_estrutural(status_bruto) in status_encerrados:
             continue
 
-        processo_normalizado = processo.normalizar(linha.valores.get("numero_processo"))
+        processo_normalizado = processo.normalizar_protocolo_administrativo(linha.valores.get("numero_processo"))
         if processo_normalizado.aviso:
             resultado.avisos.append(Aviso(linha.origem, processo_normalizado.aviso))
 
