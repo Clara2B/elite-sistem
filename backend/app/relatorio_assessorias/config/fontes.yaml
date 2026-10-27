@@ -71,7 +71,7 @@ audiencias_contrarias:
   colunas:
     data: ["DATA"]
     nome_cliente: ["NOME DO CLIENTE"]
-    estado: ["ESTADO", "UF"]
+    estado: ["ESTADO", "ESTADOS", "UF"]
     processo: ["PROCESSO"]
     empresa: ["EMPRESA"]
 
@@ -93,7 +93,7 @@ contrarias:
     data_recebimento: ["DATA DE RECEBIMENTO"]
     nome_autor: ["NOME DO AUTOR"]
     numero_processo: ["Nº DO PROCESSO", "N° DO PROCESSO", "NUMERO DO PROCESSO", "N DO PROCESSO"]  # "N° " (grau) é o que a planilha real usa, não "Nº " (ordinal) — visualmente iguais, caracteres Unicode diferentes
-    estado: ["ESTADO", "UF"]
+    estado: ["ESTADO", "ESTADOS", "UF"]
     valor_causa: ["VALOR DA CAUSA"]
     status_atual: ["STATUS ATUAL"]
     tipo_acao: ["TIPO AÇÃO", "TIPO DE AÇÃO"]
@@ -105,6 +105,6 @@ procons:
     data_recebimento: ["DATA DE RECEBIMENTO"]
     nome_autor: ["NOME DO AUTOR"]
     numero_processo: ["Nº DO PROCESSO", "N° DO PROCESSO", "NUMERO DO PROCESSO", "N DO PROCESSO"]  # "N° " (grau) é o que a planilha real usa, não "Nº " (ordinal) — visualmente iguais, caracteres Unicode diferentes
-    estado: ["ESTADO", "UF"]
+    estado: ["ESTADO", "ESTADOS", "UF"]
     status_atual: ["STATUS ATUAL"]
     tipo_acao: ["TIPO AÇÃO", "TIPO DE AÇÃO"]
