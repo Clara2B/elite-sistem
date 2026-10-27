@@ -497,6 +497,23 @@ def test_procons_recebido_depois_do_fim_do_mes_fica_fora():
     assert resultado.lista == []
 
 
+def test_procons_recebido_em_mes_anterior_nao_encerrado_nao_fica_na_lista():
+    """Bug real corrigido em 2026-10-27 (mesmo padrão do bug de Iniciais,
+    confirmado contra dado real da NEXUS): a regra antiga só tinha limite
+    superior ("recebidas até o fim do mês") — um caso recebido em
+    qualquer mês anterior e ainda ativo (não ARQUIVADO) era contado de
+    novo em TODO mês seguinte."""
+    linhas = [
+        LinhaBruta(
+            {"data_recebimento": date(2026, 4, 7), "nome_autor": "Fulano", "numero_processo": "123",
+             "estado": "SP", "status_atual": "EM ANDAMENTO", "tipo_acao": "PROCON"},
+            _origem(1),
+        ),
+    ]
+    resultado = procons.calcular(linhas, mes=9, ano=2026, regras=REGRAS["procons"])
+    assert resultado.lista == []
+
+
 def test_procons_duplicata_por_protocolo_mantem_a_primeira():
     linhas = [
         LinhaBruta(

@@ -1,9 +1,16 @@
 """Seção Procons (Fase 4, fontes: Procon e Extrajudicial).
 
 Campos (especificação):
-- Mês de referência de cada procon: DATA DE RECEBIMENTO (confirmado).
+- Mês de referência de cada procon: DATA DE RECEBIMENTO dentro do mês de
+  referência (confirmado). Bug real corrigido em 2026-10-27 (mesmo
+  padrão do bug de Iniciais, confirmado contra dado real da NEXUS): a
+  regra antiga só tinha limite superior ("recebidas até o fim do mês"),
+  sem limite inferior — um caso recebido em qualquer mês anterior e
+  ainda não encerrado era contado de novo em TODO mês seguinte. Com o
+  limite inferior (só o mês de referência), bate exatamente com o
+  relatório manual (zerou de 25 pra 0 nos dados reais testados).
 - Lista Procons: linhas com TIPO AÇÃO = PROCON, EXTRAJUDICIAL ou MP,
-  recebidas até o fim do mês e não encerradas; nome, processo, situação
+  recebidas dentro do mês e não encerradas; nome, processo, situação
   (STATUS ATUAL); total no título.
 
 Processo duplicado dentro da mesma lista (conferência cruzada, Fase 5 —
@@ -15,7 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from app.relatorio_assessorias.avisos import Aviso
-from app.relatorio_assessorias.datas_utilitarias import ultimo_dia_do_mes
+from app.relatorio_assessorias.datas_utilitarias import dentro_do_mes
 from app.relatorio_assessorias.leitores.base import LinhaBruta, Origem
 from app.relatorio_assessorias.normalizacao import datas, processo, texto
 from app.utils import cell_text
@@ -37,7 +44,6 @@ class ResultadoProcons:
 
 
 def calcular(linhas: list[LinhaBruta], mes: int, ano: int, regras: dict) -> ResultadoProcons:
-    fim_do_mes = ultimo_dia_do_mes(mes, ano)
     tipos_incluidos = {normalizar_estrutural(t) for t in regras["tipos_acao_incluidos"]}
     status_encerrados = {normalizar_estrutural(s) for s in regras["status_encerrados_padrao"]}
 
@@ -52,7 +58,7 @@ def calcular(linhas: list[LinhaBruta], mes: int, ano: int, regras: dict) -> Resu
         recebimento = datas.normalizar(linha.valores.get("data_recebimento"))
         if recebimento.aviso:
             resultado.avisos.append(Aviso(linha.origem, f"data de recebimento: {recebimento.aviso}"))
-        if recebimento.valor is None or recebimento.valor > fim_do_mes:
+        if not dentro_do_mes(recebimento.valor, mes, ano):
             continue
 
         status_bruto = cell_text(linha.valores.get("status_atual"))
