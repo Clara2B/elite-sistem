@@ -232,14 +232,17 @@ def test_extrajudiciais_pendente_para_proximo_mes():
 # ---------- judiciais.py (audiências judiciais / contrárias) ----------
 
 
-def test_audiencias_acumulado_no_ano():
+def test_audiencias_so_do_mes_de_referencia():
+    """Confirmado pela Clara (2026-10-27): a regra é só o mês de
+    referência, não acumulado no ano — o relatório manual batia
+    exatamente com essa contagem, não com a acumulada."""
     linhas = [
-        LinhaBruta({"data": date(2026, 3, 10), "empresa": "EWS"}, _origem(1)),
-        LinhaBruta({"data": date(2026, 8, 20), "empresa": "EWS"}, _origem(2)),
-        LinhaBruta({"data": date(2025, 12, 31), "empresa": "EWS"}, _origem(3)),  # ano anterior: fora
-        LinhaBruta({"data": date(2026, 9, 10), "empresa": "EWS"}, _origem(4)),  # depois da data de corte: fora
+        LinhaBruta({"data": date(2026, 3, 10), "empresa": "EWS"}, _origem(1)),  # mês diferente: fora
+        LinhaBruta({"data": date(2026, 9, 20), "empresa": "EWS"}, _origem(2)),
+        LinhaBruta({"data": date(2025, 9, 15), "empresa": "EWS"}, _origem(3)),  # ano anterior: fora
+        LinhaBruta({"data": date(2026, 9, 1), "empresa": "EWS"}, _origem(4)),
     ]
-    resultado = judiciais.calcular(linhas, ano=2026, data_corte=date(2026, 9, 4))
+    resultado = judiciais.calcular(linhas, mes=9, ano=2026)
     assert resultado.quantidade == 2
 
 

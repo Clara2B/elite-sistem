@@ -122,8 +122,8 @@ def processar_upload(
         r_laudos = laudos.calcular(linhas_laudo_a, data_corte, regras["laudos"])
         r_iniciais = iniciais.calcular(linhas_iniciais_a, mes=mes, ano=ano, data_corte=data_corte, regras=regras["iniciais"])
         r_extra = extrajudiciais.calcular(linhas_extra_a, mes=mes, ano=ano, data_corte=data_corte, regras=regras["extrajudiciais"])
-        r_judicial = judiciais.calcular(linhas_judicial_a, ano=ano, data_corte=data_corte)
-        r_pauta = judiciais.calcular(linhas_pauta_a, ano=ano, data_corte=data_corte)
+        r_judicial = judiciais.calcular(linhas_judicial_a, mes=mes, ano=ano)
+        r_pauta = judiciais.calcular(linhas_pauta_a, mes=mes, ano=ano)
         r_contrarias = contrarias.calcular(linhas_contrarias_a, mes=mes, ano=ano, data_corte=data_corte, regras=regras["contrarias"])
         r_procons = procons.calcular(linhas_procon_a, mes=mes, ano=ano, regras=regras["procons"])
 

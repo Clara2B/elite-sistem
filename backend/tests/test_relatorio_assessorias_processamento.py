@@ -44,11 +44,11 @@ def _workbook_agendamento():
     wb.remove(wb.active)
     ws_judicial = wb.create_sheet("JUDICIAL")
     ws_judicial.append([None, "NOME DO CLIENTE", "PROCESSO", "EMPRESA"])
-    ws_judicial.append(["01/03/2026", "Fulano", "0001", "TESTE SA"])
+    ws_judicial.append(["10/08/2026", "Fulano", "0001", "TESTE SA"])
     ws_pauta = wb.create_sheet("PAUTA DA SEMANA CONTRARIA")
     ws_pauta.append(["PAUTA DA SEMANA CONTRARIA"])
     ws_pauta.append(["DATA", "NOME DO CLIENTE", "ESTADO", "PROCESSO", "EMPRESA"])
-    ws_pauta.append(["01/04/2026", "Beltrano", "SP", "0002", "TESTE SA"])
+    ws_pauta.append(["15/08/2026", "Beltrano", "SP", "0002", "TESTE SA"])
     return _salvar(wb)
 
 
