@@ -15,7 +15,6 @@
 laudos:
   arquivo_campo_upload: "laudo"
   padrao_leitura: aba_mensal
-  cabecalho_linha: 1
   aba_mes:
     formato: ["mes_abreviado + ano_2_digitos"]  # ex.: AGO26, ABR26
   colunas:
@@ -36,7 +35,6 @@ laudos:
 iniciais:
   arquivo_campo_upload: "iniciais"
   padrao_leitura: aba_mensal
-  cabecalho_linha: 1
   aba_mes:
     formato: ["mes_por_extenso + ano_4_digitos"]  # ex.: AGOSTO 2026
     observacao: >
@@ -59,7 +57,6 @@ audiencias_judiciais:
   arquivo_campo_upload: "agendamento"  # arquivo "PLANILHA 2026"
   padrao_leitura: aba_unica
   aba: "JUDICIAL"
-  cabecalho_linha: 1
   colunas:
     nome_cliente: ["NOME DO CLIENTE"]
     processo: ["PROCESSO"]
@@ -71,7 +68,6 @@ audiencias_contrarias:
   arquivo_campo_upload: "agendamento"  # arquivo "PLANILHA 2026"
   padrao_leitura: aba_unica
   aba: "PAUTA DA SEMANA CONTRARIA"
-  cabecalho_linha: 2  # linha 1 é só o título da aba
   colunas:
     data: ["DATA"]
     nome_cliente: ["NOME DO CLIENTE"]
@@ -83,7 +79,6 @@ extrajudiciais:
   arquivo_campo_upload: "extrajudicial"  # arquivo "AGENDAMENTO"
   padrao_leitura: aba_unica
   aba: "AGENDAMENTO"
-  cabecalho_linha: 1
   colunas:
     data_recebimento: ["DATA DE RECEBIMENTO"]
     empresa: ["EMPRESA"]
@@ -94,7 +89,6 @@ extrajudiciais:
 contrarias:
   arquivo_campo_upload: "contrarias"  # arquivo "CONTRÁRIAS - NOVO"
   padrao_leitura: aba_por_assessoria
-  cabecalho_linha: 3  # linhas 1-2: nome da assessoria / título
   colunas:
     data_recebimento: ["DATA DE RECEBIMENTO"]
     nome_autor: ["NOME DO AUTOR"]
@@ -107,7 +101,6 @@ contrarias:
 procons:
   arquivo_campo_upload: "procon"  # arquivo "PROCON E EXTRAJUDICIAL"
   padrao_leitura: aba_por_assessoria
-  cabecalho_linha: 2
   colunas:
     data_recebimento: ["DATA DE RECEBIMENTO"]
     nome_autor: ["NOME DO AUTOR"]
