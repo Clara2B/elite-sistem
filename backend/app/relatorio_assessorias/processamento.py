@@ -124,7 +124,7 @@ def processar_upload(
         linhas_procon_a = por_assessoria_procon.get(nome_assessoria, [])
 
         r_laudos = laudos.calcular(linhas_laudo_a, data_corte, regras["laudos"])
-        r_iniciais = iniciais.calcular(linhas_iniciais_a, mes=mes, ano=ano, data_corte=data_corte, regras=regras["iniciais"])
+        r_iniciais = iniciais.calcular(linhas_iniciais_a, mes=mes, ano=ano, regras=regras["iniciais"])
         r_extra = extrajudiciais.calcular(linhas_extra_a, mes=mes, ano=ano, data_corte=data_corte, regras=regras["extrajudiciais"])
         r_judicial = judiciais.calcular(linhas_judicial_a, mes=mes, ano=ano)
         r_pauta = judiciais.calcular(linhas_pauta_a, mes=mes, ano=ano)

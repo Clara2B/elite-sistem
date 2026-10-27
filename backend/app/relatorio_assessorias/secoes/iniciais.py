@@ -4,8 +4,14 @@ Campos (especificação):
 - Processos distribuídos no mês: DATA DE DISTRIBUIÇÃO dentro do mês,
   buscando em todas as abas mensais do ano (um caso recebido em julho
   pode ser distribuído em agosto).
-- Aguardando distribuição: recebidos até o fim do mês, sem data de
-  distribuição ou com PROTOCOLADO ≠ "SIM" na data de corte.
+- Aguardando distribuição: recebidos DENTRO do mês de referência, sem
+  data de distribuição ou com PROTOCOLADO ≠ "SIM" — bug real corrigido
+  em 2026-10-27 (confirmado pela Clara contra dado real da NEXUS): a
+  regra antiga ("recebidos até o fim do mês", sem limite inferior)
+  acumulava pra sempre o backlog de casos recebidos em meses anteriores
+  e nunca distribuídos, contando-os de novo em TODO mês seguinte. Com o
+  limite inferior (só o mês de referência), bate exatamente com o
+  relatório manual.
 - Distribuídos em até 7 / entre 8 e 20 dias úteis: faixas de
   config/regras.yaml (rótulos confirmados pela Clara, 2026-10-08 — cobrem
   todos os casos, diferente do modelo atual que deixava intervalos de fora).
@@ -18,11 +24,10 @@ assessoria antes de chamar `calcular`."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
 
 from app.relatorio_assessorias import dias_uteis
 from app.relatorio_assessorias.avisos import Aviso
-from app.relatorio_assessorias.datas_utilitarias import dentro_do_mes, ultimo_dia_do_mes
+from app.relatorio_assessorias.datas_utilitarias import dentro_do_mes
 from app.relatorio_assessorias.leitores.base import LinhaBruta
 from app.relatorio_assessorias.normalizacao import datas
 from app.utils import cell_text
@@ -37,8 +42,7 @@ class ResultadoIniciais:
     avisos: list[Aviso] = field(default_factory=list)
 
 
-def calcular(linhas: list[LinhaBruta], mes: int, ano: int, data_corte: date, regras: dict) -> ResultadoIniciais:
-    fim_do_mes = ultimo_dia_do_mes(mes, ano)
+def calcular(linhas: list[LinhaBruta], mes: int, ano: int, regras: dict) -> ResultadoIniciais:
     faixas_config = regras["faixas_dias_uteis"]
     aviso_acima_de = regras["aviso_acima_de"]
 
@@ -69,7 +73,7 @@ def calcular(linhas: list[LinhaBruta], mes: int, ano: int, data_corte: date, reg
                         Aviso(linha.origem, f"distribuído em {dias} dias úteis — acima da faixa configurada")
                     )
 
-        if recebimento.valor is not None and recebimento.valor <= fim_do_mes:
+        if dentro_do_mes(recebimento.valor, mes, ano):
             protocolado = normalizar_estrutural(cell_text(linha.valores.get("protocolado")))
             if distribuicao.valor is None or protocolado != "SIM":
                 resultado.aguardando_distribuicao += 1

@@ -164,7 +164,7 @@ def test_iniciais_distribuido_no_mes_entra_na_faixa_ate_7():
             _origem(1),
         ),
     ]
-    resultado = iniciais.calcular(linhas, mes=8, ano=2026, data_corte=date(2026, 9, 4), regras=REGRAS["iniciais"])
+    resultado = iniciais.calcular(linhas, mes=8, ano=2026, regras=REGRAS["iniciais"])
     assert resultado.distribuidos_no_mes == 1
     assert resultado.faixas["Distribuídos em até 7 dias úteis"] == 1
     assert resultado.faixas["Distribuídos entre 8 e 20 dias úteis"] == 0
@@ -178,7 +178,7 @@ def test_iniciais_distribuido_em_outro_mes_nao_conta_para_este_mes():
             _origem(1),
         ),
     ]
-    resultado = iniciais.calcular(linhas, mes=8, ano=2026, data_corte=date(2026, 9, 4), regras=REGRAS["iniciais"])
+    resultado = iniciais.calcular(linhas, mes=8, ano=2026, regras=REGRAS["iniciais"])
     assert resultado.distribuidos_no_mes == 0
 
 
@@ -190,8 +190,26 @@ def test_iniciais_aguardando_distribuicao_sem_data_distribuicao():
             _origem(1),
         ),
     ]
-    resultado = iniciais.calcular(linhas, mes=8, ano=2026, data_corte=date(2026, 9, 4), regras=REGRAS["iniciais"])
+    resultado = iniciais.calcular(linhas, mes=8, ano=2026, regras=REGRAS["iniciais"])
     assert resultado.aguardando_distribuicao == 1
+
+
+def test_iniciais_recebido_em_mes_anterior_nunca_distribuido_nao_conta_aguardando():
+    """Bug real corrigido em 2026-10-27 (confirmado contra dado real da
+    NEXUS): "aguardando distribuição" não tem limite inferior de data
+    antes — um caso recebido em abril e nunca distribuído era contado de
+    novo em TODO mês seguinte (maio, junho, ... agosto), inflando o
+    número pra sempre. Agora só conta quem foi recebido dentro do mês de
+    referência."""
+    linhas = [
+        LinhaBruta(
+            {"data_recebimento": date(2026, 4, 7), "data_distribuicao": None,
+             "protocolado": "SIM", "estados": "SP", "numero_processo": "x", "assessoria": "EWS"},
+            _origem(1),
+        ),
+    ]
+    resultado = iniciais.calcular(linhas, mes=8, ano=2026, regras=REGRAS["iniciais"])
+    assert resultado.aguardando_distribuicao == 0
 
 
 def test_iniciais_nao_protocolado_mesmo_com_data_de_distribuicao_fica_aguardando():
@@ -202,7 +220,7 @@ def test_iniciais_nao_protocolado_mesmo_com_data_de_distribuicao_fica_aguardando
             _origem(1),
         ),
     ]
-    resultado = iniciais.calcular(linhas, mes=8, ano=2026, data_corte=date(2026, 9, 4), regras=REGRAS["iniciais"])
+    resultado = iniciais.calcular(linhas, mes=8, ano=2026, regras=REGRAS["iniciais"])
     assert resultado.aguardando_distribuicao == 1
 
 
@@ -214,7 +232,7 @@ def test_iniciais_acima_da_faixa_vira_aviso_sem_entrar_em_faixa():
             _origem(1),
         ),
     ]
-    resultado = iniciais.calcular(linhas, mes=8, ano=2026, data_corte=date(2026, 9, 4), regras=REGRAS["iniciais"])
+    resultado = iniciais.calcular(linhas, mes=8, ano=2026, regras=REGRAS["iniciais"])
     assert sum(resultado.faixas.values()) == 0
     assert any("acima da faixa" in a.mensagem for a in resultado.avisos)
 
