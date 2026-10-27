@@ -90,8 +90,12 @@ def processar_upload(
     linhas_pauta = aba_unica.ler(wb_agendamento, "agendamento", fontes["audiencias_contrarias"])
     linhas_extrajudicial = aba_unica.ler(wb_extrajudicial, "extrajudicial", fontes["extrajudiciais"])
 
-    por_assessoria_contrarias = aba_por_assessoria.ler(wb_contrarias, "contrarias", fontes["contrarias"], nomes_por_apelido)
-    por_assessoria_procon = aba_por_assessoria.ler(wb_procon, "procon", fontes["procons"], nomes_por_apelido)
+    por_assessoria_contrarias, avisos_contrarias = aba_por_assessoria.ler(
+        wb_contrarias, "contrarias", fontes["contrarias"], nomes_por_apelido
+    )
+    por_assessoria_procon, avisos_procon = aba_por_assessoria.ler(
+        wb_procon, "procon", fontes["procons"], nomes_por_apelido
+    )
 
     empresas_desconhecidas: dict[str, int] = {}
     for linhas, campo in (
@@ -126,6 +130,8 @@ def processar_upload(
         avisos: list[Aviso] = []
         for resultado_secao in (r_laudos, r_iniciais, r_extra, r_judicial, r_pauta, r_contrarias, r_procons):
             avisos.extend(resultado_secao.avisos)
+        avisos.extend(avisos_contrarias.get(nome_assessoria, []))
+        avisos.extend(avisos_procon.get(nome_assessoria, []))
         avisos.extend(validacao.conferir_cronologia_laudos(linhas_laudo_a))
         avisos.extend(validacao.conferir_cronologia_iniciais(linhas_iniciais_a))
         aviso_soma_uf = validacao.conferir_soma_uf(r_contrarias)
