@@ -1,9 +1,16 @@
 """Seção Iniciais (Fase 4, fonte: Iniciais).
 
 Campos (especificação):
-- Processos distribuídos no mês: DATA DE DISTRIBUIÇÃO dentro do mês,
-  buscando em todas as abas mensais do ano (um caso recebido em julho
-  pode ser distribuído em agosto).
+- Processos distribuídos no mês: DATA DE RECEBIMENTO dentro do mês de
+  referência E com DATA DE DISTRIBUIÇÃO preenchida (não importa em que
+  mês a distribuição aconteceu) — regra confirmada pela Clara,
+  2026-10-27, contra dado real da NEXUS (bate exatamente 46 = 46 com o
+  relatório manual). Antes contava pela DATA DE DISTRIBUIÇÃO caindo no
+  mês de referência (regra da Fase 4/2026-10-08, que agrupava um caso
+  recebido num mês anterior e só distribuído depois no mês do
+  relatório) — as duas regras são genuinamente diferentes, não um
+  ajuste pequeno; a Clara confirmou que a certa é agrupar pelo mês de
+  RECEBIMENTO, exigindo só que já tenha data de distribuição.
 - Aguardando distribuição: recebidos DENTRO do mês de referência, sem
   data de distribuição ou com PROTOCOLADO ≠ "SIM" — bug real corrigido
   em 2026-10-27 (confirmado pela Clara contra dado real da NEXUS): a
@@ -20,7 +27,11 @@ Recebe `linhas` já filtradas pra uma assessoria, mas de TODAS as abas
 mensais do ano (não só a do mês de referência) — é quem orquestra as
 seções (Fase 8) que lê todas as abas via
 `leitores.aba_mensal.encontrar_todas_abas_do_ano` e filtra por
-assessoria antes de chamar `calcular`."""
+assessoria antes de chamar `calcular`. Como os dois campos agora são
+sempre agrupados pelo mês de RECEBIMENTO, só a aba do mês de referência
+importaria pra este cálculo — mas a leitura continua trazendo o ano
+inteiro porque outras partes do sistema (ex.: avisos cruzados) podem vir
+a precisar do histórico completo."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -58,24 +69,25 @@ def calcular(linhas: list[LinhaBruta], mes: int, ano: int, regras: dict) -> Resu
         if bruto_distribuicao is not None and distribuicao.aviso:
             resultado.avisos.append(Aviso(linha.origem, f"data de distribuição: {distribuicao.aviso}"))
 
-        if dentro_do_mes(distribuicao.valor, mes, ano):
-            resultado.distribuidos_no_mes += 1
-            if recebimento.valor is not None:
-                dias = dias_uteis.contar_dias_uteis(recebimento.valor, distribuicao.valor)
-                colocado = False
-                for faixa in faixas_config:
-                    if faixa["min"] <= dias <= faixa["max"]:
-                        resultado.faixas[faixa["rotulo"]] += 1
-                        colocado = True
-                        break
-                if not colocado and dias > aviso_acima_de:
-                    resultado.avisos.append(
-                        Aviso(linha.origem, f"distribuído em {dias} dias úteis — acima da faixa configurada")
-                    )
+        if not dentro_do_mes(recebimento.valor, mes, ano):
+            continue
 
-        if dentro_do_mes(recebimento.valor, mes, ano):
-            protocolado = normalizar_estrutural(cell_text(linha.valores.get("protocolado")))
-            if distribuicao.valor is None or protocolado != "SIM":
-                resultado.aguardando_distribuicao += 1
+        if distribuicao.valor is not None:
+            resultado.distribuidos_no_mes += 1
+            dias = dias_uteis.contar_dias_uteis(recebimento.valor, distribuicao.valor)
+            colocado = False
+            for faixa in faixas_config:
+                if faixa["min"] <= dias <= faixa["max"]:
+                    resultado.faixas[faixa["rotulo"]] += 1
+                    colocado = True
+                    break
+            if not colocado and dias > aviso_acima_de:
+                resultado.avisos.append(
+                    Aviso(linha.origem, f"distribuído em {dias} dias úteis — acima da faixa configurada")
+                )
+
+        protocolado = normalizar_estrutural(cell_text(linha.valores.get("protocolado")))
+        if distribuicao.valor is None or protocolado != "SIM":
+            resultado.aguardando_distribuicao += 1
 
     return resultado

@@ -170,7 +170,7 @@ def test_iniciais_distribuido_no_mes_entra_na_faixa_ate_7():
     assert resultado.faixas["Distribuídos entre 8 e 20 dias úteis"] == 0
 
 
-def test_iniciais_distribuido_em_outro_mes_nao_conta_para_este_mes():
+def test_iniciais_recebido_em_outro_mes_nao_conta_para_este_mes():
     linhas = [
         LinhaBruta(
             {"data_recebimento": date(2026, 7, 20), "data_distribuicao": date(2026, 7, 22),
@@ -180,6 +180,31 @@ def test_iniciais_distribuido_em_outro_mes_nao_conta_para_este_mes():
     ]
     resultado = iniciais.calcular(linhas, mes=8, ano=2026, regras=REGRAS["iniciais"])
     assert resultado.distribuidos_no_mes == 0
+
+
+def test_iniciais_distribuidos_no_mes_agrupa_pelo_recebimento_nao_pela_distribuicao():
+    """Regra confirmada pela Clara (2026-10-27), contra dado real da
+    NEXUS: agrupa pelo mês de RECEBIMENTO, não pelo mês em que a
+    distribuição de fato aconteceu — um caso recebido em agosto e só
+    distribuído em outubro ainda conta pra agosto (não pra outubro), e
+    um caso recebido em julho não conta pra agosto mesmo se distribuído
+    em agosto."""
+    linhas = [
+        LinhaBruta(
+            {"data_recebimento": date(2026, 8, 3), "data_distribuicao": date(2026, 10, 1),
+             "protocolado": "SIM", "estados": "RJ", "numero_processo": "x", "assessoria": "EWS"},
+            _origem(1),
+        ),
+        LinhaBruta(
+            {"data_recebimento": date(2026, 7, 20), "data_distribuicao": date(2026, 8, 3),
+             "protocolado": "SIM", "estados": "RJ", "numero_processo": "y", "assessoria": "EWS"},
+            _origem(2),
+        ),
+    ]
+    resultado_agosto = iniciais.calcular(linhas, mes=8, ano=2026, regras=REGRAS["iniciais"])
+    assert resultado_agosto.distribuidos_no_mes == 1  # só a linha 1 (recebida em agosto)
+    resultado_outubro = iniciais.calcular(linhas, mes=10, ano=2026, regras=REGRAS["iniciais"])
+    assert resultado_outubro.distribuidos_no_mes == 0  # a linha 1 foi recebida em agosto, não outubro
 
 
 def test_iniciais_aguardando_distribuicao_sem_data_distribuicao():
@@ -227,7 +252,7 @@ def test_iniciais_nao_protocolado_mesmo_com_data_de_distribuicao_fica_aguardando
 def test_iniciais_acima_da_faixa_vira_aviso_sem_entrar_em_faixa():
     linhas = [
         LinhaBruta(
-            {"data_recebimento": date(2026, 1, 5), "data_distribuicao": date(2026, 8, 6),
+            {"data_recebimento": date(2026, 8, 3), "data_distribuicao": date(2026, 10, 1),
              "protocolado": "SIM", "estados": "RJ", "numero_processo": "x", "assessoria": "EWS"},
             _origem(1),
         ),
