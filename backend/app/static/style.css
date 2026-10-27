@@ -404,6 +404,16 @@ form.formulario {
   align-items: flex-end;
 }
 
+/* Uploads do relatório das assessorias, um embaixo do outro (a pedido da
+   Clara, 2026-10-27) — só este wrapper, não mexe no .formulario geral
+   (usado em telas de filtro/edição onde o lado a lado continua certo). */
+.campos-upload-empilhados {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
 .campo {
   display: flex;
   flex-direction: column;
