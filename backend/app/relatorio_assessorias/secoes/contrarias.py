@@ -67,7 +67,7 @@ def calcular(
 
     resultado = ResultadoContrarias()
     candidatos_ativos: list[tuple[ProcessoContrario, str]] = []
-    chaves_vistas: dict[str, Origem] = {}
+    chaves_vistas: dict[str, tuple[Origem, str]] = {}
 
     for linha in linhas:
         recebimento = datas.normalizar(linha.valores.get("data_recebimento"))
@@ -93,13 +93,33 @@ def calcular(
             resultado.avisos.append(Aviso(linha.origem, processo_normalizado.aviso))
 
         chave = processo_normalizado.chave_comparacao
-        if chave and (chave in chaves_vistas or chave in chaves_cnj_de_outras_fontes):
-            origem_anterior = chaves_vistas.get(chave)
-            detalhe = f"já contado em {origem_anterior}" if origem_anterior else "já contado no Procon"
-            resultado.avisos.append(Aviso(linha.origem, f"processo duplicado ({detalhe}) — mantido só o primeiro"))
+        nome_atual = normalizar_estrutural(cell_text(linha.valores.get("nome_autor")))
+        if chave and chave in chaves_vistas:
+            origem_anterior, nome_anterior = chaves_vistas[chave]
+            # Mesmo número de processo, nome claramente diferente: não é
+            # duplicata de verdade (ex. erro de digitação do número numa
+            # das duas linhas) — achado real, 2026-10-27, confirmado pela
+            # Clara: "apenas erro de digitação, o sistema deve pontuar
+            # isso [...] para correção se preciso". Em vez de descartar a
+            # 2ª linha, mantém as duas e só avisa, pra alguém conferir.
+            mesmo_autor = nome_anterior and nome_atual and (nome_anterior in nome_atual or nome_atual in nome_anterior)
+            if mesmo_autor:
+                resultado.avisos.append(
+                    Aviso(linha.origem, f"processo duplicado (já contado em {origem_anterior}) — mantido só o primeiro")
+                )
+                continue
+            resultado.avisos.append(
+                Aviso(
+                    linha.origem,
+                    f"número de processo igual ao de {origem_anterior}, mas com nome de autor diferente "
+                    "— confira se o número do processo está certo (as duas linhas foram mantidas)",
+                )
+            )
+        elif chave and chave in chaves_cnj_de_outras_fontes:
+            resultado.avisos.append(Aviso(linha.origem, "processo duplicado (já contado no Procon) — mantido só o primeiro"))
             continue
-        if chave:
-            chaves_vistas[chave] = linha.origem
+        if chave and chave not in chaves_vistas:
+            chaves_vistas[chave] = (linha.origem, nome_atual)
 
         uf_normalizada = texto.normalizar_uf(linha.valores.get("estado"))
         if uf_normalizada.aviso:

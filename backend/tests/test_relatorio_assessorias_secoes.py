@@ -34,18 +34,70 @@ def _origem(linha: int) -> Origem:
 def test_laudos_elaborados_exclui_cancelado():
     linhas = [
         LinhaBruta(
-            {"data": date(2026, 8, 3), "entrada_laudo": "Cancelado", "tipo_laudo": "", "laudo_pronto": "Não",
-             "data_pronto": None, "empresa": "EWS"},
+            {"data": date(2026, 8, 3), "entrada_laudo": "Cancelado", "tipo_laudo": "", "laudo_pronto": "Sim",
+             "data_pronto": date(2026, 8, 5), "empresa": "EWS"},
             _origem(1),
         ),
         LinhaBruta(
-            {"data": date(2026, 8, 3), "entrada_laudo": "", "tipo_laudo": "", "laudo_pronto": "Não",
-             "data_pronto": None, "empresa": "EWS"},
+            {"data": date(2026, 8, 3), "entrada_laudo": "", "tipo_laudo": "", "laudo_pronto": "Sim",
+             "data_pronto": date(2026, 8, 5), "empresa": "EWS"},
             _origem(2),
         ),
     ]
     resultado = laudos.calcular(linhas, date(2026, 9, 4), REGRAS["laudos"])
     assert resultado.elaborados == 1
+
+
+def test_laudos_elaborados_so_conta_com_data_na_coluna_g():
+    """Confirmado pela Clara (2026-10-27): só conta como elaborado quem
+    tem a coluna G (DATA de pronto) preenchida — um laudo ainda sem essa
+    data (mesmo não cancelado) não é "elaborado" ainda, é pendente."""
+    linhas = [
+        LinhaBruta(
+            {"data": date(2026, 8, 3), "entrada_laudo": "", "tipo_laudo": "", "laudo_pronto": "Não",
+             "data_pronto": None, "empresa": "EWS"},
+            _origem(1),
+        ),
+        LinhaBruta(
+            {"data": date(2026, 8, 3), "entrada_laudo": "", "tipo_laudo": "", "laudo_pronto": "Sim",
+             "data_pronto": date(2026, 8, 5), "empresa": "EWS"},
+            _origem(2),
+        ),
+    ]
+    resultado = laudos.calcular(linhas, date(2026, 9, 4), REGRAS["laudos"])
+    assert resultado.elaborados == 1
+    assert resultado.pendentes == 1
+
+
+def test_laudos_data_de_pronto_anterior_a_entrada_gera_aviso_e_nao_conta_prazo():
+    """Bug real (planilha de produção, 2026-10-27): ano digitado errado na
+    data de entrada (ex. 2029 em vez de 2026) fazia a conta de dias úteis
+    dar negativo e contar por engano como "dentro do prazo"."""
+    linhas = [
+        LinhaBruta(
+            {"data": date(2029, 9, 22), "entrada_laudo": "", "tipo_laudo": "", "laudo_pronto": "Sim",
+             "data_pronto": date(2026, 9, 25), "empresa": "EWS"},
+            _origem(1),
+        ),
+    ]
+    resultado = laudos.calcular(linhas, date(2026, 10, 10), REGRAS["laudos"])
+    assert resultado.elaborados == 1
+    assert resultado.entregues_dentro_prazo == 0
+    assert any("anterior à data de entrada" in a.mensagem for a in resultado.avisos)
+
+
+def test_laudos_pronto_sem_data_de_conclusao_gera_aviso():
+    linhas = [
+        LinhaBruta(
+            {"data": date(2026, 8, 3), "entrada_laudo": "", "tipo_laudo": "", "laudo_pronto": "Sim",
+             "data_pronto": None, "empresa": "EWS"},
+            _origem(1),
+        ),
+    ]
+    resultado = laudos.calcular(linhas, date(2026, 9, 4), REGRAS["laudos"])
+    assert resultado.elaborados == 0
+    assert resultado.pendentes == 0
+    assert any("sem data de conclusão" in a.mensagem for a in resultado.avisos)
 
 
 def test_laudos_entregue_dentro_do_prazo():
@@ -321,6 +373,33 @@ def test_contrarias_sem_data_de_recebimento_entra_e_avisa():
     assert any("sem data de recebimento" in a.mensagem for a in resultado.avisos)
 
 
+def test_contrarias_mesmo_numero_processo_nome_diferente_nao_descarta():
+    """Confirmado pela Clara (2026-10-27): processo repetido com nome de
+    autor bem diferente provavelmente é erro de digitação do número, não
+    duplicata de verdade — o sistema deve apontar isso, não descartar a
+    linha (achado real, planilha de Contrárias de produção)."""
+    linhas = [
+        LinhaBruta(
+            {"data_recebimento": date(2026, 8, 1), "nome_autor": "Terezinha Virgilio Da Paz De Castro",
+             "numero_processo": "4000122-63.2026.8.26.0347", "estado": "SP", "valor_causa": None,
+             "status_atual": "ANDAMENTO", "tipo_acao": "JUDICIAL"},
+            Origem("contrarias", "NEXUS", 141),
+        ),
+        LinhaBruta(
+            {"data_recebimento": date(2026, 8, 1), "nome_autor": "Luzimara Fayan",
+             "numero_processo": "4000122-63.2026.8.26.0347", "estado": "SP", "valor_causa": None,
+             "status_atual": "ANDAMENTO", "tipo_acao": "JUDICIAL"},
+            Origem("contrarias", "NEXUS", 148),
+        ),
+    ]
+    resultado = contrarias.calcular(
+        linhas, mes=8, ano=2026, data_corte=date(2026, 9, 4), regras=REGRAS["contrarias"]
+    )
+    assert resultado.ativos_total == 2
+    assert any("nome de autor diferente" in a.mensagem for a in resultado.avisos)
+    assert not any("mantido só o primeiro" in a.mensagem for a in resultado.avisos)
+
+
 def test_contrarias_dedup_cross_arquivo_com_procon():
     linhas = [
         LinhaBruta(
@@ -393,6 +472,24 @@ def test_procons_duplicata_por_protocolo_mantem_a_primeira():
     resultado = procons.calcular(linhas, mes=8, ano=2026, regras=REGRAS["procons"])
     assert len(resultado.lista) == 1
     assert any("duplicado" in a.mensagem for a in resultado.avisos)
+
+
+def test_procons_mesmo_numero_protocolo_nome_diferente_nao_descarta():
+    linhas = [
+        LinhaBruta(
+            {"data_recebimento": date(2026, 8, 10), "nome_autor": "Fulano", "numero_processo": "0470905/2025",
+             "estado": "RJ", "status_atual": "EM ANDAMENTO", "tipo_acao": "PROCON"},
+            _origem(1),
+        ),
+        LinhaBruta(
+            {"data_recebimento": date(2026, 8, 10), "nome_autor": "Beltrano Completamente Diferente",
+             "numero_processo": "0470905/2025", "estado": "RJ", "status_atual": "EM ANDAMENTO", "tipo_acao": "PROCON"},
+            _origem(2),
+        ),
+    ]
+    resultado = procons.calcular(linhas, mes=8, ano=2026, regras=REGRAS["procons"])
+    assert len(resultado.lista) == 2
+    assert any("nome de autor diferente" in a.mensagem for a in resultado.avisos)
 
 
 def test_procons_numero_protocolo_fora_do_padrao_cnj_nao_avisa():
