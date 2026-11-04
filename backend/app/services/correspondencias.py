@@ -42,7 +42,13 @@ def parse_valor(texto: str) -> float | None:
     (ex.: "a combinar") — nesse caso a Clara pediu pra manter o texto
     original da planilha no relatório em vez de zerar ou travar o import
     inteiro (ver `services/correspondencias.py::gerar_relatorio` e
-    `LinhaCorrespondencia.valor_texto`)."""
+    `LinhaCorrespondencia.valor_texto`).
+
+    Também aceita número "simples" (célula formatada como texto na
+    planilha, sem "R$" e com ponto decimal em vez de vírgula — ex.:
+    "280.5", "280.50") — a pedido da Clara, 2026-11-04: antes só o
+    formato brasileiro (vírgula decimal, ponto de milhar) era reconhecido,
+    e esse outro formato caía em `valor_texto` (fora do Total)."""
     limpo = (texto or "").strip()
     if not limpo:
         return None
@@ -50,10 +56,13 @@ def parse_valor(texto: str) -> float | None:
     # Ponto final sobrando (típico de digitação, ex.: "R$ 280,00.") não
     # muda o valor pretendido — visto na planilha real da Clara.
     sem_prefixo = sem_prefixo.removesuffix(".")
-    if not _RE_NUMERO.match(sem_prefixo):
-        return None
+    if _RE_NUMERO.match(sem_prefixo):
+        try:
+            return float(sem_prefixo.replace(".", "").replace(",", "."))
+        except ValueError:
+            return None
     try:
-        return float(sem_prefixo.replace(".", "").replace(",", "."))
+        return float(sem_prefixo)
     except ValueError:
         return None
 

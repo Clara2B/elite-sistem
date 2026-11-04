@@ -31,6 +31,10 @@ from app.services.empresas import get_or_create_empresa
         ("R$ 280,00.", 280.0),  # ponto final sobrando — visto na planilha real
         ("  R$ 90,00  ", 90.0),
         ("90,00", 90.0),  # sem "R$" na frente
+        ("280.50", 280.5),  # célula de texto simples, ponto decimal — a pedido da Clara, 2026-11-04
+        ("280.5", 280.5),
+        ("280", 280.0),
+        ("-50.5", -50.5),
     ],
 )
 def test_parse_valor_reconhece_formatos_validos(texto, esperado):
