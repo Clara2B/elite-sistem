@@ -220,7 +220,7 @@ def test_excluir_empresa_com_correspondencia_vinculada_sem_destino_e_bloqueada(d
         excluir_empresa(db, origem.id)
         assert False, "deveria ter recusado"
     except ValueError as e:
-        assert "correspondências" in str(e).lower()
+        assert "correspondentes" in str(e).lower()
     assert db.get(EmpresaCliente, origem.id) is not None
 
 

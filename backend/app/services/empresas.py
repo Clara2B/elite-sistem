@@ -37,7 +37,7 @@ _ENTIDADES_VINCULADAS = {
     "audiências": Audiencia,
     "cobranças": Cobranca,
     "processos": Processo,
-    "correspondências": Correspondencia,
+    "correspondentes": Correspondencia,
 }
 
 

@@ -70,7 +70,7 @@ MODULOS_ROTULO: dict[str, str] = {
     "AUDIENCIAS": "Audiências",
     "CARTAS": "Cartas",
     "PENDENCIAS": "Pendências",
-    "CORRESPONDENCIAS": "Correspondências",
+    "CORRESPONDENCIAS": "Correspondentes",
 }
 
 
