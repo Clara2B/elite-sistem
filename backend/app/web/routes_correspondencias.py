@@ -66,7 +66,7 @@ def tela(
         except ValueError as e:
             contexto["erro"] = str(e)
         else:
-            registrar(db, usuario, "GEROU_RELATORIO_CORRESPONDENCIAS", entidade="empresa_cliente", entidade_id=empresa)
+            registrar(db, usuario, "GEROU_RELATORIO_CORRESPONDENTES", entidade="empresa_cliente", entidade_id=empresa)
             contexto["resultado"] = resultado
     return templates.TemplateResponse(request, "correspondencias.html", contexto)
 
@@ -86,7 +86,7 @@ async def importar(
     except ValueError as e:
         erro = str(e)
     else:
-        registrar(db, usuario, "IMPORTOU_CORRESPONDENCIAS", entidade="correspondencia", detalhes=str(resumo))
+        registrar(db, usuario, "IMPORTOU_CORRESPONDENTES", entidade="correspondencia", detalhes=str(resumo))
         mensagem = (
             f"{resumo.linhas_novas} linha(s) nova(s) importada(s) "
             f"({resumo.linhas_ja_existentes} já existiam de antes)."
@@ -113,8 +113,8 @@ def apagar_tudo(
     antes desse POST). Só Admin Superior/T.I."""
     total = correspondencias_service.apagar_todas_correspondencias(db)
     registrar(
-        db, usuario, "APAGOU_TODAS_CORRESPONDENCIAS",
-        entidade="correspondencia", detalhes=f"{total} correspondência(s) apagada(s)",
+        db, usuario, "APAGOU_TODOS_CORRESPONDENTES",
+        entidade="correspondencia", detalhes=f"{total} correspondente(s) apagado(s)",
     )
-    mensagem = quote(f"{total} correspondência(s) apagada(s). Pode importar a planilha do zero agora.")
+    mensagem = quote(f"{total} correspondente(s) apagado(s). Pode importar a planilha do zero agora.")
     return RedirectResponse(f"/app/correspondencias?mensagem={mensagem}", status_code=303)

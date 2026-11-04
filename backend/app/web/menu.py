@@ -32,7 +32,7 @@ def itens_menu(db: Session, usuario: Usuario) -> list[dict]:
     if "PENDENCIAS" in acessiveis:
         itens.append({"url": "/app/pendencias", "rotulo": "Pendências", "icone": "pendencias", "descricao": "Cobranças em aberto por empresa-cliente."})
     if "CORRESPONDENCIAS" in acessiveis:
-        itens.append({"url": "/app/correspondencias", "rotulo": "Correspondências", "icone": "correspondencias", "descricao": "Importar planilha e gerar relatório por mês e empresa."})
+        itens.append({"url": "/app/correspondencias", "rotulo": "Correspondentes", "icone": "correspondencias", "descricao": "Importar planilha e gerar relatório por mês e empresa."})
     if usuario.papel_global in PAPEIS_GLOBAIS:
         # Relatórios das Assessorias e Chamados saíram de dentro de
         # Configuração (2026-10-14, a pedido da Clara) — ganham item
