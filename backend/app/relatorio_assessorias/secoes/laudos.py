@@ -2,11 +2,19 @@
 
 Campos (especificação):
 - Laudos elaborados no mês: linhas da assessoria na aba do mês, exceto
-  ENTRADA DE LAUDO = "Cancelado".
+  ENTRADA DE LAUDO = "Cancelado" e com a coluna G (DATA de pronto)
+  preenchida — confirmado pela Clara, 2026-10-27: só conta como
+  elaborado quem tem essa data; sem ela, o laudo ainda não foi
+  concluído de verdade (fica como pendente).
 - Entregues dentro do prazo: LAUDO PRONTO = "Sim" e dias úteis entre DATA
   e a data de pronto ≤ prazo do tipo (config/regras.yaml).
 - Pendentes: LAUDO PRONTO ≠ "Sim" na data de corte.
 - Pendentes atrasados: pendentes cujo prazo já venceu na data de corte.
+- Data de pronto anterior à data de entrada (erro de digitação real
+  encontrado em planilha de produção, 2026-10-27 — ano digitado errado)
+  vira aviso em vez de contar como "dentro do prazo" por acaso (dias
+  úteis "decorridos" dava negativo e passava despercebido no
+  `<= prazo`).
 
 Recebe `linhas` já filtradas pra uma assessoria e um mês (a leitura via
 `aba_mensal` já resolve "aba do mês certo"; o filtro de assessoria é
@@ -45,7 +53,6 @@ def calcular(linhas: list[LinhaBruta], data_corte: date, regras: dict) -> Result
     for linha in linhas:
         if normalizar_estrutural(cell_text(linha.valores.get("entrada_laudo"))) == status_cancelado:
             continue
-        resultado.elaborados += 1
 
         data_entrada = datas.normalizar(linha.valores.get("data"))
         if data_entrada.aviso:
@@ -54,6 +61,10 @@ def calcular(linhas: list[LinhaBruta], data_corte: date, regras: dict) -> Result
         tipo = cell_text(linha.valores.get("tipo_laudo"))
         prazo = prazos_por_tipo.get(normalizar_estrutural(tipo), prazo_padrao)
         pronto = normalizar_estrutural(cell_text(linha.valores.get("laudo_pronto"))) == laudo_pronto_valor
+        data_pronto = datas.normalizar(linha.valores.get("data_pronto"))
+
+        if data_pronto.valor is not None:
+            resultado.elaborados += 1
 
         if not pronto:
             resultado.pendentes += 1
@@ -63,10 +74,24 @@ def calcular(linhas: list[LinhaBruta], data_corte: date, regras: dict) -> Result
                     resultado.pendentes_atrasados += 1
             continue
 
-        data_pronto = datas.normalizar(linha.valores.get("data_pronto"))
+        if data_pronto.valor is None:
+            resultado.avisos.append(
+                Aviso(linha.origem, "laudo pronto sem data de conclusão (coluna G) preenchida")
+            )
+            continue
         if data_pronto.aviso:
             resultado.avisos.append(Aviso(linha.origem, f"data de pronto: {data_pronto.aviso}"))
-        if data_entrada.valor is not None and data_pronto.valor is not None:
+
+        if data_entrada.valor is not None:
+            if data_pronto.valor < data_entrada.valor:
+                resultado.avisos.append(
+                    Aviso(
+                        linha.origem,
+                        f"data de pronto ({data_pronto.valor:%d/%m/%Y}) anterior à data de entrada "
+                        f"({data_entrada.valor:%d/%m/%Y}) — confira a digitação das datas",
+                    )
+                )
+                continue
             dias_para_ficar_pronto = dias_uteis.contar_dias_uteis(data_entrada.valor, data_pronto.valor)
             if dias_para_ficar_pronto <= prazo:
                 resultado.entregues_dentro_prazo += 1

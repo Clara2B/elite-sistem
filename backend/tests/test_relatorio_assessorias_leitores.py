@@ -253,24 +253,45 @@ _CONFIG_CONTRARIAS = {
 def test_aba_por_assessoria_soma_apelidos():
     wb = _workbook_contrarias()
     nomes_por_apelido = {"EWS": "EWS", "SW": "EWS", "NOVARE": "NOVARE"}
-    resultado = aba_por_assessoria.ler(wb, "contrarias", _CONFIG_CONTRARIAS, nomes_por_apelido)
+    resultado, avisos = aba_por_assessoria.ler(wb, "contrarias", _CONFIG_CONTRARIAS, nomes_por_apelido)
     assert len(resultado["EWS"]) == 2  # abas EWS + SW somadas
     assert [l.valores["nome_autor"] for l in resultado["EWS"]] == ["Fulano", "Beltrano"]
     assert len(resultado["NOVARE"]) == 1
+    assert avisos == {}
 
 
 def test_aba_por_assessoria_ignora_aba_sem_apelido_conhecido():
     wb = _workbook_contrarias()
     nomes_por_apelido = {"EWS": "EWS"}  # SW e NOVARE não cadastrados
-    resultado = aba_por_assessoria.ler(wb, "contrarias", _CONFIG_CONTRARIAS, nomes_por_apelido)
+    resultado, _avisos = aba_por_assessoria.ler(wb, "contrarias", _CONFIG_CONTRARIAS, nomes_por_apelido)
     assert set(resultado.keys()) == {"EWS"}
     assert len(resultado["EWS"]) == 1  # só a aba "EWS", não "SW"
 
 
-def test_aba_por_assessoria_aba_malformada_levanta_erro():
+def test_aba_por_assessoria_aba_malformada_com_dado_real_levanta_erro():
+    """Aba com dado de verdade (mais de uma linha de registro) e cabeçalho
+    incompleto continua bloqueante — só a aba SEM dado nenhum é tolerada."""
     wb = Workbook()
     wb.remove(wb.active)
     ws = wb.create_sheet("EWS")
     ws.append(["coluna errada"])
+    ws.append(["dado 1"])
+    ws.append(["dado 2"])
     with pytest.raises(base.CabecalhoNaoEncontrado):
         aba_por_assessoria.ler(wb, "contrarias", _CONFIG_CONTRARIAS, {"EWS": "EWS"})
+
+
+def test_aba_por_assessoria_aba_vazia_com_cabecalho_incompleto_gera_aviso_sem_bloquear():
+    """Bug real (planilha de Procon de produção, 2026-10-27): aba de
+    assessoria sem nenhum caso cadastrado, com cabeçalho incompleto —
+    não deve travar o relatório das outras assessorias, só avisar."""
+    wb = Workbook()
+    wb.remove(wb.active)
+    ws = wb.create_sheet("EWS")
+    ws.append(["EWS"])
+    ws.append(["DATA DE RECEBIMENTO", "NOME DO AUTOR", "Nº DO PROCESSO"])  # faltam colunas
+    resultado, avisos = aba_por_assessoria.ler(wb, "contrarias", _CONFIG_CONTRARIAS, {"EWS": "EWS"})
+    assert resultado == {}
+    assert "EWS" in avisos
+    assert "cabeçalho incompleto" in avisos["EWS"][0].mensagem
+    assert avisos["EWS"][0].origem is None

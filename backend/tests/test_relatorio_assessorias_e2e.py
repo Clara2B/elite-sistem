@@ -14,7 +14,20 @@ especificação lista 11, mas a investigação da Fase 4 (ver DECISIONS.md
 2026-10-09, "Fase 4... Investigado e resolvido") concluiu que 10 é o
 número correto pra esses dados — a Clara confirmou que a 11ª audiência do
 relatório original provavelmente foi um acréscimo manual, não algo que a
-planilha capture. Testado contra 10, não contra 11."""
+planilha capture. Testado contra 10, não contra 11.
+
+ATENÇÃO (2026-10-27): os valores esperados abaixo ficaram desatualizados
+depois de 4 mudanças de regra de negócio confirmadas pela Clara nesta
+mesma data — "Audiências judiciais/contrárias" passou a ser só o mês
+(não mais acumulado no ano), "Audiências de processos contrários" passou
+a vir de um arquivo novo (`pauta_contrarias`, não mais de dentro de
+"agendamento"), "Laudos elaborados" passou a exigir data na coluna G, e
+a deduplicação de Contrárias/Procons por número de processo passou a não
+descartar mais linhas com nome de autor diferente. Quem rodar este teste
+localmente (com `dados_locais_nao_versionados/`) vai precisar recalcular
+os números esperados contra os dados reais antes de confiar nele de
+novo — não foi feito aqui porque este ambiente não tem os arquivos
+reais."""
 from __future__ import annotations
 
 from datetime import date
@@ -50,6 +63,9 @@ def caminhos_reais() -> dict[str, str]:
         "extrajudicial": _caminho("AGENDAMENTO (10).xlsx"),
         "contrarias": _caminho("CONTRÁRIAS - NOVO.xlsx"),
         "procon": _caminho("PROCON E EXTRAJUDICIAL 2026.xlsx"),
+        # Arquivo novo (2026-10-27) — ajuste o nome se o seu arquivo local
+        # tiver outro nome.
+        "pauta_contrarias": _caminho("PAUTA DE AUDIÊNCIAS CONTRÁRIAS.xlsx"),
     }
 
 

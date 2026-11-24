@@ -184,3 +184,21 @@ def ler_aba(linhas: list[tuple], config_fonte: dict, planilha: str, aba: str) ->
     if localizado is None:
         raise CabecalhoNaoEncontrado(planilha, aba, list(config_fonte["colunas"]))
     return ler_linhas(linhas, localizado, planilha, aba)
+
+
+def tem_apenas_titulo_e_cabecalho(linhas: list[tuple]) -> bool:
+    """True quando a aba não tem nenhuma linha de dado de verdade — só, no
+    máximo, uma linha de título (nome da assessoria) e uma de cabeçalho
+    (nomes de coluna), sem nenhuma linha além dessas com algum valor.
+
+    Usado por `aba_por_assessoria.ler` (Fase 4/bug real, 2026-10-27): uma
+    aba de assessoria sem nenhum caso cadastrado às vezes também está com
+    o cabeçalho incompleto (coluna renomeada, célula em branco por
+    descuido) — como não há dado nenhum pra perder, isso não deveria travar
+    o relatório inteiro das ~40 outras assessorias (ver
+    `base.CabecalhoNaoEncontrado`, que permanece bloqueante quando a aba
+    TEM dado de verdade)."""
+    linhas_com_conteudo = sum(
+        1 for linha in linhas if any(c is not None and str(c).strip() for c in linha)
+    )
+    return linhas_com_conteudo <= 2
