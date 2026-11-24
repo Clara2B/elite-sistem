@@ -1,8 +1,33 @@
 import os
 import tempfile
 
+# 20 MB — generoso pra qualquer planilha real já vista em produção (a maior,
+# "Gestão de Processos", gira em torno de poucos MB), mas protege o processo
+# do plano gratuito do Render (memória limitada) de um arquivo enorme enviado
+# por engano (ex.: a pessoa errada o campo de upload).
+TAMANHO_MAXIMO_UPLOAD_BYTES = 20 * 1024 * 1024
+
 
 def salvar_temp(upload) -> str:
+    """Salva o arquivo enviado num arquivo temporário .xlsx — valida ANTES
+    de gravar ou processar qualquer coisa (achado na varredura completa,
+    2026-11-24): sem isso, um arquivo que não é .xlsx de verdade (PDF, foto,
+    arquivo errado) ou grande demais ia direto pro openpyxl/pandas, que
+    estourava com um erro técnico sem tratamento — tela genérica "Algo deu
+    errado" em vez de uma mensagem clara dizendo o que fazer. `ValueError`
+    aqui é capturado pelo mesmo `try/except` que cada tela de import já usa
+    pros erros de `importar_planilha`."""
+    nome = upload.filename or ""
+    if not nome.lower().endswith(".xlsx"):
+        raise ValueError(
+            f'O arquivo "{nome}" não é uma planilha .xlsx. Verifique se escolheu o arquivo certo e tente de novo.'
+        )
+    if upload.size is not None and upload.size > TAMANHO_MAXIMO_UPLOAD_BYTES:
+        tamanho_mb = upload.size / (1024 * 1024)
+        limite_mb = TAMANHO_MAXIMO_UPLOAD_BYTES // (1024 * 1024)
+        raise ValueError(
+            f"O arquivo tem {tamanho_mb:.1f} MB — o limite é {limite_mb} MB. Envie um arquivo menor."
+        )
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
         tmp.write(upload.file.read())
         return tmp.name

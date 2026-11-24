@@ -88,15 +88,17 @@ async def importar(
     usuario: Usuario = Depends(_acesso_eximia),
     db: Session = Depends(get_db),
 ):
-    path = salvar_temp(arquivo)
     contexto = _contexto_base(db, usuario)
+    path = None
     try:
+        path = salvar_temp(arquivo)
         resumo = importar_planilha_bancos(db, path)
     except ValueError as e:
         contexto["erro"] = str(e)
         return templates.TemplateResponse(request, "bancos.html", contexto, status_code=400)
     finally:
-        remover_temp(path)
+        if path:
+            remover_temp(path)
     registrar(db, usuario, "IMPORTOU_BANCOS", entidade="banco", detalhes=str(resumo))
     contexto = _contexto_base(db, usuario)
     partes = [f"{resumo.criados} criado(s), {resumo.atualizados} atualizado(s)"]

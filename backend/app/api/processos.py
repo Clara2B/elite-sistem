@@ -29,13 +29,15 @@ def importar(
     usuario: Usuario = Depends(_acesso_elite),
     db: Session = Depends(get_db),
 ):
-    path = salvar_temp(arquivo)
+    path = None
     try:
+        path = salvar_temp(arquivo)
         resumo = processos_service.importar_planilha(db, path, usuario_id=usuario.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     finally:
-        remover_temp(path)
+        if path:
+            remover_temp(path)
     registrar(db, usuario, "IMPORTOU_PROCESSOS", entidade="processo", detalhes=str(resumo))
     return resumo
 

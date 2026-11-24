@@ -85,10 +85,11 @@ async def importar(
     usuario: Usuario = Depends(_acesso_elite),
     db: Session = Depends(get_db),
 ):
-    path = salvar_temp(arquivo)
     mensagem = None
     erro = None
+    path = None
     try:
+        path = salvar_temp(arquivo)
         resumo = correspondencias_service.importar_planilha(db, path)
     except ValueError as e:
         erro = str(e)
@@ -99,7 +100,8 @@ async def importar(
             f"({resumo.linhas_ja_existentes} já existiam de antes)."
         )
     finally:
-        remover_temp(path)
+        if path:
+            remover_temp(path)
     # _contexto_base DEPOIS do import (não antes): a planilha pode trazer
     # empresa nova, que só existe no banco depois de importar_planilha
     # rodar — calculado antes, o dropdown de empresa saía sem a que acabou

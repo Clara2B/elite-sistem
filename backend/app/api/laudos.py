@@ -26,13 +26,15 @@ def importar(
     usuario: Usuario = Depends(_acesso_elite),
     db: Session = Depends(get_db),
 ):
-    path = salvar_temp(arquivo)
+    path = None
     try:
+        path = salvar_temp(arquivo)
         resumo = laudos_service.importar_planilha(db, path)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     finally:
-        remover_temp(path)
+        if path:
+            remover_temp(path)
     registrar(db, usuario, "IMPORTOU_LAUDOS", entidade="laudo", detalhes=str(resumo))
     return resumo
 
