@@ -161,6 +161,66 @@
     {% endif %}
   {% endif %}
 
+  {% if eh_admin and duplicatas %}
+    <div class="card">
+      <h2>Possíveis duplicatas</h2>
+      <p class="subtitulo">
+        Mesma empresa, data e cliente, mas tipo ou status diferente — sobra de antes do bug de
+        reimportação ser corrigido. Confira na planilha qual está certo e exclua o outro.
+      </p>
+      {% for grupo in duplicatas %}
+        <div class="card" style="margin-top: 12px;">
+          <p><strong>{{ grupo.empresa }}</strong> — {{ grupo.cliente }} — {{ grupo.data.strftime("%d/%m/%Y") }}</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Tipo</th>
+                <th>Status</th>
+                <th>Valor</th>
+                <th>Importado em</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for l in grupo.laudos %}
+                <tr>
+                  <td>{{ l.tipo_laudo_nome }}</td>
+                  <td>{{ l.status }}</td>
+                  <td>R$ {{ "%.2f"|format(l.valor)|replace(".", ",") }}</td>
+                  <td>{{ l.criado_em.strftime("%d/%m/%Y %H:%M") }}</td>
+                  <td>
+                    <button type="button" class="perigo botao-linha" data-abrir-confirmacao="modal-excluir-laudo-{{ l.id }}">
+                      {{ icones.icone('lixeira') }} Excluir
+                    </button>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% for l in grupo.laudos %}
+          <dialog id="modal-excluir-laudo-{{ l.id }}" class="modal-confirmacao">
+            <div class="modal-corpo">
+              <div class="modal-icone">{{ icones.icone('alerta') }}</div>
+              <h3>Excluir este laudo?</h3>
+              <p>
+                {{ grupo.cliente }} — {{ grupo.empresa }} — {{ grupo.data.strftime("%d/%m/%Y") }} —
+                tipo <strong>{{ l.tipo_laudo_nome }}</strong>, status <strong>{{ l.status }}</strong>.
+                Isso vai apagar esse laudo específico, sem volta. O outro da dupla não é afetado.
+              </p>
+            </div>
+            <div class="modal-acoes">
+              <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
+              <form method="post" action="/app/laudos/{{ l.id }}/excluir">
+                <button type="submit" class="perigo">Excluir definitivamente</button>
+              </form>
+            </div>
+          </dialog>
+        {% endfor %}
+      {% endfor %}
+    </div>
+  {% endif %}
+
   {% if eh_admin %}
     <div class="card" style="border: 1px solid var(--danger-soft);">
       <h2>Zona de perigo</h2>

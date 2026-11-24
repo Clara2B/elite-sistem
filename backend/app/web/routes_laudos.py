@@ -45,6 +45,7 @@ def tela(
     status_menu = status or laudos_service.OPCOES_STATUS[0]
     ids_com_laudo = laudos_service.ids_empresas_com_laudo(db, periodo_ini_menu, periodo_fim_menu, status_menu)
 
+    eh_admin = usuario.papel_global in PAPEIS_GLOBAIS
     contexto = {
         "usuario": usuario,
         "menu": itens_menu(db, usuario),
@@ -57,7 +58,10 @@ def tela(
         "resumo": None,
         "resumo_texto": None,
         "erro": erro,
-        "eh_admin": usuario.papel_global in PAPEIS_GLOBAIS,
+        "eh_admin": eh_admin,
+        # Só calcula pra admin — mesma varredura da tabela inteira que
+        # `detectar_duplicatas` faz não interessa pra quem não vê a seção.
+        "duplicatas": laudos_service.detectar_duplicatas(db) if eh_admin else [],
     }
     # O resumo é sempre GERAL — cobre todas as empresas, ignorando o filtro
     # de "Empresa" do relatório detalhado (que continua servindo só pra
@@ -99,6 +103,7 @@ async def importar(
     # de hoje faria a empresa que acabou de ser importada desaparecer do
     # menu bem na hora que a Clara mais precisa vê-la pra confirmar que o
     # import funcionou.
+    eh_admin = usuario.papel_global in PAPEIS_GLOBAIS
     contexto = {
         "usuario": usuario,
         "menu": itens_menu(db, usuario),
@@ -111,7 +116,7 @@ async def importar(
         "resumo_texto": None,
         "mensagem": None,
         "erro": None,
-        "eh_admin": usuario.papel_global in PAPEIS_GLOBAIS,
+        "eh_admin": eh_admin,
     }
     try:
         resumo = laudos_service.importar_planilha(db, path)
@@ -126,7 +131,27 @@ async def importar(
         )
     finally:
         remover_temp(path)
+    contexto["duplicatas"] = laudos_service.detectar_duplicatas(db) if eh_admin else []
     return templates.TemplateResponse(request, "laudos.html", contexto)
+
+
+@router.post("/{laudo_id}/excluir")
+def excluir(
+    laudo_id: int,
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Exclui UM laudo específico — usado pra resolver uma duplicata
+    apontada na seção "Possíveis duplicatas" da tela, depois da Clara
+    decidir qual dos dois manter (ver laudos_service.detectar_duplicatas).
+    Só Admin Superior/T.I."""
+    excluido = laudos_service.excluir_laudo(db, laudo_id)
+    if excluido:
+        registrar(db, usuario, "EXCLUIU_LAUDO", entidade="laudo", entidade_id=str(laudo_id))
+        mensagem = quote("Laudo excluído.")
+    else:
+        mensagem = quote("Esse laudo já não existe mais (pode já ter sido excluído).")
+    return RedirectResponse(f"/app/laudos?mensagem={mensagem}", status_code=303)
 
 
 @router.post("/apagar-tudo")
