@@ -123,6 +123,29 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
     return resumo
 
 
+def recalcular_valores_zerados(db: Session) -> int:
+    """Corrige registros ANTIGOS que ficaram com `valor=None` porque foram
+    importados antes do bug de "280.50" (texto simples com ponto decimal
+    sendo descartado) ser corrigido em `parse_valor_monetario` — reimportar
+    a planilha sem mudar nada NÃO corrige esses registros (a chave de
+    duplicidade usa o `valor_texto` original, que não mudou, então a linha
+    é tratada como "já existe" e nunca é reprocessada; ver `importar_planilha`
+    acima). Aqui, em vez disso, reaplica o parser atual direto em cima do
+    `valor_texto` já salvo de cada registro com `valor` nulo — ação
+    administrativa, segura (só preenche o que estava vazio, nunca sobrescreve
+    um valor já calculado), disparada manualmente a pedido da Clara
+    (SIMPLIFICA/Outubro aparecia com Total R$ 0,00 mesmo depois do bug
+    corrigido). Devolve quantos registros foram corrigidos."""
+    corrigidos = 0
+    for c in db.scalars(select(Correspondencia).where(Correspondencia.valor.is_(None))):
+        novo_valor = parse_valor_monetario(c.valor_texto)
+        if novo_valor is not None:
+            c.valor = novo_valor
+            corrigidos += 1
+    db.commit()
+    return corrigidos
+
+
 def apagar_todas_correspondencias(db: Session) -> int:
     """Apaga TODO o histórico de correspondências — mesmo padrão de
     `laudos.py::apagar_todos_laudos` (zona de perigo, confirmação

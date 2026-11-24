@@ -92,6 +92,18 @@
   {% endif %}
 
   {% if eh_admin %}
+    <div class="card">
+      <h2>Manutenção</h2>
+      <p class="subtitulo">
+        Corrige registros antigos que ficaram com valor zerado no relatório (bug já corrigido na
+        importação, mas que não afeta quem já foi importado antes). Ação segura — só preenche o
+        que estava vazio, não apaga nem sobrescreve nada.
+      </p>
+      <form method="post" action="/app/correspondencias/recalcular-valores">
+        <button type="submit" class="secundario">Corrigir valores zerados</button>
+      </form>
+    </div>
+
     <div class="card" style="border: 1px solid var(--danger-soft);">
       <h2>Zona de perigo</h2>
       <p class="subtitulo">

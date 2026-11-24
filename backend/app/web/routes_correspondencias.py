@@ -110,6 +110,24 @@ async def importar(
     return templates.TemplateResponse(request, "correspondencias.html", contexto)
 
 
+@router.post("/recalcular-valores")
+def recalcular_valores(
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Corrige registros antigos com valor zerado (importados antes do bug
+    de "280.50" ser corrigido) — ação segura, não some com nada, só
+    preenche o que estava vazio. Só Admin Superior/T.I., mesmo acesso de
+    "apagar tudo"."""
+    total = correspondencias_service.recalcular_valores_zerados(db)
+    registrar(
+        db, usuario, "RECALCULOU_VALORES_CORRESPONDENTES",
+        entidade="correspondencia", detalhes=f"{total} correspondente(s) corrigido(s)",
+    )
+    mensagem = quote(f"{total} correspondente(s) com valor zerado foram corrigidos.")
+    return RedirectResponse(f"/app/correspondencias?mensagem={mensagem}", status_code=303)
+
+
 @router.post("/apagar-tudo")
 def apagar_tudo(
     usuario: Usuario = Depends(admin_logado_web),
