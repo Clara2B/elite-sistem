@@ -135,9 +135,9 @@ def test_import_grande_comita_a_cada_2000_linhas_sem_perder_nenhuma(db):
 
 def test_reimportacao_nao_duplica_o_mesmo_laudo(db):
     """M31: Laudos não tinha nenhum teste de deduplicação na reimportação
-    (Processos tem 4 equivalentes) — diferente de Processos, aqui não há
-    atualização de linha existente, só "já existe, ignora" (chave: empresa
-    + tipo + data + nome do cliente)."""
+    (Processos tem 4 equivalentes) — identidade do laudo: empresa + data +
+    nome do cliente (TIPO DE LAUDO não entra mais na identidade, ver
+    `test_reimportacao_com_tipo_corrigido_atualiza_em_vez_de_duplicar`)."""
     def _planilha(nome_arquivo):
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -177,6 +177,41 @@ def test_reimportacao_com_cliente_diferente_nao_e_tratada_como_duplicata(db):
     assert resumo2.linhas_novas == 1
     assert resumo2.linhas_ja_existentes == 0
     assert db.query(Laudo).count() == 2
+
+
+def test_reimportacao_com_tipo_corrigido_atualiza_em_vez_de_duplicar(db):
+    """Bug real reportado pela Clara (2026-11-24, planilha da Guardiã,
+    cliente LEANDRO SILVA PESSANHA): o TIPO DE LAUDO fazia parte da chave
+    de duplicidade contra o banco, então reimportar com o tipo corrigido
+    (de "AUTO" pra "EMPRÉSTIMO") criava um registro NOVO em vez de
+    corrigir o existente — o relatório contava os dois, duplicando o
+    cliente e inflando o valor a cobrar. Agora a reimportação ATUALIZA o
+    tipo (e o status) do registro já existente, sem duplicar."""
+    def _planilha(nome_arquivo, tipo, status="Solicitação"):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["DATA", "EMPRESA", "TIPO DE LAUDO", "NOME DO CLIENTE", "ENTRADA DE LAUDO"])
+        ws.append([date(2026, 10, 21), "GUARDIÃ", tipo, "LEANDRO SILVA PESSANHA", status])
+        path = Path(tempfile.mkdtemp()) / nome_arquivo
+        wb.save(path)
+        return str(path)
+
+    resumo1 = importar_planilha(db, _planilha("v1.xlsx", "AUTO"))
+    assert resumo1.linhas_novas == 1
+
+    resumo2 = importar_planilha(db, _planilha("v2.xlsx", "EMPRÉSTIMO"))
+    assert resumo2.linhas_novas == 0
+    assert resumo2.linhas_atualizadas == 1
+    assert resumo2.linhas_ja_existentes == 0
+
+    assert db.query(Laudo).count() == 1
+    laudo = db.query(Laudo).one()
+    assert laudo.tipo_laudo_nome == "EMPRÉSTIMO"
+
+    # Reimportar de novo com o mesmo tipo não deve "atualizar" à toa.
+    resumo3 = importar_planilha(db, _planilha("v3.xlsx", "EMPRÉSTIMO"))
+    assert resumo3.linhas_atualizadas == 0
+    assert resumo3.linhas_ja_existentes == 1
 
 
 def test_apagar_todos_laudos_remove_tudo_e_devolve_a_contagem(db):

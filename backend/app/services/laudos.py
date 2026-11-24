@@ -44,7 +44,25 @@ STATUS_OPCAO_MAP = {
 }
 
 REQUIRED_HEADERS = ["EMPRESA", "TIPO DE LAUDO", "DATA"]
+# Usada só por `load_data_sheets` (descarta linha repetida DENTRO da mesma
+# planilha, ex. a mesma linha presente em duas abas por engano) — inclui
+# TIPO DE LAUDO de propósito, porque dois laudos do mesmo cliente no mesmo
+# dia com tipos diferentes são, dentro de UM import só, casos distintos de
+# verdade (não duplicata).
 CHAVE_DUPLICIDADE = ["DATA", "NOME DO CLIENTE", "EMPRESA", "TIPO DE LAUDO"]
+# Identidade do laudo PRA COMPARAR COM O QUE JÁ ESTÁ NO BANCO (entre
+# importações diferentes) — sem TIPO DE LAUDO de propósito. Bug real
+# corrigido em 2026-11-24 (reportado pela Clara, planilha de Guardiã,
+# cliente LEANDRO SILVA PESSANHA): ela reimportou a planilha com o TIPO DE
+# LAUDO de um cliente corrigido (de "AUTO" pra "EMPRÉSTIMO"), e por esse
+# campo fazer parte da identidade do laudo, o sistema não reconheceu como
+# "o mesmo laudo com um dado corrigido" — criou um registro NOVO, deixando
+# os dois salvos (contando duas vezes no relatório, inflando o valor a
+# cobrar). Mesma classe de bug já vista antes com a coluna DATA (ver
+# `apagar_todos_laudos`). Com a identidade mais estreita, uma reimportação
+# com TIPO (ou STATUS) diferente agora ATUALIZA o registro existente em
+# vez de duplicar.
+CHAVE_IDENTIDADE_LAUDO = ["DATA", "NOME DO CLIENTE", "EMPRESA"]
 
 
 def periodo_20_a_20(ano: int, mes: int) -> tuple[date, date]:
@@ -76,6 +94,7 @@ class ImportResumo:
     linhas_lidas: int = 0
     linhas_novas: int = 0
     linhas_ja_existentes: int = 0
+    linhas_atualizadas: int = 0
 
 
 def importar_planilha(db: Session, path: str) -> ImportResumo:
@@ -92,8 +111,8 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
     col_cliente = _col_optional(df, "NOME DO CLIENTE") or _col_optional(df, "CLIENTE")
     col_status = _col_optional(df, "ENTRADA DE LAUDO") or _col_optional(df, "STATUS")
 
-    existentes = {
-        (laudo.empresa_cliente_id, normalize(laudo.tipo_laudo_nome), laudo.data, normalize(laudo.nome_cliente))
+    existentes: dict[tuple, Laudo] = {
+        (laudo.empresa_cliente_id, laudo.data, normalize(laudo.nome_cliente)): laudo
         for laudo in db.scalars(select(Laudo))
     }
     # Cache de empresa-cliente pro import inteiro — sem isso,
@@ -132,21 +151,27 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
         cliente = cell_text(row.get(col_cliente)) if col_cliente else ""
 
         empresa = get_or_create_empresa(db, empresa_nome, cache=empresa_cache)
-        chave = (empresa.id, normalize(tipo), data_val, normalize(cliente))
-        if chave in existentes:
-            resumo.linhas_ja_existentes += 1
+        chave = (empresa.id, data_val, normalize(cliente))
+        laudo_existente = existentes.get(chave)
+        if laudo_existente is not None:
+            tipo_novo = tipo.upper()
+            if normalize(laudo_existente.tipo_laudo_nome) != normalize(tipo_novo) or laudo_existente.status != status_normalizado:
+                laudo_existente.tipo_laudo_nome = tipo_novo
+                laudo_existente.status = status_normalizado
+                resumo.linhas_atualizadas += 1
+            else:
+                resumo.linhas_ja_existentes += 1
             continue
 
-        db.add(
-            Laudo(
-                empresa_cliente_id=empresa.id,
-                tipo_laudo_nome=tipo.upper(),
-                data=data_val,
-                nome_cliente=cliente,
-                status=status_normalizado,
-            )
+        novo = Laudo(
+            empresa_cliente_id=empresa.id,
+            tipo_laudo_nome=tipo.upper(),
+            data=data_val,
+            nome_cliente=cliente,
+            status=status_normalizado,
         )
-        existentes.add(chave)
+        db.add(novo)
+        existentes[chave] = novo
         resumo.linhas_novas += 1
 
         # Mesmo padrão já usado em app/services/processos.py (2026-10-13,
