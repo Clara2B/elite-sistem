@@ -5,7 +5,6 @@ app/models.py::Correspondencia)."""
 from __future__ import annotations
 
 import logging
-import re
 import time
 from dataclasses import dataclass, field
 
@@ -15,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.excel_reader import load_data_sheets
 from app.models import Correspondencia
 from app.services.empresas import get_or_create_empresa, resolver_empresa_por_nome
-from app.utils import cell_text, normalize
+from app.utils import cell_text, normalize, parse_valor_monetario
 
 _logger = logging.getLogger("elite_sistem.import")
 
@@ -25,8 +24,6 @@ _logger = logging.getLogger("elite_sistem.import")
 # genérica de "nenhuma aba com essas colunas" que load_data_sheets dá.
 REQUIRED_HEADERS = ["MÊS", "EMPRESA"]
 COLUNAS_OBRIGATORIAS = ["MÊS", "EMPRESA", "ADVOGADO", "AUTOR", "ADV / PREPOSTO", "VALOR", "TIPO DE AÇÃO"]
-
-_RE_NUMERO = re.compile(r"-?\d{1,3}(\.\d{3})*(,\d+)?$|-?\d+(,\d+)?$")
 
 
 def _col(df, nome: str) -> str | None:
@@ -38,33 +35,16 @@ def _col(df, nome: str) -> str | None:
 
 def parse_valor(texto: str) -> float | None:
     """"R$ 180,00" / "R$160,00" (sem espaço) / "R$ 1.234,56" -> 180.0 /
-    160.0 / 1234.56. `None` quando o texto não é um valor reconhecível
-    (ex.: "a combinar") — nesse caso a Clara pediu pra manter o texto
-    original da planilha no relatório em vez de zerar ou travar o import
-    inteiro (ver `services/correspondencias.py::gerar_relatorio` e
+    160.0 / 1234.56, e também número "simples" (célula de texto sem "R$",
+    com ponto decimal — ex.: "280.50"). `None` quando o texto não é um
+    valor reconhecível (ex.: "a combinar") — nesse caso a Clara pediu pra
+    manter o texto original da planilha no relatório em vez de zerar ou
+    travar o import inteiro (ver `gerar_relatorio` e
     `LinhaCorrespondencia.valor_texto`).
 
-    Também aceita número "simples" (célula formatada como texto na
-    planilha, sem "R$" e com ponto decimal em vez de vírgula — ex.:
-    "280.5", "280.50") — a pedido da Clara, 2026-11-04: antes só o
-    formato brasileiro (vírgula decimal, ponto de milhar) era reconhecido,
-    e esse outro formato caía em `valor_texto` (fora do Total)."""
-    limpo = (texto or "").strip()
-    if not limpo:
-        return None
-    sem_prefixo = re.sub(r"(?i)^r\$\s*", "", limpo).strip()
-    # Ponto final sobrando (típico de digitação, ex.: "R$ 280,00.") não
-    # muda o valor pretendido — visto na planilha real da Clara.
-    sem_prefixo = sem_prefixo.removesuffix(".")
-    if _RE_NUMERO.match(sem_prefixo):
-        try:
-            return float(sem_prefixo.replace(".", "").replace(",", "."))
-        except ValueError:
-            return None
-    try:
-        return float(sem_prefixo)
-    except ValueError:
-        return None
+    A conversão em si é `app.utils.parse_valor_monetario`, compartilhada
+    com `services/pendencias.py` desde 2026-11-24."""
+    return parse_valor_monetario(texto)
 
 
 @dataclass

@@ -126,6 +126,26 @@ def test_reimportacao_com_pago_corrigido_atualiza_em_vez_de_duplicar(db):
     assert resumo3.linhas_ja_existentes == 1
 
 
+def test_importar_planilha_com_valor_em_texto_simples_nao_infla_100x(db):
+    """Bug real corrigido em 2026-11-24: célula de VALOR em texto simples
+    com ponto decimal (ex.: "280.50", sem "R$", sem vírgula) era
+    interpretada cegamente como formato brasileiro (ponto = separador de
+    milhar), virando 28050.0 — 100x maior, sem nenhum aviso. Agora usa
+    `parse_valor_monetario` (compartilhada com Correspondências)."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["DATA", "EMPRESA", "TIPO DE COBRANÇA", "VALOR", "PAGO"])
+    ws.append([date(2026, 10, 1), "NOVA GLOBAL", "MENSALIDADE PROCESSUAL", "280.50", "NÃO"])
+    path = Path(tempfile.mkdtemp()) / "valor_texto_simples.xlsx"
+    wb.save(path)
+
+    resumo = importar_planilha(db, str(path))
+    assert resumo.linhas_novas == 1
+
+    cobranca = db.query(Cobranca).one()
+    assert cobranca.valor == 280.5
+
+
 def test_apagar_todas_pendencias_remove_tudo_e_devolve_a_contagem(db):
     empresa1 = get_or_create_empresa(db, "NOVA GLOBAL")
     empresa2 = get_or_create_empresa(db, "OUTRA")

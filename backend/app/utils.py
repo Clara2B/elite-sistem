@@ -5,10 +5,13 @@ comportamento — mesmas regras já validadas em produção.
 """
 from __future__ import annotations
 
+import re
 import unicodedata
 from datetime import date, datetime
 
 import pandas as pd
+
+_RE_NUMERO_MONETARIO = re.compile(r"-?\d{1,3}(\.\d{3})*(,\d+)?$|-?\d+(,\d+)?$")
 
 
 def normalize(text) -> str:
@@ -83,6 +86,44 @@ def format_brl(value: float) -> str:
     text = f"{value:,.2f}"
     text = text.replace(",", "X").replace(".", ",").replace("X", ".")
     return f"R$ {text}"
+
+
+def parse_valor_monetario(texto) -> float | None:
+    """Converte um valor monetário em texto pra `float`. Aceita o formato
+    brasileiro ("R$ 1.234,56" — ponto de milhar, vírgula decimal) E texto
+    simples sem "R$" com ponto decimal (ex.: "280.50", "280.5") ou inteiro
+    (ex.: "280"). `None` quando o texto não é um valor reconhecível (ex.:
+    "a combinar").
+
+    Compartilhada por `services/correspondencias.py` e
+    `services/pendencias.py` — extraída em 2026-11-24 depois do mesmo
+    bug (ponto decimal de texto simples interpretado como separador de
+    milhar) ter sido corrigido primeiro só em Correspondências e só
+    depois notado, separadamente, em Pendências — lá o efeito era pior
+    (não só "fica de fora do Total" como em Correspondências, e sim um
+    valor ERRADO: "280.50" virava 28050.0, 100x maior, sem nenhum aviso).
+    Uma função só, usada pelos dois módulos, evita o mesmo bug reaparecer
+    de novo num terceiro lugar."""
+    if texto is None:
+        return None
+    limpo = str(texto).strip()
+    if not limpo:
+        return None
+    sem_prefixo = re.sub(r"(?i)^r\$\s*", "", limpo).strip()
+    # Ponto final sobrando (típico de digitação, ex.: "R$ 280,00.") não
+    # muda o valor pretendido — visto na planilha real da Clara.
+    sem_prefixo = sem_prefixo.removesuffix(".")
+    if not sem_prefixo:
+        return None
+    if _RE_NUMERO_MONETARIO.match(sem_prefixo):
+        try:
+            return float(sem_prefixo.replace(".", "").replace(",", "."))
+        except ValueError:
+            return None
+    try:
+        return float(sem_prefixo)
+    except ValueError:
+        return None
 
 
 def _nome_arquivo(extensao: str, partes: tuple[str, ...]) -> str:

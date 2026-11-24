@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from app.excel_reader import load_data_sheets
 from app.models import Cobranca
 from app.services.empresas import get_or_create_empresa, resolver_empresa_por_nome
-from app.utils import cell_text, format_brl, normalize, parse_date_cell
+from app.utils import cell_text, format_brl, normalize, parse_date_cell, parse_valor_monetario
 
 _logger = logging.getLogger("elite_sistem.import")
 
@@ -47,21 +47,20 @@ def _e_pendente(pago_valor) -> bool:
 
 
 def _parse_valor(valor) -> float | None:
+    """Número já vindo como int/float da planilha (célula numérica de
+    verdade) é usado direto; texto passa por `parse_valor_monetario`
+    (compartilhada com `services/correspondencias.py` desde 2026-11-24 —
+    bug real corrigido: um valor de texto simples com ponto decimal, ex.
+    "280.50", era interpretado como formato brasileiro cegamente (ponto =
+    separador de milhar), virando 28050.0 — 100x maior, sem nenhum
+    aviso)."""
     if valor is None:
         return None
     if isinstance(valor, (int, float)):
         if isinstance(valor, float) and pd.isna(valor):
             return None
         return float(valor)
-    texto = str(valor).strip()
-    if not texto:
-        return None
-    texto = texto.replace("R$", "").replace("r$", "").strip()
-    texto = texto.replace(".", "").replace(",", ".")
-    try:
-        return float(texto)
-    except ValueError:
-        return None
+    return parse_valor_monetario(valor)
 
 
 def _classificar_cobrador(tipo_cobranca: str) -> str:
