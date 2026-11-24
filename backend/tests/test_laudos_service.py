@@ -8,6 +8,8 @@ from app.models import Laudo, TipoLaudo
 from app.services.empresas import get_or_create_empresa
 from app.services.laudos import (
     apagar_todos_laudos,
+    detectar_duplicatas,
+    excluir_laudo,
     formatar_texto_resumo_assessorias,
     gerar_relatorio,
     gerar_resumo_por_assessoria,
@@ -293,6 +295,69 @@ def test_apagar_todos_laudos_remove_tudo_e_devolve_a_contagem(db):
 
 def test_apagar_todos_laudos_com_banco_ja_vazio(db):
     assert apagar_todos_laudos(db) == 0
+
+
+def test_detectar_duplicatas_agrupa_quem_tem_mesma_identidade_tipo_diferente(db):
+    """Caso real reportado pela Clara: Guardiã/LEANDRO SILVA PESSANHA
+    apareceu duas vezes no relatório, um como "AUTO" e outro como
+    "EMPRÉSTIMO", no mesmo dia — sobra de ANTES do bug de reimportação
+    (CHAVE_IDENTIDADE_LAUDO sem TIPO) ser corrigido."""
+    guardia = get_or_create_empresa(db, "GUARDIÃ")
+    sem_duplicata = get_or_create_empresa(db, "ABSOLUTA")
+    duplicado_auto = Laudo(
+        empresa_cliente_id=guardia.id, tipo_laudo_nome="AUTO", data=date(2026, 10, 21),
+        nome_cliente="LEANDRO SILVA PESSANHA", status="SOLICITAÇÃO",
+    )
+    duplicado_emprestimo = Laudo(
+        empresa_cliente_id=guardia.id, tipo_laudo_nome="EMPRÉSTIMO", data=date(2026, 10, 21),
+        nome_cliente="LEANDRO SILVA PESSANHA", status="SOLICITAÇÃO",
+    )
+    db.add_all([
+        duplicado_auto,
+        duplicado_emprestimo,
+        Laudo(empresa_cliente_id=sem_duplicata.id, tipo_laudo_nome="IMÓVEL", data=date(2026, 10, 21),
+              nome_cliente="Fulano", status="SOLICITAÇÃO"),
+    ])
+    db.commit()
+
+    grupos = detectar_duplicatas(db)
+
+    assert len(grupos) == 1
+    grupo = grupos[0]
+    assert grupo.empresa == "GUARDIÃ"
+    assert grupo.cliente == "LEANDRO SILVA PESSANHA"
+    assert {l.tipo_laudo_nome for l in grupo.laudos} == {"AUTO", "EMPRÉSTIMO"}
+    assert {l.id for l in grupo.laudos} == {duplicado_auto.id, duplicado_emprestimo.id}
+
+
+def test_detectar_duplicatas_sem_nenhuma_devolve_lista_vazia(db):
+    empresa = get_or_create_empresa(db, "ABSOLUTA")
+    db.add(Laudo(empresa_cliente_id=empresa.id, tipo_laudo_nome="AUTO", data=date(2026, 10, 21),
+                 nome_cliente="Fulano", status="SOLICITAÇÃO"))
+    db.commit()
+
+    assert detectar_duplicatas(db) == []
+
+
+def test_excluir_laudo_remove_so_o_escolhido(db):
+    empresa = get_or_create_empresa(db, "GUARDIÃ")
+    manter = Laudo(empresa_cliente_id=empresa.id, tipo_laudo_nome="EMPRÉSTIMO", data=date(2026, 10, 21),
+                    nome_cliente="LEANDRO SILVA PESSANHA", status="SOLICITAÇÃO")
+    apagar = Laudo(empresa_cliente_id=empresa.id, tipo_laudo_nome="AUTO", data=date(2026, 10, 21),
+                   nome_cliente="LEANDRO SILVA PESSANHA", status="SOLICITAÇÃO")
+    db.add_all([manter, apagar])
+    db.commit()
+    apagar_id = apagar.id
+
+    assert excluir_laudo(db, apagar_id) is True
+
+    assert db.query(Laudo).count() == 1
+    assert db.get(Laudo, manter.id) is not None
+    assert db.get(Laudo, apagar_id) is None
+
+
+def test_excluir_laudo_inexistente_devolve_false(db):
+    assert excluir_laudo(db, 999999) is False
 
 
 def test_gerar_resumo_por_assessoria_agrupa_conta_e_ordena(db):

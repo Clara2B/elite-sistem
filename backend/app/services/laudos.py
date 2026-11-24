@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
@@ -204,6 +204,73 @@ def apagar_todos_laudos(db: Session) -> int:
     db.execute(delete(Laudo))
     db.commit()
     return total
+
+
+@dataclass
+class LaudoDuplicado:
+    id: int
+    tipo_laudo_nome: str
+    status: str
+    valor: float
+    criado_em: datetime
+
+
+@dataclass
+class GrupoDuplicata:
+    empresa: str
+    data: date
+    cliente: str
+    laudos: list[LaudoDuplicado] = field(default_factory=list)
+
+
+def detectar_duplicatas(db: Session) -> list[GrupoDuplicata]:
+    """Grupos de laudos com a mesma identidade (empresa+data+cliente, ver
+    CHAVE_IDENTIDADE_LAUDO) mas tipo/status diferente — sobra de ANTES do
+    bug corrigido em 2026-11-24 (reimportar com o TIPO DE LAUDO corrigido
+    criava um registro novo em vez de atualizar o existente; caso real:
+    Guardiã/LEANDRO SILVA PESSANHA, dia 21/10, "AUTO" x "EMPRÉSTIMO"). A
+    partir da correção, um grupo como esse não é mais criado — isso só
+    lista o que ficou de duplicata ANTIGA no banco. Não decide sozinho
+    qual apagar: só a Clara sabe qual dos dois está certo (ela mesma
+    conferiu o caso da Guardiã na planilha); por isso aqui só agrupa e
+    mostra pra ela escolher, em vez de apagar um dos dois automaticamente."""
+    por_identidade: dict[tuple, list[Laudo]] = {}
+    for laudo in db.scalars(select(Laudo)):
+        chave = (laudo.empresa_cliente_id, laudo.data, normalize(laudo.nome_cliente))
+        por_identidade.setdefault(chave, []).append(laudo)
+
+    empresas_cache = {e.id: e.nome for e in db.scalars(select(EmpresaCliente))}
+    grupos = [
+        GrupoDuplicata(
+            empresa=empresas_cache.get(laudos[0].empresa_cliente_id, "?"),
+            data=laudos[0].data,
+            cliente=laudos[0].nome_cliente,
+            laudos=[
+                LaudoDuplicado(
+                    id=l.id, tipo_laudo_nome=l.tipo_laudo_nome, status=l.status,
+                    valor=l.valor, criado_em=l.criado_em,
+                )
+                for l in sorted(laudos, key=lambda l: l.criado_em)
+            ],
+        )
+        for laudos in por_identidade.values()
+        if len(laudos) > 1
+    ]
+    grupos.sort(key=lambda g: (normalize(g.empresa), g.data, normalize(g.cliente)))
+    return grupos
+
+
+def excluir_laudo(db: Session, laudo_id: int) -> bool:
+    """Exclui UM laudo específico por id — usado pra resolver uma
+    duplicata apontada por `detectar_duplicatas`, depois da Clara decidir
+    qual dos dois manter. Devolve False se o id não existir (ex.: já foi
+    excluído por outra aba/pessoa)."""
+    laudo = db.get(Laudo, laudo_id)
+    if laudo is None:
+        return False
+    db.delete(laudo)
+    db.commit()
+    return True
 
 
 @dataclass
