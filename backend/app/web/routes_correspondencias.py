@@ -4,6 +4,7 @@ empresa, PDF/Excel. Ver app/web/routes_laudos.py pro espelho exato dessa
 rota."""
 from __future__ import annotations
 
+from datetime import date
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Request, UploadFile
@@ -59,6 +60,12 @@ def tela(
     contexto["filtro"] = {"empresa": empresa, "mes": mes}
     contexto["mensagem"] = mensagem
     contexto["erro"] = erro
+
+    # Só quem tem correspondência nesse mês aparece no menu — a pedido da
+    # Clara (2026-11-24). Sem mês escolhido ainda, usa o mês atual.
+    mes_menu = mes or MESES[date.today().month - 1]
+    ids_com_correspondencia = correspondencias_service.ids_empresas_com_correspondencia(db, mes_menu)
+    contexto["empresas"] = [e for e in contexto["empresas"] if e.id in ids_com_correspondencia]
 
     if empresa and mes and not erro:
         try:

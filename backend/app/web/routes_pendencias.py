@@ -23,10 +23,14 @@ _acesso_pendencias = require_modulo_web("PENDENCIAS")
 
 
 def _contexto_base(db: Session, usuario: Usuario) -> dict:
+    ids_com_pendencia = pendencias_service.ids_empresas_com_pendencia(db)
     return {
         "usuario": usuario,
         "menu": itens_menu(db, usuario),
-        "empresas": listar_empresas(db, apenas_ativas=False),
+        # Só quem tem pendência agora aparece no menu — a pedido da Clara
+        # (2026-11-24): empresa sem nenhuma cobrança pendente (ex.: "Juros
+        # Justos") não é uma opção útil pra gerar mensagem de cobrança.
+        "empresas": [e for e in listar_empresas(db, apenas_ativas=False) if e.id in ids_com_pendencia],
         "filtro": {},
         "mensagens": None,
         "mensagem": None,

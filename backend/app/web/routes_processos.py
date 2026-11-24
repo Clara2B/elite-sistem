@@ -66,6 +66,12 @@ def tela(
         "empresa": empresa or "",
         "assistente": assistente or "",
     }
+    # Só quem tem processo em escopo nesse período aparece no menu — a
+    # pedido da Clara (2026-11-24).
+    ids_com_processo = processos_service.ids_empresas_com_processo(
+        db, contexto["filtro"]["periodo_ini"], contexto["filtro"]["periodo_fim"]
+    )
+    contexto["empresas"] = [e for e in contexto["empresas"] if e.id in ids_com_processo]
     try:
         if tipo == "empresa":
             if not empresa:

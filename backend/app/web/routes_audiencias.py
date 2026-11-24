@@ -51,6 +51,17 @@ def tela(
     contexto = _contexto_base(db, usuario)
     contexto["mensagem"] = mensagem
     contexto["filtro"] = {"empresa": empresa, "ano": ano, "mes": mes, "quinzena": quinzena}
+
+    # Só quem tem audiência nessa quinzena aparece no menu — a pedido da
+    # Clara (2026-11-24). Sem filtro escolhido ainda, usa a quinzena atual
+    # (mesmo default de mês/ano já pré-selecionado na tela).
+    hoje = date.today()
+    periodo_ini_menu, periodo_fim_menu = audiencias_service.periodo_quinzenal(
+        ano or hoje.year, mes or hoje.month, quinzena or (1 if hoje.day <= 15 else 2)
+    )
+    ids_com_audiencia = audiencias_service.ids_empresas_com_audiencia(db, periodo_ini_menu, periodo_fim_menu)
+    contexto["empresas"] = [e for e in contexto["empresas"] if e.id in ids_com_audiencia]
+
     if empresa and ano and mes and quinzena:
         try:
             periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)

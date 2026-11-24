@@ -10,6 +10,7 @@ from app.models import Audiencia
 from app.services.audiencias import (
     apagar_todas_audiencias,
     gerar_relatorio,
+    ids_empresas_com_audiencia,
     importar_planilha,
     periodo_quinzenal,
 )
@@ -64,6 +65,23 @@ def test_proxima_faixa(db):
     ini, fim = periodo_quinzenal(2026, 9, 2)
     result = gerar_relatorio(db, "ALFA", ini, fim)
     assert (result.quantidade_mes, result.valor_unitario, result.total) == (40, 300.0, 6000.0)
+
+
+def test_ids_empresas_com_audiencia_so_conta_quem_tem_na_quinzena(db):
+    """A pedido da Clara (2026-11-24): usado pra tirar do menu de empresas
+    quem não tem audiência naquela quinzena (ex.: "Juros Justos" não
+    aparece se nunca tiver uma)."""
+    alfa = get_or_create_empresa(db, "ALFA")  # 1ª quinzena
+    _planilha(db, "ALFA", 10, 0)
+    beta_so_na_segunda = get_or_create_empresa(db, "BETA")
+    _planilha(db, "BETA", 0, 5)
+    get_or_create_empresa(db, "JUROS JUSTOS")  # nunca tem audiência
+
+    ini, fim = periodo_quinzenal(2026, 9, 1)
+    ids = ids_empresas_com_audiencia(db, ini, fim)
+
+    assert ids == {alfa.id}
+    assert beta_so_na_segunda.id not in ids
 
 
 # --- M43: diferencia LookupError (empresa não encontrada, 404 na API) de

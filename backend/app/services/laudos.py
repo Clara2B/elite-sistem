@@ -303,6 +303,23 @@ def _grupo_relatorio(db: Session, empresa: EmpresaCliente) -> tuple[list[int], s
     return [e.id for e in empresas_grupo], nome_canonico, canonica.cnpj
 
 
+def ids_empresas_com_laudo(db: Session, periodo_ini: date, periodo_fim: date, status_opcao: str) -> set[int]:
+    """IDs de empresa-cliente com pelo menos um laudo no período/status
+    informado — mesmo filtro que `gerar_relatorio` usa linha a linha
+    (`_status_bate`). Usado pra filtrar o menu de empresas da tela (a
+    pedido da Clara, 2026-11-24: só mostrar quem tem resultado)."""
+    status_normalizado, _ = _resolver_status(status_opcao)
+    query = select(Laudo.empresa_cliente_id, Laudo.status).where(
+        Laudo.data >= periodo_ini,
+        Laudo.data <= periodo_fim,
+    )
+    return {
+        empresa_id
+        for empresa_id, status_laudo in db.execute(query)
+        if _status_bate(status_laudo, status_normalizado)
+    }
+
+
 def gerar_relatorio(
     db: Session,
     empresa_nome: str,
