@@ -506,6 +506,14 @@ def _filtrar_por_assistente(processos: list[Processo], filtro_assistente: str | 
     return [p for p in processos if normalize(p.assistente or "") == alvo]
 
 
+def ids_empresas_com_processo(db: Session, periodo_ini: date, periodo_fim: date) -> set[int]:
+    """IDs de empresa-cliente com pelo menos um processo em escopo no
+    período informado — mesmo filtro de `_processos_em_escopo`. Usado pra
+    filtrar o menu de empresas da tela (a pedido da Clara, 2026-11-24: só
+    mostrar quem tem resultado)."""
+    return {p.empresa_cliente_id for p in _processos_em_escopo(db, periodo_ini, periodo_fim)}
+
+
 def gerar_relatorio_geral(
     db: Session, periodo_ini: date, periodo_fim: date, filtro_assistente: str | None = None
 ) -> RelatorioGeral:

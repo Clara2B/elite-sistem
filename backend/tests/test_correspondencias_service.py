@@ -14,6 +14,7 @@ from app.models import Correspondencia
 from app.services.correspondencias import (
     apagar_todas_correspondencias,
     gerar_relatorio,
+    ids_empresas_com_correspondencia,
     importar_planilha,
     parse_valor,
 )
@@ -149,6 +150,27 @@ def test_gerar_relatorio_filtra_por_empresa_e_mes(db):
     assert len(r.linhas) == 1
     assert r.linhas[0].autor == "Cliente A"
     assert r.total == 100.0
+
+
+def test_ids_empresas_com_correspondencia_so_conta_quem_tem_no_mes(db):
+    """A pedido da Clara (2026-11-24): usado pra tirar do menu de empresas
+    quem não tem correspondência naquele mês (ex.: "Juros Justos" não
+    aparece se nunca tiver uma)."""
+    path = _planilha([
+        ["Janeiro", "Dra. A", "Cliente A", "Eros", "ADVOGADO", "R$ 100,00", "PROCON"],
+        ["Fevereiro", "Dra. C", "Cliente C", "Zenith", "ADVOGADO", "R$ 300,00", "PROCON"],
+    ])
+    importar_planilha(db, path)
+    sem_correspondencia = get_or_create_empresa(db, "Juros Justos")
+    db.commit()
+
+    ids_janeiro = ids_empresas_com_correspondencia(db, "Janeiro")
+
+    eros = get_or_create_empresa(db, "Eros")
+    zenith = get_or_create_empresa(db, "Zenith")
+    assert ids_janeiro == {eros.id}
+    assert zenith.id not in ids_janeiro
+    assert sem_correspondencia.id not in ids_janeiro
 
 
 def test_gerar_relatorio_soma_so_os_valores_validos(db):

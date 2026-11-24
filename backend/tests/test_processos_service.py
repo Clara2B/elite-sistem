@@ -16,6 +16,7 @@ from app.services.processos import (
     formatar_texto_por_empresa,
     gerar_relatorio_geral,
     gerar_relatorio_por_empresa,
+    ids_empresas_com_processo,
     importar_planilha,
     marcar_resolvido,
     prazos_proximos,
@@ -422,6 +423,26 @@ def test_apagar_todos_processos_remove_processos_e_eventos_e_devolve_a_contagem(
 
 def test_apagar_todos_processos_com_banco_ja_vazio(db):
     assert apagar_todos_processos(db) == 0
+
+
+def test_ids_empresas_com_processo_so_conta_quem_tem_processo_em_escopo_no_periodo(db):
+    """A pedido da Clara (2026-11-24): usado pra tirar do menu de empresas
+    quem não tem processo em escopo naquele período (ex.: "Juros Justos"
+    não aparece se nunca tiver um)."""
+    com_evento_no_periodo = _processo(db, numero="1111111-11.2026.8.11.0001", empresa="ABSOLUTA")
+    so_fora_do_periodo = _processo(db, numero="2222222-22.2026.8.11.0002", empresa="ALFA")
+    get_or_create_empresa(db, "JUROS JUSTOS")  # nunca tem processo
+    db.add_all(
+        [
+            EventoProcesso(processo_id=com_evento_no_periodo.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
+            EventoProcesso(processo_id=so_fora_do_periodo.id, data=date(2026, 8, 1), tipo_evento_nome="CUSTAS"),
+        ]
+    )
+    db.commit()
+
+    ids = ids_empresas_com_processo(db, date(2026, 9, 1), date(2026, 9, 30))
+
+    assert ids == {com_evento_no_periodo.empresa_cliente_id}
 
 
 def test_import_reconhece_empresa_em_coluna_propria_alem_do_formato_com_hifen(db):

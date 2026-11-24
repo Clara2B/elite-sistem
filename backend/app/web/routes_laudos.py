@@ -35,10 +35,20 @@ def tela(
     usuario: Usuario = Depends(_acesso_elite),
     db: Session = Depends(get_db),
 ):
+    # Período/status usados pra filtrar o menu de empresas (só quem tem
+    # laudo aparece — a pedido da Clara, 2026-11-24) seguem o mesmo padrão
+    # já pré-selecionado no template quando a tela abre sem filtro nenhum:
+    # mês/ano de hoje e a primeira opção de status.
+    periodo_ini_menu, periodo_fim_menu = laudos_service.periodo_20_a_20(
+        ano or date.today().year, mes or date.today().month
+    )
+    status_menu = status or laudos_service.OPCOES_STATUS[0]
+    ids_com_laudo = laudos_service.ids_empresas_com_laudo(db, periodo_ini_menu, periodo_fim_menu, status_menu)
+
     contexto = {
         "usuario": usuario,
         "menu": itens_menu(db, usuario),
-        "empresas": listar_empresas(db, apenas_ativas=False),
+        "empresas": [e for e in listar_empresas(db, apenas_ativas=False) if e.id in ids_com_laudo],
         "opcoes_status": laudos_service.OPCOES_STATUS,
         "hoje": date.today(),
         "filtro": {"empresa": empresa, "ano": ano, "mes": mes, "status": status},
@@ -83,6 +93,12 @@ async def importar(
     db: Session = Depends(get_db),
 ):
     path = salvar_temp(arquivo)
+    # Lista cheia aqui (sem o filtro "só quem tem resultado" do período
+    # atual) de propósito: a planilha recém-importada pode trazer laudo de
+    # um período diferente de hoje, ou empresa nova — filtrar pelo período
+    # de hoje faria a empresa que acabou de ser importada desaparecer do
+    # menu bem na hora que a Clara mais precisa vê-la pra confirmar que o
+    # import funcionou.
     contexto = {
         "usuario": usuario,
         "menu": itens_menu(db, usuario),

@@ -282,6 +282,21 @@ class MensagemPendencia:
     total: float = 0.0
 
 
+def ids_empresas_com_pendencia(db: Session) -> set[int]:
+    """IDs de empresa-cliente com pelo menos uma cobrança pendente agora
+    — mesma regra de `gerar_mensagens` (status em STATUS_PENDENTE e valor >
+    0). Usado pra filtrar o menu de empresas da tela (a pedido da Clara,
+    2026-11-24: só mostrar quem tem resultado — ex.: "Juros Justos" não
+    aparece se nunca tiver uma cobrança pendente)."""
+    ids: set[int] = set()
+    for empresa_id, status, valor in db.execute(
+        select(Cobranca.empresa_cliente_id, Cobranca.status_pagamento, Cobranca.valor)
+    ):
+        if _e_pendente(status) and valor is not None and valor > 0:
+            ids.add(empresa_id)
+    return ids
+
+
 def gerar_mensagens(db: Session, empresa_nome: str) -> list[MensagemPendencia]:
     empresa = resolver_empresa_por_nome(db, empresa_nome)
     if empresa is None:

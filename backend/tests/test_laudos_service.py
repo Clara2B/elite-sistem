@@ -11,6 +11,7 @@ from app.services.laudos import (
     formatar_texto_resumo_assessorias,
     gerar_relatorio,
     gerar_resumo_por_assessoria,
+    ids_empresas_com_laudo,
     importar_planilha,
     periodo_20_a_20,
 )
@@ -54,6 +55,32 @@ def test_gera_relatorio_soma_valores_por_tipo(db):
     resultado = gerar_relatorio(db, "ABSOLUTA", ini, fim, "Solicitação + Corrigido (cobrança)")
     assert resultado.total == 40.0 + 70.0
     assert len(resultado.linhas) == 2
+
+
+def test_ids_empresas_com_laudo_so_conta_quem_tem_laudo_no_periodo_e_status(db):
+    """A pedido da Clara (2026-11-24): usado pra tirar do menu de empresas
+    quem não tem laudo nenhum no período/status escolhido (ex.: "Juros
+    Justos" não aparece se nunca tiver laudo)."""
+    tem_no_periodo = get_or_create_empresa(db, "ABSOLUTA")
+    so_fora_do_periodo = get_or_create_empresa(db, "ALFA")
+    cancelado = get_or_create_empresa(db, "HUNTING")
+    get_or_create_empresa(db, "JUROS JUSTOS")  # nunca tem laudo
+    db.add_all(
+        [
+            Laudo(empresa_cliente_id=tem_no_periodo.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 25),
+                  nome_cliente="Fulano", status="SOLICITAÇÃO"),
+            Laudo(empresa_cliente_id=so_fora_do_periodo.id, tipo_laudo_nome="AUTO", data=date(2026, 3, 1),
+                  nome_cliente="Beltrano", status="SOLICITAÇÃO"),
+            Laudo(empresa_cliente_id=cancelado.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 25),
+                  nome_cliente="Ciclano", status="CANCELADO"),
+        ]
+    )
+    db.commit()
+
+    ini, fim = periodo_20_a_20(2026, 1)
+    ids = ids_empresas_com_laudo(db, ini, fim, "Solicitação + Corrigido (cobrança)")
+
+    assert ids == {tem_no_periodo.id}
 
 
 def test_filtro_por_status_exclui_cancelado(db):

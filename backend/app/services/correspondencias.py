@@ -151,6 +151,19 @@ class CorrespondenciasResult:
     total: float = 0.0
 
 
+def ids_empresas_com_correspondencia(db: Session, mes: str) -> set[int]:
+    """IDs de empresa-cliente com pelo menos uma correspondência no mês
+    informado — mesma comparação de `gerar_relatorio` (normalize(), sem
+    acento). Usado pra filtrar o menu de empresas da tela (a pedido da
+    Clara, 2026-11-24: só mostrar quem tem resultado)."""
+    alvo_mes = normalize(mes)
+    return {
+        empresa_id
+        for empresa_id, mes_registro in db.execute(select(Correspondencia.empresa_cliente_id, Correspondencia.mes))
+        if normalize(mes_registro) == alvo_mes
+    }
+
+
 def gerar_relatorio(db: Session, empresa_nome: str, mes: str) -> CorrespondenciasResult:
     empresa = resolver_empresa_por_nome(db, empresa_nome)
     if empresa is None:

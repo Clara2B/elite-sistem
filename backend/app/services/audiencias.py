@@ -184,6 +184,18 @@ def _faixa_para_quantidade(db: Session, quantidade: int) -> FaixaAudiencia | Non
     return None
 
 
+def ids_empresas_com_audiencia(db: Session, periodo_ini: date, periodo_fim: date) -> set[int]:
+    """IDs de empresa-cliente com pelo menos uma audiência no período
+    informado — mesmo filtro de `_clientes_no_periodo`/`gerar_relatorio`.
+    Usado pra filtrar o menu de empresas da tela (a pedido da Clara,
+    2026-11-24: só mostrar quem tem resultado)."""
+    query = select(Audiencia.empresa_cliente_id).where(
+        Audiencia.data_recebimento >= periodo_ini,
+        Audiencia.data_recebimento <= periodo_fim,
+    )
+    return set(db.scalars(query))
+
+
 def gerar_relatorio(
     db: Session,
     empresa_nome: str,

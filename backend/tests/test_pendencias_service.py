@@ -9,6 +9,7 @@ from app.services.empresas import get_or_create_empresa
 from app.services.pendencias import (
     apagar_todas_pendencias,
     gerar_mensagens,
+    ids_empresas_com_pendencia,
     importar_planilha,
 )
 
@@ -209,3 +210,28 @@ def test_apagar_todas_pendencias_remove_tudo_e_devolve_a_contagem(db):
 
 def test_apagar_todas_pendencias_com_banco_ja_vazio(db):
     assert apagar_todas_pendencias(db) == 0
+
+
+def test_ids_empresas_com_pendencia_so_conta_quem_tem_pendencia_de_verdade(db):
+    """A pedido da Clara (2026-11-24): usado pra tirar do menu de empresas
+    quem nunca tem pendência (ex.: "Juros Justos") — só entra quem tem
+    cobrança pendente de verdade (mesma regra de `gerar_mensagens`: status
+    pendente e valor > 0)."""
+    com_pendencia = get_or_create_empresa(db, "NOVA GLOBAL")
+    paga = get_or_create_empresa(db, "ABSOLUTA")
+    sem_nenhuma_cobranca = get_or_create_empresa(db, "JUROS JUSTOS")
+    db.add_all(
+        [
+            Cobranca(empresa_cliente_id=com_pendencia.id, data=date(2026, 1, 1), tipo_cobranca="MENSALIDADE",
+                      cobrador="ELITE", valor=100.0, status_pagamento="EM ATRASO"),
+            Cobranca(empresa_cliente_id=paga.id, data=date(2026, 1, 2), tipo_cobranca="MENSALIDADE",
+                      cobrador="ELITE", valor=100.0, status_pagamento="SIM"),
+        ]
+    )
+    db.commit()
+
+    ids = ids_empresas_com_pendencia(db)
+
+    assert ids == {com_pendencia.id}
+    assert paga.id not in ids
+    assert sem_nenhuma_cobranca.id not in ids
