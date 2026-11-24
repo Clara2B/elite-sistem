@@ -17,6 +17,7 @@ from app.services.correspondencias import (
     ids_empresas_com_correspondencia,
     importar_planilha,
     parse_valor,
+    recalcular_valores_zerados,
 )
 from app.services.empresas import get_or_create_empresa
 
@@ -215,3 +216,41 @@ def test_gerar_relatorio_mes_sem_acento_na_planilha_bate_com_mes_acentuado(db):
     r = gerar_relatorio(db, "Eros", "Março")
     assert len(r.linhas) == 1
     assert r.linhas[0].autor == "Cliente A"
+
+
+def test_recalcular_valores_zerados_corrige_so_quem_tinha_valor_nulo(db):
+    """Bug real reportado pela Clara (SIMPLIFICA/Outubro aparecia com Total
+    R$ 0,00): registros importados ANTES do bug de "280.50" ser corrigido
+    ficaram com valor=None pra sempre — reimportar a planilha sem mudar
+    nada não corrige (chave de duplicidade usa o valor_texto original, que
+    não mudou). `recalcular_valores_zerados` reaplica o parser atual direto
+    nesses registros."""
+    empresa = get_or_create_empresa(db, "SIMPLIFICA")
+    zerado_mas_corrigivel = Correspondencia(
+        empresa_cliente_id=empresa.id, mes="OUTUBRO", advogado="Dra. A", autor="Cliente A",
+        adv_preposto="ADVOGADO", valor_texto="280.50", valor=None, tipo_acao="PROCON",
+    )
+    zerado_sem_conserto = Correspondencia(
+        empresa_cliente_id=empresa.id, mes="OUTUBRO", advogado="Dra. B", autor="Cliente B",
+        adv_preposto="ADVOGADO", valor_texto="a combinar", valor=None, tipo_acao="PROCON",
+    )
+    ja_tinha_valor = Correspondencia(
+        empresa_cliente_id=empresa.id, mes="OUTUBRO", advogado="Dra. C", autor="Cliente C",
+        adv_preposto="ADVOGADO", valor_texto="R$ 100,00", valor=100.0, tipo_acao="PROCON",
+    )
+    db.add_all([zerado_mas_corrigivel, zerado_sem_conserto, ja_tinha_valor])
+    db.commit()
+
+    corrigidos = recalcular_valores_zerados(db)
+
+    assert corrigidos == 1
+    db.refresh(zerado_mas_corrigivel)
+    db.refresh(zerado_sem_conserto)
+    db.refresh(ja_tinha_valor)
+    assert zerado_mas_corrigivel.valor == 280.5
+    assert zerado_sem_conserto.valor is None  # continua sem valor reconhecível
+    assert ja_tinha_valor.valor == 100.0  # não foi tocado
+
+
+def test_recalcular_valores_zerados_com_banco_sem_pendencia(db):
+    assert recalcular_valores_zerados(db) == 0
