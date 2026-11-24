@@ -56,6 +56,35 @@ def test_gera_relatorio_soma_valores_por_tipo(db):
     assert len(resultado.linhas) == 2
 
 
+def test_gerar_relatorio_junta_laudos_de_sw_e_ews_como_ews(db):
+    """A pedido da Clara (2026-11-24): EWS trocou de nome (era "SW") e os
+    laudos das duas devem sempre aparecer juntos, num relatório só, com o
+    nome "EWS" — mesmo elas sendo EmpresaCliente cadastradas separadamente
+    (CNPJs diferentes)."""
+    ews = get_or_create_empresa(db, "EWS")
+    sw = get_or_create_empresa(db, "SW")
+    db.add_all(
+        [
+            Laudo(empresa_cliente_id=ews.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 25),
+                  nome_cliente="Fulano", status="SOLICITAÇÃO"),
+            Laudo(empresa_cliente_id=sw.id, tipo_laudo_nome="IMÓVEL", data=date(2026, 1, 26),
+                  nome_cliente="Beltrano", status="SOLICITAÇÃO"),
+        ]
+    )
+    db.commit()
+
+    ini, fim = periodo_20_a_20(2026, 1)
+
+    resultado_ews = gerar_relatorio(db, "EWS", ini, fim, "Solicitação + Corrigido (cobrança)")
+    assert resultado_ews.empresa == "EWS"
+    assert {linha.cliente for linha in resultado_ews.linhas} == {"Fulano", "Beltrano"}
+
+    # Buscar por "SW" devolve o MESMO relatório combinado, já nomeado EWS.
+    resultado_sw = gerar_relatorio(db, "SW", ini, fim, "Solicitação + Corrigido (cobrança)")
+    assert resultado_sw.empresa == "EWS"
+    assert {linha.cliente for linha in resultado_sw.linhas} == {"Fulano", "Beltrano"}
+
+
 def test_filtro_por_status_exclui_cancelado(db):
     empresa = get_or_create_empresa(db, "ABSOLUTA")
     db.add(
@@ -268,6 +297,29 @@ def test_gerar_resumo_por_assessoria_agrupa_conta_e_ordena(db):
     assert absoluta_r.tipos[1].quantidade == 1
     assert absoluta_r.tipos[1].valor_unitario == 70.0
     assert resumo[1].total_laudos == 1
+
+
+def test_gerar_resumo_por_assessoria_junta_sw_e_ews_numa_linha_so(db):
+    """Mesma regra de `gerar_relatorio` (2026-11-24): no resumo geral por
+    assessoria, SW entra somado junto de EWS numa linha só, não em duas."""
+    ews = get_or_create_empresa(db, "EWS")
+    sw = get_or_create_empresa(db, "SW")
+    db.add_all(
+        [
+            Laudo(empresa_cliente_id=ews.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 25),
+                  nome_cliente="Fulano", status="SOLICITAÇÃO"),
+            Laudo(empresa_cliente_id=sw.id, tipo_laudo_nome="AUTO", data=date(2026, 1, 26),
+                  nome_cliente="Beltrano", status="SOLICITAÇÃO"),
+        ]
+    )
+    db.commit()
+
+    ini, fim = periodo_20_a_20(2026, 1)
+    resumo = gerar_resumo_por_assessoria(db, ini, fim, "Solicitação + Corrigido (cobrança)")
+
+    assert [r.assessoria for r in resumo] == ["EWS"]
+    assert resumo[0].total_laudos == 2
+    assert resumo[0].tipos[0].quantidade == 2
 
 
 def test_gerar_resumo_por_assessoria_nao_lista_quem_nao_tem_laudo_no_periodo(db):
