@@ -113,6 +113,7 @@ class ImportResumo:
     linhas_lidas: int = 0
     linhas_novas: int = 0
     linhas_ja_existentes: int = 0
+    linhas_atualizadas: int = 0
 
 
 def importar_planilha(db: Session, path: str) -> ImportResumo:
@@ -131,8 +132,18 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
     col_pago = _col_optional(df, "PAGO")
     col_data = _col_optional(df, "DATA")
 
-    existentes = {
-        (c.empresa_cliente_id, c.data, normalize(c.tipo_cobranca), c.valor)
+    # Identidade da cobrança contra o que já está no banco — sem PAGO de
+    # propósito. Bug real corrigido em 2026-11-24 (mesma classe do bug já
+    # corrigido em Laudos): PAGO fazia parte da chave original de
+    # duplicidade contra o banco, então reimportar a planilha depois do
+    # cliente pagar (PAGO corrigido de "NÃO"/vazio pra "SIM") não era
+    # reconhecido como "a mesma cobrança, só que paga agora" — criava um
+    # registro NOVO, deixando o antigo (ainda pendente) intacto, e o
+    # sistema continuava cobrando o cliente pra sempre por uma dívida já
+    # quitada. Agora a reimportação ATUALIZA o status de pagamento do
+    # registro existente em vez de duplicar.
+    existentes: dict[tuple, Cobranca] = {
+        (c.empresa_cliente_id, c.data, normalize(c.tipo_cobranca), c.valor): c
         for c in db.scalars(select(Cobranca))
     }
     # Cache de empresa-cliente pro import inteiro — ver nota equivalente em
@@ -156,21 +167,25 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
 
         empresa = get_or_create_empresa(db, empresa_nome, cache=empresa_cache)
         chave = (empresa.id, data_val, normalize(tipo), valor)
-        if chave in existentes:
-            resumo.linhas_ja_existentes += 1
+        cobranca_existente = existentes.get(chave)
+        if cobranca_existente is not None:
+            if normalize(cobranca_existente.status_pagamento) != normalize(status_pago):
+                cobranca_existente.status_pagamento = status_pago
+                resumo.linhas_atualizadas += 1
+            else:
+                resumo.linhas_ja_existentes += 1
             continue
 
-        db.add(
-            Cobranca(
-                empresa_cliente_id=empresa.id,
-                data=data_val,
-                tipo_cobranca=tipo,
-                cobrador=_classificar_cobrador(tipo),
-                valor=valor,
-                status_pagamento=status_pago,
-            )
+        nova = Cobranca(
+            empresa_cliente_id=empresa.id,
+            data=data_val,
+            tipo_cobranca=tipo,
+            cobrador=_classificar_cobrador(tipo),
+            valor=valor,
+            status_pagamento=status_pago,
         )
-        existentes.add(chave)
+        db.add(nova)
+        existentes[chave] = nova
         resumo.linhas_novas += 1
 
     db.commit()

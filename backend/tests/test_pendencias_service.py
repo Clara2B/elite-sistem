@@ -1,8 +1,16 @@
+import tempfile
 from datetime import date
+from pathlib import Path
+
+import openpyxl
 
 from app.models import Cobranca
 from app.services.empresas import get_or_create_empresa
-from app.services.pendencias import apagar_todas_pendencias, gerar_mensagens
+from app.services.pendencias import (
+    apagar_todas_pendencias,
+    gerar_mensagens,
+    importar_planilha,
+)
 
 
 def test_classifica_cobrador_por_tipo_e_ignora_pago(db):
@@ -81,6 +89,41 @@ def test_pago_vazio_nao_conta_como_pendente(db):
     )
     db.commit()
     assert gerar_mensagens(db, "NOVA GLOBAL") == []
+
+
+def _planilha_pendencias(nome_arquivo, pago):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["DATA", "EMPRESA", "TIPO DE COBRANÇA", "VALOR", "PAGO"])
+    ws.append([date(2026, 10, 1), "NOVA GLOBAL", "MENSALIDADE PROCESSUAL", 100.0, pago])
+    path = Path(tempfile.mkdtemp()) / nome_arquivo
+    wb.save(path)
+    return str(path)
+
+
+def test_reimportacao_com_pago_corrigido_atualiza_em_vez_de_duplicar(db):
+    """Bug real corrigido em 2026-11-24 (mesma classe do bug já corrigido
+    em Laudos): PAGO fazia parte da identidade da cobrança contra o banco
+    — reimportar a planilha depois do cliente pagar (PAGO corrigido de
+    "NÃO" pra "SIM") criava uma cobrança NOVA em vez de atualizar a
+    existente, e o sistema continuava cobrando uma dívida já quitada.
+    Agora a reimportação atualiza o status de pagamento."""
+    resumo1 = importar_planilha(db, _planilha_pendencias("v1.xlsx", "NÃO"))
+    assert resumo1.linhas_novas == 1
+
+    resumo2 = importar_planilha(db, _planilha_pendencias("v2.xlsx", "SIM"))
+    assert resumo2.linhas_novas == 0
+    assert resumo2.linhas_atualizadas == 1
+    assert resumo2.linhas_ja_existentes == 0
+
+    assert db.query(Cobranca).count() == 1
+    cobranca = db.query(Cobranca).one()
+    assert cobranca.status_pagamento == "SIM"
+
+    # Reimportar de novo sem mudar nada não deve "atualizar" à toa.
+    resumo3 = importar_planilha(db, _planilha_pendencias("v3.xlsx", "SIM"))
+    assert resumo3.linhas_atualizadas == 0
+    assert resumo3.linhas_ja_existentes == 1
 
 
 def test_apagar_todas_pendencias_remove_tudo_e_devolve_a_contagem(db):
