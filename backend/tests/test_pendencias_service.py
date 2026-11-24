@@ -12,6 +12,8 @@ from app.services.pendencias import (
     importar_planilha,
 )
 
+_NOME_ABA_ANO_ATUAL = f"{date.today().year} - RECEBIMENTOS EMPRESAS"
+
 
 def test_classifica_cobrador_por_tipo_e_ignora_pago(db):
     empresa = get_or_create_empresa(db, "NOVA GLOBAL")
@@ -53,10 +55,12 @@ def test_classifica_cobrador_por_tipo_e_ignora_pago(db):
     assert elite.total == 100.0  # a paga (SIM) não entra
 
 
-def test_pago_nao_conta_como_pendente(db):
-    """A Clara pediu explicitamente (2026-09-24): PAGO = "Não" também é
-    pendência, não só valores como "EM ATRASO"/"PENDENTE". Só "Sim" conta
-    como resolvido."""
+def test_pago_sim_ou_nao_nao_contam_como_pendente(db):
+    """Regra reestruturada em 2026-11-24 a pedido da Clara: só entram na
+    mensagem de cobrança os status VERIFICAR/ACORDO/PENDENTE/EM ATRASO.
+    "SIM" é pago. "NÃO" foi EXCLUÍDO explicitamente por ela nessa mesma
+    conversa — revoga a regra anterior (2026-09-24) que tratava "NÃO"
+    como pendência também."""
     empresa = get_or_create_empresa(db, "NOVA GLOBAL")
     db.add(
         Cobranca(
@@ -68,11 +72,19 @@ def test_pago_nao_conta_como_pendente(db):
             status_pagamento="Não",
         )
     )
+    db.add(
+        Cobranca(
+            empresa_cliente_id=empresa.id,
+            data=date(2026, 1, 2),
+            tipo_cobranca="MENSALIDADE PROCESSUAL",
+            cobrador="ELITE",
+            valor=200.0,
+            status_pagamento="Sim",
+        )
+    )
     db.commit()
 
-    mensagens = gerar_mensagens(db, "NOVA GLOBAL")
-    assert len(mensagens) == 1
-    assert mensagens[0].total == 150.0
+    assert gerar_mensagens(db, "NOVA GLOBAL") == []
 
 
 def test_pago_vazio_nao_conta_como_pendente(db):
@@ -91,24 +103,51 @@ def test_pago_vazio_nao_conta_como_pendente(db):
     assert gerar_mensagens(db, "NOVA GLOBAL") == []
 
 
-def _planilha_pendencias(nome_arquivo, pago):
+def _planilha_pendencias(nome_arquivo, pago, nome_aba=None):
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.append(["DATA", "EMPRESA", "TIPO DE COBRANÇA", "VALOR", "PAGO"])
-    ws.append([date(2026, 10, 1), "NOVA GLOBAL", "MENSALIDADE PROCESSUAL", 100.0, pago])
+    ws.title = nome_aba or _NOME_ABA_ANO_ATUAL
+    ws.append(["DATA", "CLIENTE", "CNPJ", "VALOR FALTANTE", "VALOR Á RECEBER", "TIPO DE COBRANÇA", "PAGO"])
+    ws.append([date(2026, 10, 1), "NOVA GLOBAL", "00.000.000/0001-00", 100.0, None, "MENSALIDADE PROCESSUAL", pago])
     path = Path(tempfile.mkdtemp()) / nome_arquivo
     wb.save(path)
     return str(path)
+
+
+def test_importar_planilha_le_so_a_aba_recebimentos_empresas_do_ano_atual(db):
+    """Bug real corrigido em 2026-11-24: o import genérico varria qualquer
+    aba com cabeçalhos parecidos e sempre acabava lendo a aba do ANO
+    PASSADO ("EMPRESA"/"VALOR"/"PAGO (SIM/NÃO)" batiam; "CLIENTE"/"VALOR
+    FALTANTE" da aba atual nunca batiam) — o sistema gerava mensagens de
+    cobrança com dados desatualizados sem nenhum erro aparecer. Agora só a
+    aba "<ano atual> - RECEBIMENTOS EMPRESAS" é lida."""
+    wb = openpyxl.Workbook()
+    ws_antiga = wb.active
+    ws_antiga.title = "2025 - RECEBIMENTOS EMPRESAS"
+    ws_antiga.append(["DATA", "EMPRESA", "VALOR", "VALOR RECEBIDO", "TIPO DE COBRANÇA", "PAGO (SIM/NÃO)", "OBS"])
+    ws_antiga.append([date(2025, 10, 1), "EMPRESA ANTIGA", 999.0, None, "MENSALIDADE PROCESSUAL", "NÃO", None])
+    ws_atual = wb.create_sheet(_NOME_ABA_ANO_ATUAL)
+    ws_atual.append(["DATA", "CLIENTE", "CNPJ", "VALOR FALTANTE", "VALOR Á RECEBER", "TIPO DE COBRANÇA", "PAGO"])
+    ws_atual.append([date(2026, 10, 1), "NOVA GLOBAL", "00.000.000/0001-00", 100.0, None, "MENSALIDADE PROCESSUAL", "EM ATRASO"])
+    path = Path(tempfile.mkdtemp()) / "duas_abas.xlsx"
+    wb.save(path)
+
+    resumo = importar_planilha(db, str(path))
+
+    assert resumo.linhas_novas == 1
+    cobranca = db.query(Cobranca).one()
+    assert cobranca.tipo_cobranca == "MENSALIDADE PROCESSUAL"
+    assert cobranca.valor == 100.0  # da aba atual — não o 999.0 da aba de 2025
 
 
 def test_reimportacao_com_pago_corrigido_atualiza_em_vez_de_duplicar(db):
     """Bug real corrigido em 2026-11-24 (mesma classe do bug já corrigido
     em Laudos): PAGO fazia parte da identidade da cobrança contra o banco
     — reimportar a planilha depois do cliente pagar (PAGO corrigido de
-    "NÃO" pra "SIM") criava uma cobrança NOVA em vez de atualizar a
+    "EM ATRASO" pra "SIM") criava uma cobrança NOVA em vez de atualizar a
     existente, e o sistema continuava cobrando uma dívida já quitada.
     Agora a reimportação atualiza o status de pagamento."""
-    resumo1 = importar_planilha(db, _planilha_pendencias("v1.xlsx", "NÃO"))
+    resumo1 = importar_planilha(db, _planilha_pendencias("v1.xlsx", "EM ATRASO"))
     assert resumo1.linhas_novas == 1
 
     resumo2 = importar_planilha(db, _planilha_pendencias("v2.xlsx", "SIM"))
@@ -127,15 +166,16 @@ def test_reimportacao_com_pago_corrigido_atualiza_em_vez_de_duplicar(db):
 
 
 def test_importar_planilha_com_valor_em_texto_simples_nao_infla_100x(db):
-    """Bug real corrigido em 2026-11-24: célula de VALOR em texto simples
-    com ponto decimal (ex.: "280.50", sem "R$", sem vírgula) era
+    """Bug real corrigido em 2026-11-24: célula de VALOR FALTANTE em texto
+    simples com ponto decimal (ex.: "280.50", sem "R$", sem vírgula) era
     interpretada cegamente como formato brasileiro (ponto = separador de
     milhar), virando 28050.0 — 100x maior, sem nenhum aviso. Agora usa
     `parse_valor_monetario` (compartilhada com Correspondências)."""
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.append(["DATA", "EMPRESA", "TIPO DE COBRANÇA", "VALOR", "PAGO"])
-    ws.append([date(2026, 10, 1), "NOVA GLOBAL", "MENSALIDADE PROCESSUAL", "280.50", "NÃO"])
+    ws.title = _NOME_ABA_ANO_ATUAL
+    ws.append(["DATA", "CLIENTE", "CNPJ", "VALOR FALTANTE", "VALOR Á RECEBER", "TIPO DE COBRANÇA", "PAGO"])
+    ws.append([date(2026, 10, 1), "NOVA GLOBAL", "00.000.000/0001-00", "280.50", None, "MENSALIDADE PROCESSUAL", "EM ATRASO"])
     path = Path(tempfile.mkdtemp()) / "valor_texto_simples.xlsx"
     wb.save(path)
 

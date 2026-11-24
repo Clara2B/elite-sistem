@@ -1,10 +1,27 @@
-"""Fluxo de PENDÊNCIAS — portado de core/pendencias.py (leitor-relatorio).
+"""Fluxo de PENDÊNCIAS — reestruturado em 2026-11-24 a pedido da Clara
+("já está errado desde o começo, vamos reestruturar").
 
-Regras já auditadas em ARCHITECTURE.md seção 1.4: pendente = campo PAGO com
-qualquer status diferente de SIM (vazio não conta) — inclui "NÃO"
-explicitamente como pendência, a pedido da Clara (2026-09-24; antes disso
-"NÃO" era tratado como resolvido, igual "SIM", o que estava errado — ver
-DECISIONS.md). Dedup por (data+empresa+tipo+valor) com SIM sempre vencendo;
+Raiz do problema anterior: o import genérico (`load_data_sheets`, que varre
+TODAS as abas da planilha e usa a primeira que bater com os cabeçalhos
+exigidos) sempre acabava lendo a aba "2025 - RECEBIMENTOS EMPRESAS" — que
+tem literalmente as colunas "EMPRESA"/"VALOR"/"PAGO (SIM/NÃO)" — porque a
+aba atual, "2026 - RECEBIMENTOS EMPRESAS", usa nomes diferentes ("CLIENTE",
+"VALOR FALTANTE") que nunca batiam com os cabeçalhos exigidos. Ou seja: o
+gerador de mensagens de cobrança vinha puxando dados do ANO PASSADO, sem
+nenhum erro aparecer (a aba de 2025 "servia" pro import, só com os dados
+errados) — ver DECISIONS.md.
+
+Agora o import abre SÓ a aba "<ano atual> - RECEBIMENTOS EMPRESAS" (nunca
+outra aba da mesma planilha) e lê pelas colunas reais dela: "CLIENTE"
+(nome da empresa), "VALOR FALTANTE" (valor a cobrar) e "PAGO".
+
+Pendente = campo PAGO em {"VERIFICAR", "ACORDO", "PENDENTE", "EM ATRASO"}
+— lista exata confirmada com a Clara em 2026-11-24. "SIM" é pago (não
+cobra) e "NÃO" foi explicitamente excluído da lista por ela nessa mesma
+data (revoga a regra anterior, de 2026-09-24, que tratava "NÃO" como
+pendência também — ver DECISIONS.md).
+
+Dedup por (data+empresa+tipo+valor) com SIM sempre vencendo;
 classificação automática do cobrador (tipo contendo "AUDIÊNCIA" -> EXIMIA,
 resto -> ELITE).
 """
@@ -14,21 +31,29 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
+from datetime import date
 
+import openpyxl
 import pandas as pd
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from app.excel_reader import load_data_sheets
 from app.models import Cobranca
 from app.services.empresas import get_or_create_empresa, resolver_empresa_por_nome
-from app.utils import cell_text, format_brl, normalize, parse_date_cell, parse_valor_monetario
+from app.utils import (
+    cell_text,
+    format_brl,
+    normalize,
+    parse_date_cell,
+    parse_valor_monetario,
+)
 
 _logger = logging.getLogger("elite_sistem.import")
 
-REQUIRED_HEADERS = ["EMPRESA", "TIPO DE COBRANÇA", "VALOR"]
-CHAVE_DUPLICIDADE = ["DATA", "EMPRESA", "TIPO DE COBRANÇA", "VALOR"]
-STATUS_PAGO_OK = {normalize("SIM")}
+NOME_ABA_SUFIXO = "RECEBIMENTOS EMPRESAS"
+COLUNAS_OBRIGATORIAS = ["DATA", "CLIENTE", "TIPO DE COBRANÇA", "VALOR FALTANTE"]
+CHAVE_DUPLICIDADE = ["DATA", "CLIENTE", "TIPO DE COBRANÇA", "VALOR FALTANTE"]
+STATUS_PENDENTE = {normalize(s) for s in ("VERIFICAR", "ACORDO", "PENDENTE", "EM ATRASO")}
 _PRIORIDADE_PAGO = {"SIM": 0}
 
 PIX_EXIMIA = "✅ PIX: CNPJ: 655965130001-52 \nEXIMIA CAMARA DE CONCILIACAO MEDIACAO & ARBITRAGEM LTDA"
@@ -43,7 +68,7 @@ def _e_pendente(pago_valor) -> bool:
     texto = normalize(pago_valor)
     if not texto:
         return False
-    return texto not in STATUS_PAGO_OK
+    return texto in STATUS_PENDENTE
 
 
 def _parse_valor(valor) -> float | None:
@@ -86,6 +111,40 @@ def _col_optional(df, nome: str) -> str | None:
         return None
 
 
+def _nome_aba_esperado(ano: int) -> str:
+    return f"{ano} - {NOME_ABA_SUFIXO}"
+
+
+def _ler_aba_recebimentos(path: str) -> pd.DataFrame:
+    """Lê SÓ a aba "<ano atual> - RECEBIMENTOS EMPRESAS" — nunca outra aba
+    da mesma planilha (ex.: "PAGAMENTOS", "CNPJs" ou a aba de um ano
+    anterior), a pedido explícito da Clara (2026-11-24). `read_only=True`
+    pelo mesmo motivo de `excel_reader.load_data_sheets`: não carregar a
+    planilha inteira (que tem ~10 abas) na memória."""
+    nome_esperado = _nome_aba_esperado(date.today().year)
+    wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
+    try:
+        nome_aba = next((s for s in wb.sheetnames if normalize(s) == normalize(nome_esperado)), None)
+        if nome_aba is None:
+            raise ValueError(
+                f'Não encontrei a aba "{nome_esperado}" nesta planilha. '
+                f"Abas disponíveis: {', '.join(wb.sheetnames)}."
+            )
+        linhas = list(wb[nome_aba].iter_rows(values_only=True))
+    finally:
+        wb.close()
+
+    linhas = [l for l in linhas if any(v is not None for v in l)]
+    if not linhas:
+        return pd.DataFrame()
+    header = linhas[0]
+    largura = len(header)
+    dados = [l + (None,) * (largura - len(l)) if len(l) < largura else l[:largura] for l in linhas[1:]]
+    cols = [cell_text(c) or f"col_{i}" for i, c in enumerate(header)]
+    df = pd.DataFrame(dados, columns=cols)
+    return df.dropna(how="all")
+
+
 def _resolver_lancamentos_duplicados(df: pd.DataFrame) -> pd.DataFrame:
     col_pago = _col_optional(df, "PAGO")
     if col_pago is None:
@@ -117,17 +176,22 @@ class ImportResumo:
 
 def importar_planilha(db: Session, path: str) -> ImportResumo:
     inicio = time.perf_counter()
-    df = load_data_sheets(path, REQUIRED_HEADERS)
+    df = _ler_aba_recebimentos(path)
     if df.empty:
+        raise ValueError(f'A aba "{_nome_aba_esperado(date.today().year)}" está vazia nesta planilha.')
+
+    faltando = [nome for nome in COLUNAS_OBRIGATORIAS if _col_optional(df, nome) is None]
+    if faltando:
         raise ValueError(
-            "Não encontrei nenhuma aba com as colunas 'EMPRESA', 'TIPO DE COBRANÇA' e 'VALOR' "
-            "(ou 'VALOR FALTANTE') nesta planilha."
+            f'A aba "{_nome_aba_esperado(date.today().year)}" está sem a(s) coluna(s) obrigatória(s): '
+            + ", ".join(f'"{c}"' for c in faltando) + "."
         )
+
     df = _resolver_lancamentos_duplicados(df)
 
-    col_empresa = _col(df, "EMPRESA")
+    col_empresa = _col(df, "CLIENTE")
     col_tipo = _col(df, "TIPO DE COBRANÇA")
-    col_valor = _col(df, "VALOR")
+    col_valor = _col(df, "VALOR FALTANTE")
     col_pago = _col_optional(df, "PAGO")
     col_data = _col_optional(df, "DATA")
 
