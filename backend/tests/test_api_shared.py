@@ -1,9 +1,21 @@
 import io
 import os
+import zipfile
 
 import pytest
 
 from app.api._shared import TAMANHO_MAXIMO_UPLOAD_BYTES, remover_temp, salvar_temp
+
+
+def _bytes_zip_valido() -> bytes:
+    """Bytes de um ZIP válido mínimo — o suficiente pra passar a checagem
+    de `zipfile.is_zipfile` (não precisa ser um .xlsx de verdade por
+    dentro; o parsing do conteúdo em si é responsabilidade do openpyxl,
+    testado em outro lugar)."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as zf:
+        zf.writestr("conteudo.txt", "qualquer coisa")
+    return buffer.getvalue()
 
 
 class _FalsoUpload:
@@ -18,11 +30,12 @@ class _FalsoUpload:
 
 
 def test_salvar_temp_aceita_xlsx_dentro_do_limite():
-    path = salvar_temp(_FalsoUpload("planilha.xlsx", b"conteudo qualquer"))
+    conteudo = _bytes_zip_valido()
+    path = salvar_temp(_FalsoUpload("planilha.xlsx", conteudo))
     try:
         assert os.path.exists(path)
         with open(path, "rb") as f:
-            assert f.read() == b"conteudo qualquer"
+            assert f.read() == conteudo
     finally:
         remover_temp(path)
 
@@ -42,5 +55,15 @@ def test_salvar_temp_rejeita_arquivo_maior_que_o_limite():
 
 
 def test_salvar_temp_aceita_arquivo_exatamente_no_limite():
-    path = salvar_temp(_FalsoUpload("planilha.xlsx", b"x", size=TAMANHO_MAXIMO_UPLOAD_BYTES))
+    path = salvar_temp(_FalsoUpload("planilha.xlsx", _bytes_zip_valido(), size=TAMANHO_MAXIMO_UPLOAD_BYTES))
     remover_temp(path)
+
+
+def test_salvar_temp_rejeita_arquivo_renomeado_pra_xlsx_sem_ser_de_verdade():
+    """Bug real encontrado testando esta mudança num navegador de verdade:
+    um arquivo com extensão .xlsx mas conteúdo que não é um ZIP (PDF
+    renomeado, download corrompido) passava pela checagem de nome e
+    estourava sem tratamento (`zipfile.BadZipFile`) só depois, dentro do
+    openpyxl — 500 em vez de uma mensagem clara."""
+    with pytest.raises(ValueError, match="não é uma planilha .xlsx válida"):
+        salvar_temp(_FalsoUpload("planilha.xlsx", b"nao sou um zip de verdade"))
