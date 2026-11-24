@@ -5,6 +5,10 @@ Regras já auditadas em ARCHITECTURE.md seção 1.4: período quinzenal (1-15 /
 16-fim), sem status (sempre solicitação), valor definido pela faixa do
 acumulado mensal da empresa-cliente — a 2ª quinzena usa a faixa nova só para
 as audiências novas, sem recalcular a 1ª quinzena.
+
+Reimportar depois de CONCILIADORA/ADVOGADA serem corrigidas na planilha
+ATUALIZA o registro existente (bug corrigido em 2026-11-24, mesma classe
+de bug já visto em Laudos/TIPO e Pendências/PAGO — ver `importar_planilha`).
 """
 from __future__ import annotations
 
@@ -75,6 +79,7 @@ class ImportResumo:
     linhas_lidas: int = 0
     linhas_novas: int = 0
     linhas_ja_existentes: int = 0
+    linhas_atualizadas: int = 0
 
 
 def importar_planilha(db: Session, path: str) -> ImportResumo:
@@ -93,8 +98,16 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
     col_conciliadora = _col_optional(df, "CONCILIADORA")
     col_advogada = _col_optional(df, "ADVOGADA")
 
-    existentes = {
-        (a.empresa_cliente_id, a.data_recebimento, normalize(a.nome_cliente), _normalizar_cpf(a.cpf))
+    # dict (não set): reimportar depois de CONCILIADORA/ADVOGADA serem
+    # corrigidas na planilha (bug real reportado pela Clara, 2026-11-24)
+    # precisa ATUALIZAR o registro existente em vez de só contar "já
+    # existe" e ignorar — mesma classe de bug já corrigida em Laudos (TIPO)
+    # e Pendências (PAGO): a identidade contra o banco (empresa+data+
+    # cliente+cpf) de propósito não inclui esses dois campos, porque eles
+    # podem ser corrigidos entre uma importação e outra sem que isso
+    # signifique "é uma audiência diferente".
+    existentes: dict[tuple, Audiencia] = {
+        (a.empresa_cliente_id, a.data_recebimento, normalize(a.nome_cliente), _normalizar_cpf(a.cpf)): a
         for a in db.scalars(select(Audiencia))
     }
     # Cache de empresa-cliente pro import inteiro — ver nota equivalente em
@@ -115,24 +128,35 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
             continue
         cpf = cell_text(row.get(col_cpf)) if col_cpf else ""
 
+        conciliadora = (cell_text(row.get(col_conciliadora)) or None) if col_conciliadora else None
+        advogada = (cell_text(row.get(col_advogada)) or None) if col_advogada else None
+
         empresa = get_or_create_empresa(db, empresa_nome, cache=empresa_cache)
         chave = (empresa.id, data_val, normalize(cliente), _normalizar_cpf(cpf))
-        if chave in existentes:
-            resumo.linhas_ja_existentes += 1
+        audiencia_existente = existentes.get(chave)
+        if audiencia_existente is not None:
+            if (
+                normalize(audiencia_existente.conciliadora) != normalize(conciliadora)
+                or normalize(audiencia_existente.advogada) != normalize(advogada)
+            ):
+                audiencia_existente.conciliadora = conciliadora
+                audiencia_existente.advogada = advogada
+                resumo.linhas_atualizadas += 1
+            else:
+                resumo.linhas_ja_existentes += 1
             continue
 
-        db.add(
-            Audiencia(
-                empresa_cliente_id=empresa.id,
-                nome_cliente=cliente,
-                cpf=cpf or None,
-                data_recebimento=data_val,
-                data_agendamento=(cell_text(row.get(col_data_agendamento)) or None) if col_data_agendamento else None,
-                conciliadora=(cell_text(row.get(col_conciliadora)) or None) if col_conciliadora else None,
-                advogada=(cell_text(row.get(col_advogada)) or None) if col_advogada else None,
-            )
+        nova = Audiencia(
+            empresa_cliente_id=empresa.id,
+            nome_cliente=cliente,
+            cpf=cpf or None,
+            data_recebimento=data_val,
+            data_agendamento=(cell_text(row.get(col_data_agendamento)) or None) if col_data_agendamento else None,
+            conciliadora=conciliadora,
+            advogada=advogada,
         )
-        existentes.add(chave)
+        db.add(nova)
+        existentes[chave] = nova
         resumo.linhas_novas += 1
 
     db.commit()
