@@ -78,8 +78,9 @@ async def importar(
     else:
         registrar(db, usuario, "IMPORTOU_PENDENCIAS", entidade="cobranca", detalhes=str(resumo))
         contexto["mensagem"] = (
-            f"{resumo.linhas_novas} linha(s) nova(s) importada(s) "
-            f"({resumo.linhas_ja_existentes} já existiam de antes)."
+            f"{resumo.linhas_novas} linha(s) nova(s) importada(s), "
+            f"{resumo.linhas_atualizadas} atualizada(s) "
+            f"({resumo.linhas_ja_existentes} já existiam sem mudança)."
         )
     finally:
         remover_temp(path)
