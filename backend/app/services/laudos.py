@@ -267,6 +267,42 @@ def _resolver_empresa(db: Session, empresa_nome: str) -> EmpresaCliente | None:
     return None
 
 
+# EWS trocou de nome (era "SW") em agosto/2026 — mesmo fato de negócio já
+# tratado em app/relatorio_assessorias/config/assessorias.yaml pros
+# relatórios de assessoria. Aqui, a pedido da Clara (2026-11-24): os laudos
+# das duas sempre aparecem juntos, num relatório só, com o nome "EWS". As
+# duas continuam sendo EmpresaCliente separadas no cadastro (CNPJs
+# diferentes, cada laudo com FK pra uma ou pra outra dependendo de quando
+# foi importado) — só os relatórios de Laudos é que juntam as duas.
+GRUPOS_RELATORIO_LAUDO: dict[str, set[str]] = {
+    "EWS": {normalize("EWS"), normalize("SW")},
+}
+
+
+def _nome_canonico_grupo(empresa_nome: str) -> str:
+    alvo = normalize(empresa_nome)
+    for nome_canonico, nomes_grupo in GRUPOS_RELATORIO_LAUDO.items():
+        if alvo in nomes_grupo:
+            return nome_canonico
+    return empresa_nome
+
+
+def _grupo_relatorio(db: Session, empresa: EmpresaCliente) -> tuple[list[int], str, str | None]:
+    """IDs de TODAS as EmpresaCliente que entram no mesmo relatório que
+    `empresa` (ela mesma, e as outras do mesmo grupo em
+    GRUPOS_RELATORIO_LAUDO, se houver), o nome canônico a exibir e o CNPJ
+    canônico — da empresa que dá nome ao grupo, não necessariamente a que
+    foi buscada (ex.: buscar "SW" devolve o CNPJ cadastrado da EWS).
+    Empresa sem grupo conhecido devolve só ela mesma."""
+    nome_canonico = _nome_canonico_grupo(empresa.nome)
+    nomes_grupo = GRUPOS_RELATORIO_LAUDO.get(nome_canonico)
+    if nomes_grupo is None:
+        return [empresa.id], empresa.nome, empresa.cnpj
+    empresas_grupo = [e for e in db.scalars(select(EmpresaCliente)) if normalize(e.nome) in nomes_grupo]
+    canonica = next((e for e in empresas_grupo if normalize(e.nome) == nome_canonico), empresa)
+    return [e.id for e in empresas_grupo], nome_canonico, canonica.cnpj
+
+
 def gerar_relatorio(
     db: Session,
     empresa_nome: str,
@@ -281,8 +317,9 @@ def gerar_relatorio(
 
     status_normalizado, status_label = _resolver_status(status_opcao)
 
+    ids_empresas, nome_relatorio, cnpj_relatorio = _grupo_relatorio(db, empresa)
     query = select(Laudo).where(
-        Laudo.empresa_cliente_id == empresa.id,
+        Laudo.empresa_cliente_id.in_(ids_empresas),
         Laudo.data >= periodo_ini,
         Laudo.data <= periodo_fim,
     )
@@ -315,8 +352,8 @@ def gerar_relatorio(
     total = sum(linha.valor for linha in linhas)
 
     return LaudosResult(
-        empresa=empresa.nome,
-        cnpj=cnpj or empresa.cnpj,
+        empresa=nome_relatorio,
+        cnpj=cnpj or cnpj_relatorio,
         periodo_ini=periodo_ini,
         periodo_fim=periodo_fim,
         status=status_label,
@@ -378,30 +415,33 @@ def gerar_resumo_por_assessoria(
     ver `formatar_texto_resumo_assessorias`)."""
     status_normalizado, _ = _resolver_status(status_opcao)
 
-    empresa_id_filtro = None
+    ids_empresas_filtro = None
     if filtro_empresa:
         empresa = _resolver_empresa(db, filtro_empresa)
         if empresa is None:
             raise ValueError(f"A empresa '{filtro_empresa}' não foi encontrada.")
-        empresa_id_filtro = empresa.id
+        ids_empresas_filtro, _, _ = _grupo_relatorio(db, empresa)
 
     query = (
         select(Laudo.tipo_laudo_nome, Laudo.status, EmpresaCliente.nome)
         .join(EmpresaCliente, Laudo.empresa_cliente_id == EmpresaCliente.id)
         .where(Laudo.data >= periodo_ini, Laudo.data <= periodo_fim)
     )
-    if empresa_id_filtro is not None:
-        query = query.where(Laudo.empresa_cliente_id == empresa_id_filtro)
+    if ids_empresas_filtro is not None:
+        query = query.where(Laudo.empresa_cliente_id.in_(ids_empresas_filtro))
 
     # assessoria -> tipo -> quantidade. Só entra quem realmente tem laudo
     # contado — sem isso apareceriam assessorias/tipos com zero, que a
-    # Clara pediu explicitamente pra não listar.
+    # Clara pediu explicitamente pra não listar. Nome passa por
+    # `_nome_canonico_grupo` pra SW entrar somado junto de EWS, igual
+    # `gerar_relatorio` (ver GRUPOS_RELATORIO_LAUDO).
     contagem: dict[str, dict[str, int]] = {}
     for tipo, status_laudo, empresa_nome in db.execute(query):
         if not _status_bate(status_laudo, status_normalizado):
             continue
-        contagem.setdefault(empresa_nome, {}).setdefault(tipo, 0)
-        contagem[empresa_nome][tipo] += 1
+        nome_canonico = _nome_canonico_grupo(empresa_nome)
+        contagem.setdefault(nome_canonico, {}).setdefault(tipo, 0)
+        contagem[nome_canonico][tipo] += 1
 
     valor_cache: dict[str, float | None] = {}
     resultado: list[ResumoAssessoria] = []
