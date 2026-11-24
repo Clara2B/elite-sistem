@@ -41,11 +41,14 @@ from app.relatorio_assessorias.secoes import (
     procons,
 )
 
-# Chaves == `arquivo_campo_upload` de cada fonte em `config/fontes.yaml` —
-# as 6 planilhas dos "Seis campos fixos" da especificação ("Fluxo do
-# usuário e telas"). "agendamento" serve duas fontes (Judicial e Pauta da
-# Semana Contrária, mesmo arquivo "PLANILHA 2026").
-CAMPOS_UPLOAD = ["laudo", "iniciais", "agendamento", "extrajudicial", "contrarias", "procon"]
+# Chaves == `arquivo_campo_upload` de cada fonte em `config/fontes.yaml`.
+# Eram os "Seis campos fixos" da especificação ("Fluxo do usuário e
+# telas"); "pauta_contrarias" foi adicionado em 2026-10-27 (a Pauta de
+# Audiências Contrárias passou a vir num arquivo próprio, não mais de
+# dentro de "agendamento" — ver `audiencias_contrarias` em fontes.yaml).
+CAMPOS_UPLOAD = [
+    "laudo", "iniciais", "agendamento", "extrajudicial", "contrarias", "procon", "pauta_contrarias",
+]
 
 
 @dataclass
@@ -78,6 +81,7 @@ def processar_upload(
     wb_extrajudicial = load_workbook(caminhos["extrajudicial"], read_only=True, data_only=True)
     wb_contrarias = load_workbook(caminhos["contrarias"], read_only=True, data_only=True)
     wb_procon = load_workbook(caminhos["procon"], read_only=True, data_only=True)
+    wb_pauta_contrarias = load_workbook(caminhos["pauta_contrarias"], read_only=True, data_only=True)
 
     linhas_laudo = aba_mensal.ler(wb_laudo, "laudo", fontes["laudos"], mes=mes, ano=ano)
 
@@ -87,11 +91,15 @@ def processar_upload(
         linhas_iniciais_todas.extend(aba_mensal.ler(wb_iniciais, "iniciais", fontes["iniciais"], mes=mes_aba, ano=ano))
 
     linhas_judicial = aba_unica.ler(wb_agendamento, "agendamento", fontes["audiencias_judiciais"])
-    linhas_pauta = aba_unica.ler(wb_agendamento, "agendamento", fontes["audiencias_contrarias"])
+    linhas_pauta = aba_unica.ler(wb_pauta_contrarias, "pauta_contrarias", fontes["audiencias_contrarias"])
     linhas_extrajudicial = aba_unica.ler(wb_extrajudicial, "extrajudicial", fontes["extrajudiciais"])
 
-    por_assessoria_contrarias = aba_por_assessoria.ler(wb_contrarias, "contrarias", fontes["contrarias"], nomes_por_apelido)
-    por_assessoria_procon = aba_por_assessoria.ler(wb_procon, "procon", fontes["procons"], nomes_por_apelido)
+    por_assessoria_contrarias, avisos_contrarias = aba_por_assessoria.ler(
+        wb_contrarias, "contrarias", fontes["contrarias"], nomes_por_apelido
+    )
+    por_assessoria_procon, avisos_procon = aba_por_assessoria.ler(
+        wb_procon, "procon", fontes["procons"], nomes_por_apelido
+    )
 
     empresas_desconhecidas: dict[str, int] = {}
     for linhas, campo in (
@@ -116,16 +124,18 @@ def processar_upload(
         linhas_procon_a = por_assessoria_procon.get(nome_assessoria, [])
 
         r_laudos = laudos.calcular(linhas_laudo_a, data_corte, regras["laudos"])
-        r_iniciais = iniciais.calcular(linhas_iniciais_a, mes=mes, ano=ano, data_corte=data_corte, regras=regras["iniciais"])
+        r_iniciais = iniciais.calcular(linhas_iniciais_a, mes=mes, ano=ano, regras=regras["iniciais"])
         r_extra = extrajudiciais.calcular(linhas_extra_a, mes=mes, ano=ano, data_corte=data_corte, regras=regras["extrajudiciais"])
-        r_judicial = judiciais.calcular(linhas_judicial_a, ano=ano, data_corte=data_corte)
-        r_pauta = judiciais.calcular(linhas_pauta_a, ano=ano, data_corte=data_corte)
+        r_judicial = judiciais.calcular(linhas_judicial_a, mes=mes, ano=ano)
+        r_pauta = judiciais.calcular(linhas_pauta_a, mes=mes, ano=ano)
         r_contrarias = contrarias.calcular(linhas_contrarias_a, mes=mes, ano=ano, data_corte=data_corte, regras=regras["contrarias"])
         r_procons = procons.calcular(linhas_procon_a, mes=mes, ano=ano, regras=regras["procons"])
 
         avisos: list[Aviso] = []
         for resultado_secao in (r_laudos, r_iniciais, r_extra, r_judicial, r_pauta, r_contrarias, r_procons):
             avisos.extend(resultado_secao.avisos)
+        avisos.extend(avisos_contrarias.get(nome_assessoria, []))
+        avisos.extend(avisos_procon.get(nome_assessoria, []))
         avisos.extend(validacao.conferir_cronologia_laudos(linhas_laudo_a))
         avisos.extend(validacao.conferir_cronologia_iniciais(linhas_iniciais_a))
         aviso_soma_uf = validacao.conferir_soma_uf(r_contrarias)
