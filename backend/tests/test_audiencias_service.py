@@ -228,6 +228,42 @@ def test_reimportar_mesmo_cpf_com_formatacao_diferente_nao_duplica(db):
     assert db.query(Audiencia).count() == 1
 
 
+def test_reimportacao_com_conciliadora_e_advogada_corrigidas_atualiza_em_vez_de_duplicar(db):
+    """Bug real reportado pela Clara (2026-11-24): CONCILIADORA/ADVOGADA
+    não faziam parte da identidade contra o banco de propósito (não deviam
+    criar duplicata), mas o código só verificava "já existe" e ignorava a
+    linha — nunca atualizava os dois campos quando eram corrigidos na
+    planilha. Mesma classe de bug já corrigida em Laudos (TIPO) e
+    Pendências (PAGO)."""
+
+    def _planilha(nome_arquivo, conciliadora, advogada):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["EMPRESA", "NOME COMPLETO", "DATA DE RECEBIMENTO", "CONCILIADORA", "ADVOGADA"])
+        ws.append(["ALFA", "Cliente Teste", date(2026, 9, 1), conciliadora, advogada])
+        path = Path(tempfile.mkdtemp()) / nome_arquivo
+        wb.save(path)
+        return str(path)
+
+    resumo1 = importar_planilha(db, _planilha("v1.xlsx", "Conciliadora A", "Dra. A"))
+    assert resumo1.linhas_novas == 1
+
+    resumo2 = importar_planilha(db, _planilha("v2.xlsx", "Conciliadora B", "Dra. B"))
+    assert resumo2.linhas_novas == 0
+    assert resumo2.linhas_atualizadas == 1
+    assert resumo2.linhas_ja_existentes == 0
+
+    assert db.query(Audiencia).count() == 1
+    audiencia = db.query(Audiencia).one()
+    assert audiencia.conciliadora == "Conciliadora B"
+    assert audiencia.advogada == "Dra. B"
+
+    # Reimportar de novo sem mudar nada não deve "atualizar" à toa.
+    resumo3 = importar_planilha(db, _planilha("v3.xlsx", "Conciliadora B", "Dra. B"))
+    assert resumo3.linhas_atualizadas == 0
+    assert resumo3.linhas_ja_existentes == 1
+
+
 def test_apagar_todas_audiencias_remove_tudo_e_devolve_a_contagem(db):
     empresa1 = get_or_create_empresa(db, "ALFA")
     empresa2 = get_or_create_empresa(db, "BETA")
