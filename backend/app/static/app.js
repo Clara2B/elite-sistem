@@ -52,9 +52,19 @@ function iniciarZonasDeUpload() {
   });
 }
 
+// Mesmo limite de app/api/_shared.py::TAMANHO_MAXIMO_UPLOAD_BYTES — checado
+// aqui também só pra dar o erro na hora (sem esperar o upload inteiro
+// terminar pra descobrir que passou do limite); o servidor valida de novo
+// e é quem decide de verdade, então os dois lados nunca precisam ficar
+// sincronizados byte a byte.
+var TAMANHO_MAXIMO_UPLOAD_BYTES = 20 * 1024 * 1024;
+
 // Troca a bolha nativa do navegador ("Selecione um arquivo.") por um toast
-// no estilo do resto do sistema — só a validação de arquivo obrigatório,
-// as outras validações HTML5 (email, required de texto) continuam nativas.
+// no estilo do resto do sistema — e também valida tipo (.xlsx) e tamanho
+// do arquivo antes de enviar (a pedido da Clara: um arquivo errado ou
+// grande demais só se mostrava como erro depois do upload inteiro
+// terminar). As outras validações HTML5 (email, required de texto)
+// continuam nativas.
 function iniciarValidacaoDeUpload() {
   document.querySelectorAll("form").forEach(function (form) {
     var camposArquivo = form.querySelectorAll("input[type=file][required]");
@@ -71,14 +81,58 @@ function iniciarValidacaoDeUpload() {
     form.addEventListener("submit", function (evento) {
       for (var i = 0; i < camposArquivo.length; i++) {
         var campo = camposArquivo[i];
+        var zona = campo.closest("[data-upload]");
         if (!campo.files || campo.files.length === 0) {
           evento.preventDefault();
-          var zona = campo.closest("[data-upload]");
           if (zona) zona.classList.add("upload-erro");
           mostrarToast("Selecione um arquivo antes de importar.", "erro");
           return;
         }
+        var arquivo = campo.files[0];
+        if (!/\.xlsx$/i.test(arquivo.name)) {
+          evento.preventDefault();
+          if (zona) zona.classList.add("upload-erro");
+          mostrarToast('O arquivo "' + arquivo.name + '" não é uma planilha .xlsx.', "erro");
+          return;
+        }
+        if (arquivo.size > TAMANHO_MAXIMO_UPLOAD_BYTES) {
+          evento.preventDefault();
+          if (zona) zona.classList.add("upload-erro");
+          var tamanhoMb = (arquivo.size / (1024 * 1024)).toFixed(1);
+          var limiteMb = TAMANHO_MAXIMO_UPLOAD_BYTES / (1024 * 1024);
+          mostrarToast("O arquivo tem " + tamanhoMb + " MB — o limite é " + limiteMb + " MB.", "erro");
+          return;
+        }
       }
+    });
+  });
+}
+
+// Desativa o botão de envio e troca o texto por "Importando..." assim que
+// a planilha passa pela validação de arquivo obrigatório (`
+// iniciarValidacaoDeUpload`, registrado antes deste no DOMContentLoaded —
+// por isso `evento.defaultPrevented` já reflete a validação quando este
+// listener roda). A pedido da Clara: planilhas grandes demoram alguns
+// segundos pra importar, e sem nenhum feedback a tela parecia travada —
+// dava pra clicar "Importar" de novo e mandar a mesma planilha duas vezes.
+function iniciarFeedbackDeEnvioDeUpload() {
+  document.querySelectorAll("form").forEach(function (form) {
+    if (!form.querySelector("[data-upload]")) return;
+    var botao = form.querySelector("button[type=submit]");
+    if (!botao) return;
+    var textoOriginal = botao.textContent;
+
+    form.addEventListener("submit", function (evento) {
+      if (evento.defaultPrevented) return;
+      botao.disabled = true;
+      botao.textContent = "Importando...";
+    });
+
+    // "Voltar" do navegador depois de enviar pode restaurar a página com o
+    // botão ainda desativado (bfcache) — devolve ao estado normal.
+    window.addEventListener("pageshow", function () {
+      botao.disabled = false;
+      botao.textContent = textoOriginal;
     });
   });
 }
@@ -617,6 +671,7 @@ function iniciarBuscaDeEmpresas() {
 document.addEventListener("DOMContentLoaded", function () {
   iniciarZonasDeUpload();
   iniciarValidacaoDeUpload();
+  iniciarFeedbackDeEnvioDeUpload();
   iniciarAlternanciaTipoRelatorio();
   iniciarModaisDeConfirmacao();
   iniciarConfirmacaoPorTexto();

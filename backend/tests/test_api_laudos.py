@@ -22,6 +22,29 @@ def _planilha_laudos_bytes() -> bytes:
     return buffer.getvalue()
 
 
+def test_import_com_arquivo_que_nao_e_xlsx_devolve_erro_claro_nao_500(db, admin_token):
+    """Bug real identificado na varredura (2026-11-24): um arquivo que não
+    é .xlsx de verdade ia direto pro openpyxl, estourando com um erro
+    técnico sem tratamento (500) em vez de uma mensagem clara (400)."""
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    try:
+        client = TestClient(app)
+        resp = client.post(
+            "/laudos/import",
+            files={"arquivo": ("laudos.pdf", b"nao e uma planilha", "application/pdf")},
+            headers=headers,
+        )
+        assert resp.status_code == 400
+        assert "não é uma planilha .xlsx" in resp.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_import_e_relatorio_via_api(db, admin_token):
     def override_get_db():
         yield db

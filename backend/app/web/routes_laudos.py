@@ -96,7 +96,6 @@ async def importar(
     usuario: Usuario = Depends(_acesso_elite),
     db: Session = Depends(get_db),
 ):
-    path = salvar_temp(arquivo)
     # Lista cheia aqui (sem o filtro "só quem tem resultado" do período
     # atual) de propósito: a planilha recém-importada pode trazer laudo de
     # um período diferente de hoje, ou empresa nova — filtrar pelo período
@@ -118,7 +117,12 @@ async def importar(
         "erro": None,
         "eh_admin": eh_admin,
     }
+    # `path` só existe se `salvar_temp` passar da validação (tipo/tamanho do
+    # arquivo) — None aqui faz o `finally` abaixo saber que não há nada
+    # pra remover.
+    path = None
     try:
+        path = salvar_temp(arquivo)
         resumo = laudos_service.importar_planilha(db, path)
     except ValueError as e:
         contexto["erro"] = str(e)
@@ -130,7 +134,8 @@ async def importar(
             f"({resumo.linhas_ja_existentes} já existiam sem mudança)."
         )
     finally:
-        remover_temp(path)
+        if path:
+            remover_temp(path)
     contexto["duplicatas"] = laudos_service.detectar_duplicatas(db) if eh_admin else []
     return templates.TemplateResponse(request, "laudos.html", contexto)
 

@@ -73,9 +73,10 @@ async def importar(
     usuario: Usuario = Depends(_acesso_pendencias),
     db: Session = Depends(get_db),
 ):
-    path = salvar_temp(arquivo)
     contexto = _contexto_base(db, usuario)
+    path = None
     try:
+        path = salvar_temp(arquivo)
         resumo = pendencias_service.importar_planilha(db, path)
     except ValueError as e:
         contexto["erro"] = str(e)
@@ -87,7 +88,8 @@ async def importar(
             f"({resumo.linhas_ja_existentes} já existiam sem mudança)."
         )
     finally:
-        remover_temp(path)
+        if path:
+            remover_temp(path)
     return templates.TemplateResponse(request, "pendencias.html", contexto)
 
 

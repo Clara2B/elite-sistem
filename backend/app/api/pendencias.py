@@ -25,13 +25,15 @@ def importar(
     usuario: Usuario = Depends(_acesso_pendencias),
     db: Session = Depends(get_db),
 ):
-    path = salvar_temp(arquivo)
+    path = None
     try:
+        path = salvar_temp(arquivo)
         resumo = pendencias_service.importar_planilha(db, path)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     finally:
-        remover_temp(path)
+        if path:
+            remover_temp(path)
     registrar(db, usuario, "IMPORTOU_PENDENCIAS", entidade="cobranca", detalhes=str(resumo))
     return resumo
 

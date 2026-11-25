@@ -98,14 +98,15 @@ async def importar(
     usuario: Usuario = Depends(_acesso_elite),
     db: Session = Depends(get_db),
 ):
-    path = salvar_temp(arquivo)
     contexto = _contexto_base(db, usuario)
     padrao_ini, padrao_fim = _periodo_padrao()
     contexto["filtro"] = {
         "periodo_ini": padrao_ini, "periodo_fim": padrao_fim,
         "tipo": "geral", "empresa": "", "assistente": "",
     }
+    path = None
     try:
+        path = salvar_temp(arquivo)
         resumo = processos_service.importar_planilha(db, path, usuario_id=usuario.id)
     except ValueError as e:
         contexto["erro"] = str(e)
@@ -118,7 +119,8 @@ async def importar(
         )
         contexto["prazos"] = processos_service.prazos_proximos(db, dias=30)
     finally:
-        remover_temp(path)
+        if path:
+            remover_temp(path)
     return templates.TemplateResponse(request, "processos.html", contexto)
 
 
