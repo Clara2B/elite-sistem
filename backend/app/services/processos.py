@@ -643,6 +643,77 @@ def gerar_relatorio_por_empresa(
     )
 
 
+@dataclass
+class LinhaEventoProcesso:
+    id: int
+    numero_processo: str
+    cliente: str
+    data: date
+    tipo_evento_nome: str
+    observacao: str | None
+    prazo_fatal: bool
+
+
+def listar_eventos(db: Session, empresa_nome: str, periodo_ini: date, periodo_fim: date) -> list[LinhaEventoProcesso]:
+    """Andamentos (EventoProcesso) de uma empresa dentro do período — pra
+    edição/exclusão individual (a pedido da Clara, 2026-11-25). Diferente
+    de `gerar_relatorio_por_empresa` (que mostra só o ÚLTIMO evento de cada
+    processo, excluindo os de "data de liberação" do filtro por período),
+    aqui lista TODOS os andamentos reais do período, pra poder corrigir ou
+    excluir qualquer um deles especificamente."""
+    alvo_empresa = normalize(empresa_nome)
+    empresa = next((e for e in db.scalars(select(EmpresaCliente)) if normalize(e.nome) == alvo_empresa), None)
+    if empresa is None:
+        raise ValueError(f"A empresa '{empresa_nome}' não foi encontrada.")
+
+    query = (
+        select(EventoProcesso, Processo)
+        .join(Processo, EventoProcesso.processo_id == Processo.id)
+        .where(
+            Processo.empresa_cliente_id == empresa.id,
+            EventoProcesso.data >= periodo_ini,
+            EventoProcesso.data <= periodo_fim,
+        )
+        .order_by(EventoProcesso.data)
+    )
+    return [
+        LinhaEventoProcesso(
+            id=evento.id, numero_processo=processo.numero_processo, cliente=processo.nome_cliente or "—",
+            data=evento.data, tipo_evento_nome=evento.tipo_evento_nome, observacao=evento.observacao,
+            prazo_fatal=evento.prazo_fatal,
+        )
+        for evento, processo in db.execute(query)
+    ]
+
+
+def editar_evento(
+    db: Session, evento_id: int, data: date, tipo_evento_nome: str, observacao: str | None, prazo_fatal: bool,
+) -> bool:
+    """Edita UM andamento específico — a pedido da Clara (2026-11-25), pra
+    corrigir um registro errado sem precisar reimportar a planilha
+    inteira. Devolve False se o id não existir."""
+    evento = db.get(EventoProcesso, evento_id)
+    if evento is None:
+        return False
+    evento.data = data
+    evento.tipo_evento_nome = tipo_evento_nome
+    evento.observacao = observacao or None
+    evento.prazo_fatal = prazo_fatal
+    db.commit()
+    return True
+
+
+def excluir_evento(db: Session, evento_id: int) -> bool:
+    """Exclui UM andamento específico — a pedido da Clara (2026-11-25).
+    Devolve False se o id não existir."""
+    evento = db.get(EventoProcesso, evento_id)
+    if evento is None:
+        return False
+    db.delete(evento)
+    db.commit()
+    return True
+
+
 def formatar_texto_geral(relatorio: RelatorioGeral) -> str:
     """Sem a coluna Assistente (2026-09-28, Bloco 4 — Clara: "não exibir o
     nome do assistente no relatório gerado", inclusive nessa versão em texto

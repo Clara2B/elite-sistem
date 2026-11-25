@@ -63,28 +63,74 @@
       </h2>
       <p class="subtitulo">Mês: {{ resultado.mes.title() }}</p>
       {% if resultado.linhas %}
+        {% if eh_admin %}
+          {% for l in resultado.linhas %}
+            <form id="correspondencia-{{ l.id }}" method="post" action="/app/correspondencias/{{ l.id }}/editar">
+              <input type="hidden" name="empresa" value="{{ resultado.empresa }}">
+              <input type="hidden" name="mes" value="{{ resultado.mes }}">
+            </form>
+          {% endfor %}
+        {% endif %}
         <div class="tabela-wrap">
           <table>
             <thead>
-              <tr><th>Advogado</th><th>Autor</th><th>Adv / Preposto</th><th>Valor</th><th>Tipo de ação</th></tr>
+              <tr>
+                <th>Advogado</th><th>Autor</th><th>Adv / Preposto</th><th>Valor</th><th>Tipo de ação</th>
+                {% if eh_admin %}<th style="width:1%;"></th>{% endif %}
+              </tr>
             </thead>
             <tbody>
               {% for l in resultado.linhas %}
                 <tr>
-                  <td>{{ l.advogado }}</td>
-                  <td>{{ l.autor }}</td>
-                  <td>{{ l.adv_preposto }}</td>
-                  <td>{{ "R$ %.2f"|format(l.valor)|replace(".", ",") if l.valor is not none else l.valor_texto }}</td>
-                  <td>{{ l.tipo_acao }}</td>
+                  {% if eh_admin %}
+                    <td><input type="text" name="advogado" value="{{ l.advogado }}" required form="correspondencia-{{ l.id }}" class="campo-linha"></td>
+                    <td><input type="text" name="autor" value="{{ l.autor }}" required form="correspondencia-{{ l.id }}" class="campo-linha"></td>
+                    <td><input type="text" name="adv_preposto" value="{{ l.adv_preposto }}" required form="correspondencia-{{ l.id }}" class="campo-linha"></td>
+                    <td><input type="text" name="valor_texto" value="{{ l.valor_texto }}" required form="correspondencia-{{ l.id }}" class="campo-linha"></td>
+                    <td><input type="text" name="tipo_acao" value="{{ l.tipo_acao }}" required form="correspondencia-{{ l.id }}" class="campo-linha"></td>
+                    <td>
+                      <div class="acoes-linha">
+                        <button type="submit" form="correspondencia-{{ l.id }}" class="secundario botao-linha">Salvar</button>
+                        <button type="button" class="perigo botao-linha" data-abrir-confirmacao="modal-excluir-correspondencia-{{ l.id }}">
+                          {{ icones.icone('lixeira') }}
+                        </button>
+                      </div>
+                    </td>
+                  {% else %}
+                    <td>{{ l.advogado }}</td>
+                    <td>{{ l.autor }}</td>
+                    <td>{{ l.adv_preposto }}</td>
+                    <td>{{ "R$ %.2f"|format(l.valor)|replace(".", ",") if l.valor is not none else l.valor_texto }}</td>
+                    <td>{{ l.tipo_acao }}</td>
+                  {% endif %}
                 </tr>
               {% endfor %}
               <tr class="total">
                 <td colspan="3">Total</td>
-                <td colspan="2">R$ {{ "%.2f"|format(resultado.total)|replace(".", ",") }}</td>
+                <td colspan="{{ 3 if eh_admin else 2 }}">R$ {{ "%.2f"|format(resultado.total)|replace(".", ",") }}</td>
               </tr>
             </tbody>
           </table>
         </div>
+        {% if eh_admin %}
+          {% for l in resultado.linhas %}
+            <dialog id="modal-excluir-correspondencia-{{ l.id }}" class="modal-confirmacao">
+              <div class="modal-corpo">
+                <div class="modal-icone">{{ icones.icone('alerta') }}</div>
+                <h3>Excluir este registro?</h3>
+                <p>{{ l.autor }} — {{ l.tipo_acao }}. Isso vai apagar só esse registro, sem volta.</p>
+              </div>
+              <div class="modal-acoes">
+                <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
+                <form method="post" action="/app/correspondencias/{{ l.id }}/excluir">
+                  <input type="hidden" name="empresa" value="{{ resultado.empresa }}">
+                  <input type="hidden" name="mes" value="{{ resultado.mes }}">
+                  <button type="submit" class="perigo">Excluir definitivamente</button>
+                </form>
+              </div>
+            </dialog>
+          {% endfor %}
+        {% endif %}
       {% else %}
         <p class="vazio">Nenhum correspondente encontrado nesse mês/empresa.</p>
       {% endif %}

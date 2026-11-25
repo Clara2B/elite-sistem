@@ -97,6 +97,70 @@
     </div>
   {% endif %}
 
+  {% if eh_admin and audiencias is not none %}
+    <div class="card">
+      <h2>Audiências desta empresa no período</h2>
+      <p class="subtitulo">Pra corrigir ou excluir um registro específico sem reimportar a planilha.</p>
+      {% if audiencias %}
+        {% for a in audiencias %}
+          <form id="audiencia-{{ a.id }}" method="post" action="/app/audiencias/{{ a.id }}/editar">
+            <input type="hidden" name="empresa" value="{{ filtro.empresa }}">
+            <input type="hidden" name="ano" value="{{ filtro.ano }}">
+            <input type="hidden" name="mes" value="{{ filtro.mes }}">
+            <input type="hidden" name="quinzena" value="{{ filtro.quinzena }}">
+          </form>
+        {% endfor %}
+        <div class="tabela-wrap">
+          <table>
+            <thead>
+              <tr><th>Data de recebimento</th><th>Cliente</th><th>CPF</th><th>Conciliadora</th><th>Advogada</th><th style="width:1%;"></th></tr>
+            </thead>
+            <tbody>
+              {% for a in audiencias %}
+                <tr>
+                  <td><input type="date" name="data_recebimento" value="{{ a.data_recebimento.isoformat() }}" required form="audiencia-{{ a.id }}" class="campo-linha"></td>
+                  <td><input type="text" name="nome_cliente" value="{{ a.nome_cliente }}" required form="audiencia-{{ a.id }}" class="campo-linha"></td>
+                  <td><input type="text" name="cpf" value="{{ a.cpf or '' }}" form="audiencia-{{ a.id }}" class="campo-linha"></td>
+                  <td><input type="text" name="conciliadora" value="{{ a.conciliadora or '' }}" form="audiencia-{{ a.id }}" class="campo-linha"></td>
+                  <td><input type="text" name="advogada" value="{{ a.advogada or '' }}" form="audiencia-{{ a.id }}" class="campo-linha"></td>
+                  <td>
+                    <div class="acoes-linha">
+                      <button type="submit" form="audiencia-{{ a.id }}" class="secundario botao-linha">Salvar</button>
+                      <button type="button" class="perigo botao-linha" data-abrir-confirmacao="modal-excluir-audiencia-{{ a.id }}">
+                        {{ icones.icone('lixeira') }}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% for a in audiencias %}
+          <dialog id="modal-excluir-audiencia-{{ a.id }}" class="modal-confirmacao">
+            <div class="modal-corpo">
+              <div class="modal-icone">{{ icones.icone('alerta') }}</div>
+              <h3>Excluir esta audiência?</h3>
+              <p>{{ a.nome_cliente }} — {{ a.data_recebimento.strftime("%d/%m/%Y") }}. Isso vai apagar só esse registro, sem volta.</p>
+            </div>
+            <div class="modal-acoes">
+              <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
+              <form method="post" action="/app/audiencias/{{ a.id }}/excluir">
+                <input type="hidden" name="empresa" value="{{ filtro.empresa }}">
+                <input type="hidden" name="ano" value="{{ filtro.ano }}">
+                <input type="hidden" name="mes" value="{{ filtro.mes }}">
+                <input type="hidden" name="quinzena" value="{{ filtro.quinzena }}">
+                <button type="submit" class="perigo">Excluir definitivamente</button>
+              </form>
+            </div>
+          </dialog>
+        {% endfor %}
+      {% else %}
+        <p class="vazio">Nenhuma audiência encontrada nesse período.</p>
+      {% endif %}
+    </div>
+  {% endif %}
+
   {% if eh_admin %}
     <div class="card" style="border: 1px solid var(--danger-soft);">
       <h2>Zona de perigo</h2>

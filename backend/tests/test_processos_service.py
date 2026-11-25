@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import openpyxl
+import pytest
 from sqlalchemy import event
 
 from app.models import EmpresaCliente, EventoProcesso, Processo
@@ -12,12 +13,15 @@ from app.services.processos import (
     _pessoa_valida,
     _separar_assessoria,
     apagar_todos_processos,
+    editar_evento,
+    excluir_evento,
     formatar_texto_geral,
     formatar_texto_por_empresa,
     gerar_relatorio_geral,
     gerar_relatorio_por_empresa,
     ids_empresas_com_processo,
     importar_planilha,
+    listar_eventos,
     marcar_resolvido,
     prazos_proximos,
     status_prazo,
@@ -904,3 +908,73 @@ def test_gerar_relatorio_geral_tipo_nao_catalogado_detectado_mesmo_fora_da_pagin
     pagina1 = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30), pagina=1)
 
     assert "TIPO ESTRANHO" in pagina1.tipos_nao_catalogados
+
+
+def test_listar_eventos_filtra_por_empresa_e_periodo_e_traz_todos_nao_so_o_ultimo(db):
+    """A pedido da Clara (2026-11-25): pra edição/exclusão individual —
+    diferente de `gerar_relatorio_por_empresa` (que mostra só o último
+    evento de cada processo), aqui lista TODOS os andamentos do período."""
+    processo = _processo(db, numero="3030303-03.2026.8.11.0003", empresa="ABSOLUTA")
+    outro_processo = _processo(db, numero="4040404-04.2026.8.11.0004", empresa="ALFA")
+    db.add_all(
+        [
+            EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
+            EventoProcesso(processo_id=processo.id, data=date(2026, 9, 10), tipo_evento_nome="DOCUMENTOS"),
+            EventoProcesso(processo_id=processo.id, data=date(2026, 8, 1), tipo_evento_nome="FORA DO PERIODO"),
+            EventoProcesso(processo_id=outro_processo.id, data=date(2026, 9, 6), tipo_evento_nome="CUSTAS"),
+        ]
+    )
+    db.commit()
+
+    linhas = listar_eventos(db, "ABSOLUTA", date(2026, 9, 1), date(2026, 9, 30))
+
+    assert {l.tipo_evento_nome for l in linhas} == {"CUSTAS", "DOCUMENTOS"}
+    assert all(l.numero_processo == "3030303-03.2026.8.11.0003" for l in linhas)
+
+
+def test_listar_eventos_empresa_inexistente_gera_erro(db):
+    with pytest.raises(ValueError, match="não foi encontrada"):
+        listar_eventos(db, "NAO EXISTE", date(2026, 9, 1), date(2026, 9, 30))
+
+
+def test_editar_evento_atualiza_campos(db):
+    """A pedido da Clara (2026-11-25): corrigir um andamento errado sem
+    precisar reimportar a planilha inteira."""
+    processo = _processo(db, numero="5050505-05.2026.8.11.0005")
+    evento = EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS")
+    db.add(evento)
+    db.commit()
+
+    editado = editar_evento(
+        db, evento.id, data=date(2026, 9, 12), tipo_evento_nome="DOCUMENTOS",
+        observacao="Corrigido", prazo_fatal=True,
+    )
+
+    assert editado is True
+    db.refresh(evento)
+    assert evento.data == date(2026, 9, 12)
+    assert evento.tipo_evento_nome == "DOCUMENTOS"
+    assert evento.observacao == "Corrigido"
+    assert evento.prazo_fatal is True
+
+
+def test_editar_evento_inexistente_devolve_false(db):
+    assert editar_evento(db, 999999, date(2026, 9, 5), "X", None, False) is False
+
+
+def test_excluir_evento_remove_so_o_escolhido(db):
+    processo = _processo(db, numero="6060606-06.2026.8.11.0006")
+    manter = EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS")
+    apagar = EventoProcesso(processo_id=processo.id, data=date(2026, 9, 6), tipo_evento_nome="DOCUMENTOS")
+    db.add_all([manter, apagar])
+    db.commit()
+    apagar_id = apagar.id
+
+    assert excluir_evento(db, apagar_id) is True
+    assert db.query(EventoProcesso).count() == 1
+    assert db.get(EventoProcesso, manter.id) is not None
+    assert db.get(EventoProcesso, apagar_id) is None
+
+
+def test_excluir_evento_inexistente_devolve_false(db):
+    assert excluir_evento(db, 999999) is False

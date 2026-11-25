@@ -191,6 +191,71 @@ class AudienciasResult:
     faixa_fim: int | None = None
 
 
+@dataclass
+class LinhaAudiencia:
+    id: int
+    data_recebimento: date
+    nome_cliente: str
+    cpf: str | None
+    conciliadora: str | None
+    advogada: str | None
+
+
+def listar_audiencias(db: Session, empresa_nome: str, periodo_ini: date, periodo_fim: date) -> list[LinhaAudiencia]:
+    """Audiências de uma empresa dentro do período (mesmo filtro de
+    `gerar_relatorio`) — pra edição/exclusão individual (a pedido da
+    Clara, 2026-11-25)."""
+    empresa = resolver_empresa_por_nome(db, empresa_nome)
+    if empresa is None:
+        raise ValueError(f"A empresa '{empresa_nome}' não foi encontrada.")
+    query = (
+        select(Audiencia)
+        .where(
+            Audiencia.empresa_cliente_id == empresa.id,
+            Audiencia.data_recebimento >= periodo_ini,
+            Audiencia.data_recebimento <= periodo_fim,
+        )
+        .order_by(Audiencia.data_recebimento)
+    )
+    return [
+        LinhaAudiencia(
+            id=a.id, data_recebimento=a.data_recebimento, nome_cliente=a.nome_cliente,
+            cpf=a.cpf, conciliadora=a.conciliadora, advogada=a.advogada,
+        )
+        for a in db.scalars(query)
+    ]
+
+
+def editar_audiencia(
+    db: Session, audiencia_id: int, data_recebimento: date, nome_cliente: str,
+    cpf: str | None, conciliadora: str | None, advogada: str | None,
+) -> bool:
+    """Edita UMA audiência específica — a pedido da Clara (2026-11-25), pra
+    corrigir um registro errado sem precisar reimportar a planilha
+    inteira. Devolve False se o id não existir."""
+    a = db.get(Audiencia, audiencia_id)
+    if a is None:
+        return False
+    a.data_recebimento = data_recebimento
+    a.nome_cliente = nome_cliente
+    a.cpf = cpf or None
+    a.conciliadora = conciliadora or None
+    a.advogada = advogada or None
+    db.commit()
+    return True
+
+
+def excluir_audiencia(db: Session, audiencia_id: int) -> bool:
+    """Exclui UMA audiência específica — a pedido da Clara (2026-11-25).
+    Devolve False se o id não existir."""
+    a = db.get(Audiencia, audiencia_id)
+    if a is None:
+        return False
+    db.delete(a)
+    db.commit()
+    return True
+
+
 def _clientes_no_periodo(db: Session, empresa_id: int, periodo_ini: date, periodo_fim: date) -> list[str]:
     query = select(Audiencia).where(
         Audiencia.empresa_cliente_id == empresa_id,

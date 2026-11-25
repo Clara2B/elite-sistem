@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import date
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Request, UploadFile
+from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -33,6 +34,7 @@ def _contexto_base(db: Session, usuario: Usuario) -> dict:
         "empresas": [e for e in listar_empresas(db, apenas_ativas=False) if e.id in ids_com_pendencia],
         "filtro": {},
         "mensagens": None,
+        "cobrancas": None,
         "mensagem": None,
         "erro": None,
         "eh_admin": usuario.papel_global in PAPEIS_GLOBAIS,
@@ -63,6 +65,11 @@ def tela(
                 {"cobrador": m.cobrador, "total": m.total, "texto": pendencias_service.formatar_texto(m)}
                 for m in msgs
             ]
+            # Lista EDITÁVEL com TODAS as cobranças (pagas ou não) dessa
+            # empresa — diferente das mensagens acima, que só trazem as
+            # pendentes. Só admin, mesmo padrão de Laudos/duplicatas.
+            if contexto["eh_admin"]:
+                contexto["cobrancas"] = pendencias_service.listar_cobrancas(db, empresa)
     return templates.TemplateResponse(request, "pendencias.html", contexto)
 
 
@@ -91,6 +98,50 @@ async def importar(
         if path:
             remover_temp(path)
     return templates.TemplateResponse(request, "pendencias.html", contexto)
+
+
+@router.post("/{cobranca_id}/editar")
+def editar(
+    cobranca_id: int,
+    empresa: str = Form(...),
+    data: date = Form(...),
+    tipo_cobranca: str = Form(...),
+    cobrador: str = Form(...),
+    valor: float = Form(...),
+    status_pagamento: str = Form(""),
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Edita UMA cobrança específica — a pedido da Clara (2026-11-25), pra
+    corrigir um lançamento errado sem precisar reimportar a planilha
+    inteira. Só Admin Superior/T.I."""
+    editado = pendencias_service.editar_cobranca(
+        db, cobranca_id, data, tipo_cobranca, cobrador, valor, status_pagamento or None,
+    )
+    if editado:
+        registrar(db, usuario, "EDITOU_PENDENCIA", entidade="cobranca", entidade_id=str(cobranca_id))
+        mensagem = quote("Registro atualizado.")
+    else:
+        mensagem = quote("Esse registro já não existe mais (pode já ter sido excluído).")
+    return RedirectResponse(f"/app/pendencias?empresa={quote(empresa)}&mensagem={mensagem}", status_code=303)
+
+
+@router.post("/{cobranca_id}/excluir")
+def excluir(
+    cobranca_id: int,
+    empresa: str = Form(...),
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Exclui UMA cobrança específica — a pedido da Clara (2026-11-25). Só
+    Admin Superior/T.I."""
+    excluido = pendencias_service.excluir_cobranca(db, cobranca_id)
+    if excluido:
+        registrar(db, usuario, "EXCLUIU_PENDENCIA", entidade="cobranca", entidade_id=str(cobranca_id))
+        mensagem = quote("Registro excluído.")
+    else:
+        mensagem = quote("Esse registro já não existe mais (pode já ter sido excluído).")
+    return RedirectResponse(f"/app/pendencias?empresa={quote(empresa)}&mensagem={mensagem}", status_code=303)
 
 
 @router.post("/apagar-tudo")

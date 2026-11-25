@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Request, UploadFile
+from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -37,6 +37,7 @@ def _contexto_base(db: Session, usuario: Usuario) -> dict:
         "funcionarios": listar_funcionarios(db, apenas_ativos=False),
         "filtro": {},
         "resultado": None,
+        "eventos": None,
         "prazos": processos_service.prazos_proximos(db, dias=30),
         "mensagem": None,
         "erro": None,
@@ -80,6 +81,12 @@ def tela(
             resultado = processos_service.gerar_relatorio_por_empresa(
                 db, empresa, contexto["filtro"]["periodo_ini"], contexto["filtro"]["periodo_fim"], assistente or None,
             )
+            # Lista EDITÁVEL com os andamentos (EventoProcesso) dessa empresa
+            # no período — só admin, mesmo padrão dos outros módulos.
+            if usuario.papel_global in PAPEIS_GLOBAIS:
+                contexto["eventos"] = processos_service.listar_eventos(
+                    db, empresa, contexto["filtro"]["periodo_ini"], contexto["filtro"]["periodo_fim"],
+                )
         else:
             # Paginado por empresa (a pedido da Clara, 2026-11-25) — período
             # longo com muitas empresas virava uma página enorme e lenta.
@@ -141,6 +148,61 @@ def resolver(
     else:
         registrar(db, usuario, "RESOLVEU_EVENTO_PROCESSO", entidade="evento_processo", entidade_id=evento_id)
     return RedirectResponse("/app/processos", status_code=303)
+
+
+@router.post("/eventos/{evento_id}/editar")
+def editar_evento(
+    evento_id: int,
+    periodo_ini: date = Form(...),
+    periodo_fim: date = Form(...),
+    empresa: str = Form(...),
+    assistente: str = Form(""),
+    data: date = Form(...),
+    tipo_evento_nome: str = Form(...),
+    observacao: str = Form(""),
+    prazo_fatal: bool = Form(False),
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Edita UM andamento específico — a pedido da Clara (2026-11-25), pra
+    corrigir um registro errado sem precisar reimportar a planilha
+    inteira. Só Admin Superior/T.I."""
+    editado = processos_service.editar_evento(db, evento_id, data, tipo_evento_nome, observacao or None, prazo_fatal)
+    if editado:
+        registrar(db, usuario, "EDITOU_EVENTO_PROCESSO", entidade="evento_processo", entidade_id=str(evento_id))
+        mensagem = quote("Registro atualizado.")
+    else:
+        mensagem = quote("Esse registro já não existe mais (pode já ter sido excluído).")
+    return RedirectResponse(
+        f"/app/processos?periodo_ini={periodo_ini}&periodo_fim={periodo_fim}&tipo=empresa"
+        f"&empresa={quote(empresa)}&assistente={quote(assistente)}&mensagem={mensagem}",
+        status_code=303,
+    )
+
+
+@router.post("/eventos/{evento_id}/excluir")
+def excluir_evento(
+    evento_id: int,
+    periodo_ini: date = Form(...),
+    periodo_fim: date = Form(...),
+    empresa: str = Form(...),
+    assistente: str = Form(""),
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Exclui UM andamento específico — a pedido da Clara (2026-11-25). Só
+    Admin Superior/T.I."""
+    excluido = processos_service.excluir_evento(db, evento_id)
+    if excluido:
+        registrar(db, usuario, "EXCLUIU_EVENTO_PROCESSO", entidade="evento_processo", entidade_id=str(evento_id))
+        mensagem = quote("Registro excluído.")
+    else:
+        mensagem = quote("Esse registro já não existe mais (pode já ter sido excluído).")
+    return RedirectResponse(
+        f"/app/processos?periodo_ini={periodo_ini}&periodo_fim={periodo_fim}&tipo=empresa"
+        f"&empresa={quote(empresa)}&assistente={quote(assistente)}&mensagem={mensagem}",
+        status_code=303,
+    )
 
 
 @router.post("/apagar-tudo")

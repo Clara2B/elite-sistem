@@ -13,6 +13,8 @@ import pytest
 from app.models import Correspondencia
 from app.services.correspondencias import (
     apagar_todas_correspondencias,
+    editar_correspondencia,
+    excluir_correspondencia,
     gerar_relatorio,
     ids_empresas_com_correspondencia,
     importar_planilha,
@@ -254,3 +256,64 @@ def test_recalcular_valores_zerados_corrige_so_quem_tinha_valor_nulo(db):
 
 def test_recalcular_valores_zerados_com_banco_sem_pendencia(db):
     assert recalcular_valores_zerados(db) == 0
+
+
+def test_editar_correspondencia_atualiza_campos_e_recalcula_valor(db):
+    """A pedido da Clara (2026-11-25): corrigir um registro errado sem
+    precisar reimportar a planilha inteira."""
+    path = _planilha([["Janeiro", "Dra. A", "Cliente A", "Eros", "ADVOGADO", "R$ 100,00", "PROCON"]])
+    importar_planilha(db, path)
+    linha = gerar_relatorio(db, "Eros", "Janeiro").linhas[0]
+
+    editado = editar_correspondencia(
+        db, linha.id, advogado="Dra. B", autor="Cliente B", adv_preposto="PREPOSTO",
+        valor_texto="R$ 250,00", tipo_acao="EXTRAJUDICIAL",
+    )
+
+    assert editado is True
+    nova_linha = gerar_relatorio(db, "Eros", "Janeiro").linhas[0]
+    assert nova_linha.advogado == "Dra. B"
+    assert nova_linha.autor == "Cliente B"
+    assert nova_linha.adv_preposto == "PREPOSTO"
+    assert nova_linha.valor_texto == "R$ 250,00"
+    assert nova_linha.valor == 250.0
+    assert nova_linha.tipo_acao == "EXTRAJUDICIAL"
+
+
+def test_editar_correspondencia_com_valor_nao_reconhecido_zera_valor(db):
+    path = _planilha([["Janeiro", "Dra. A", "Cliente A", "Eros", "ADVOGADO", "R$ 100,00", "PROCON"]])
+    importar_planilha(db, path)
+    linha = gerar_relatorio(db, "Eros", "Janeiro").linhas[0]
+
+    editar_correspondencia(
+        db, linha.id, advogado="Dra. A", autor="Cliente A", adv_preposto="ADVOGADO",
+        valor_texto="a combinar", tipo_acao="PROCON",
+    )
+
+    nova_linha = gerar_relatorio(db, "Eros", "Janeiro").linhas[0]
+    assert nova_linha.valor is None
+    assert nova_linha.valor_texto == "a combinar"
+
+
+def test_editar_correspondencia_inexistente_devolve_false(db):
+    assert editar_correspondencia(db, 999999, "a", "b", "c", "d", "e") is False
+
+
+def test_excluir_correspondencia_remove_so_o_escolhido(db):
+    path = _planilha([
+        ["Janeiro", "Dra. A", "Cliente A", "Eros", "ADVOGADO", "R$ 100,00", "PROCON"],
+        ["Janeiro", "Dra. B", "Cliente B", "Eros", "ADVOGADO", "R$ 200,00", "PROCON"],
+    ])
+    importar_planilha(db, path)
+    linhas = gerar_relatorio(db, "Eros", "Janeiro").linhas
+    manter_id = next(l.id for l in linhas if l.autor == "Cliente A")
+    apagar_id = next(l.id for l in linhas if l.autor == "Cliente B")
+
+    assert excluir_correspondencia(db, apagar_id) is True
+
+    linhas_depois = gerar_relatorio(db, "Eros", "Janeiro").linhas
+    assert [l.id for l in linhas_depois] == [manter_id]
+
+
+def test_excluir_correspondencia_inexistente_devolve_false(db):
+    assert excluir_correspondencia(db, 999999) is False

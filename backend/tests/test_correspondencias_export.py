@@ -21,7 +21,7 @@ def _resultado(n_linhas=2, valor_invalido=False):
     for i in range(n_linhas):
         linhas.append(
             LinhaCorrespondencia(
-                advogado=_NOME_LONGO, autor=f"Cliente {i}", adv_preposto="ADVOGADO",
+                id=i, advogado=_NOME_LONGO, autor=f"Cliente {i}", adv_preposto="ADVOGADO",
                 valor_texto="a combinar" if (valor_invalido and i == 0) else "R$ 180,00",
                 valor=None if (valor_invalido and i == 0) else 180.0,
                 tipo_acao=_FRASE_LONGA,

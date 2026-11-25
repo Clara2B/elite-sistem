@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Request, UploadFile
+from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -31,6 +31,7 @@ def _contexto_base(db: Session, usuario: Usuario) -> dict:
         "hoje": date.today(),
         "filtro": {},
         "resultado": None,
+        "audiencias": None,
         "mensagem": None,
         "erro": None,
         "eh_admin": usuario.papel_global in PAPEIS_GLOBAIS,
@@ -75,6 +76,10 @@ def tela(
         else:
             registrar(db, usuario, "GEROU_RELATORIO_AUDIENCIAS", entidade="empresa_cliente", entidade_id=empresa)
             contexto["resultado"] = resultado
+            # Lista EDITÁVEL com as audiências dessa empresa no período — só
+            # admin, mesmo padrão de Laudos/duplicatas e Pendências.
+            if contexto["eh_admin"]:
+                contexto["audiencias"] = audiencias_service.listar_audiencias(db, empresa, periodo_ini, periodo_fim)
     return templates.TemplateResponse(request, "audiencias.html", contexto)
 
 
@@ -103,6 +108,62 @@ async def importar(
         if path:
             remover_temp(path)
     return templates.TemplateResponse(request, "audiencias.html", contexto)
+
+
+@router.post("/{audiencia_id}/editar")
+def editar(
+    audiencia_id: int,
+    empresa: str = Form(...),
+    ano: int = Form(...),
+    mes: int = Form(...),
+    quinzena: int = Form(...),
+    data_recebimento: date = Form(...),
+    nome_cliente: str = Form(...),
+    cpf: str = Form(""),
+    conciliadora: str = Form(""),
+    advogada: str = Form(""),
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Edita UMA audiência específica — a pedido da Clara (2026-11-25), pra
+    corrigir um registro errado sem precisar reimportar a planilha
+    inteira. Só Admin Superior/T.I."""
+    editado = audiencias_service.editar_audiencia(
+        db, audiencia_id, data_recebimento, nome_cliente, cpf or None, conciliadora or None, advogada or None,
+    )
+    if editado:
+        registrar(db, usuario, "EDITOU_AUDIENCIA", entidade="audiencia", entidade_id=str(audiencia_id))
+        mensagem = quote("Registro atualizado.")
+    else:
+        mensagem = quote("Esse registro já não existe mais (pode já ter sido excluído).")
+    return RedirectResponse(
+        f"/app/audiencias?empresa={quote(empresa)}&ano={ano}&mes={mes}&quinzena={quinzena}&mensagem={mensagem}",
+        status_code=303,
+    )
+
+
+@router.post("/{audiencia_id}/excluir")
+def excluir(
+    audiencia_id: int,
+    empresa: str = Form(...),
+    ano: int = Form(...),
+    mes: int = Form(...),
+    quinzena: int = Form(...),
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Exclui UMA audiência específica — a pedido da Clara (2026-11-25). Só
+    Admin Superior/T.I."""
+    excluido = audiencias_service.excluir_audiencia(db, audiencia_id)
+    if excluido:
+        registrar(db, usuario, "EXCLUIU_AUDIENCIA", entidade="audiencia", entidade_id=str(audiencia_id))
+        mensagem = quote("Registro excluído.")
+    else:
+        mensagem = quote("Esse registro já não existe mais (pode já ter sido excluído).")
+    return RedirectResponse(
+        f"/app/audiencias?empresa={quote(empresa)}&ano={ano}&mes={mes}&quinzena={quinzena}&mensagem={mensagem}",
+        status_code=303,
+    )
 
 
 @router.post("/apagar-tudo")

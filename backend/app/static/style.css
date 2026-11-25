@@ -513,6 +513,19 @@ button.botao-linha, .botao.botao-linha {
   font-size: 0.8rem;
 }
 
+/* Campo de texto editável dentro de linha de tabela (edição individual de
+   registro em Correspondentes/Pendências/Audiências/Processos, a pedido da
+   Clara, 2026-11-25) — mesmo padrão já usado inline em empresas.html, numa
+   classe só pra não repetir o style="" em 4 templates novos. */
+input.campo-linha {
+  min-width: 110px;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 0.86rem;
+  width: 100%;
+}
+
 /* ---------- tabelas ---------- */
 
 .tabela-wrap {
