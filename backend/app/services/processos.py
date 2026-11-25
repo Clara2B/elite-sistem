@@ -413,6 +413,9 @@ class RelatorioGeral:
     periodo_fim: date
     secoes: list[SecaoEmpresaGeral] = field(default_factory=list)
     tipos_nao_catalogados: list[str] = field(default_factory=list)
+    pagina_atual: int = 1
+    total_paginas: int = 1
+    total_empresas: int = 0
 
 
 @dataclass
@@ -514,29 +517,55 @@ def ids_empresas_com_processo(db: Session, periodo_ini: date, periodo_fim: date)
     return {p.empresa_cliente_id for p in _processos_em_escopo(db, periodo_ini, periodo_fim)}
 
 
+EMPRESAS_POR_PAGINA_RELATORIO_GERAL = 10
+
+
 def gerar_relatorio_geral(
-    db: Session, periodo_ini: date, periodo_fim: date, filtro_assistente: str | None = None
+    db: Session, periodo_ini: date, periodo_fim: date, filtro_assistente: str | None = None,
+    pagina: int | None = None,
 ) -> RelatorioGeral:
     """Tipo "Geral" (2026-09-25, a pedido da Clara): uma seção por empresa,
     cada uma com duas partes — Parte 1 (Assistente/Nº processo/Evento/Fatal)
     e Parte 2 (Cliente/Nº processo/Último evento/Última observação), uma
     linha por processo em cada parte (não por andamento — por isso o total
-    no topo bate com o número de linhas)."""
+    no topo bate com o número de linhas).
+
+    `pagina`: quando informado, pagina o relatório por EMPRESA (cada seção
+    inteira, nunca quebrada no meio) — a pedido da Clara (2026-11-24): num
+    período longo, com muitas empresas e cada uma com muitos processos, a
+    tela inteira virava uma página enorme e lenta de carregar. `None`
+    (padrão) devolve TODAS as empresas de uma vez, usado pelo PDF/Excel/
+    JSON — quem baixa um relatório espera o relatório completo, não só uma
+    página dele."""
     processos = _filtrar_por_assistente(_processos_em_escopo(db, periodo_ini, periodo_fim), filtro_assistente)
     ultimos = _ultimo_evento_por_processo(db, {p.id for p in processos})
     tipos_cadastrados = tipos_evento_cadastrados(db)
-    tipos_nao_catalogados: set[str] = set()
+    # Cobre TODOS os processos do período, não só os da página atual —
+    # senão o aviso de "tipo de evento não cadastrado" apareceria ou não
+    # dependendo de em qual página a empresa com esse tipo cai.
+    tipos_nao_catalogados = {
+        ultimos[p.id].tipo_evento_nome
+        for p in processos
+        if p.id in ultimos and normalize(ultimos[p.id].tipo_evento_nome) not in tipos_cadastrados
+    }
 
     por_empresa: dict[str, list[Processo]] = {}
     for p in processos:
         por_empresa.setdefault(p.empresa_cliente.nome, []).append(p)
 
+    nomes_empresas = sorted(por_empresa, key=normalize)
+    total_empresas = len(nomes_empresas)
+    if pagina is None:
+        pagina_atual, total_paginas, nomes_pagina = 1, 1, nomes_empresas
+    else:
+        total_paginas = max(1, -(-total_empresas // EMPRESAS_POR_PAGINA_RELATORIO_GERAL))
+        pagina_atual = max(1, min(pagina, total_paginas))
+        inicio = (pagina_atual - 1) * EMPRESAS_POR_PAGINA_RELATORIO_GERAL
+        nomes_pagina = nomes_empresas[inicio:inicio + EMPRESAS_POR_PAGINA_RELATORIO_GERAL]
+
     secoes = []
-    for empresa_nome in sorted(por_empresa, key=normalize):
+    for empresa_nome in nomes_pagina:
         procs = por_empresa[empresa_nome]
-        for p in procs:
-            if p.id in ultimos and normalize(ultimos[p.id].tipo_evento_nome) not in tipos_cadastrados:
-                tipos_nao_catalogados.add(ultimos[p.id].tipo_evento_nome)
         linhas_geral = [
             LinhaProcessoGeral(
                 assistente=p.assistente or "(sem assistente informado)",
@@ -564,6 +593,7 @@ def gerar_relatorio_geral(
     return RelatorioGeral(
         periodo_ini=periodo_ini, periodo_fim=periodo_fim, secoes=secoes,
         tipos_nao_catalogados=sorted(tipos_nao_catalogados),
+        pagina_atual=pagina_atual, total_paginas=total_paginas, total_empresas=total_empresas,
     )
 
 

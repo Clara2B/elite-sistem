@@ -5,7 +5,7 @@ from pathlib import Path
 import openpyxl
 from sqlalchemy import event
 
-from app.models import EventoProcesso, Processo
+from app.models import EmpresaCliente, EventoProcesso, Processo
 from app.services.empresas import get_or_create_empresa
 from app.services.processos import (
     _mes_referencia_da_aba,
@@ -836,3 +836,71 @@ def test_formatar_texto_por_empresa_sem_coluna_assistente(db):
     assert "DANILO" not in texto
     assert "ASSISTENTE" not in texto
     assert "2020202-02.2026.8.11.0111" in texto
+
+
+def _processos_em_12_empresas(db):
+    """12 empresas (EMPRESA01..EMPRESA12, ordem alfabética previsível via
+    normalize), cada uma com 1 processo com andamento dentro do período —
+    usado pra testar a paginação de `gerar_relatorio_geral`."""
+    for i in range(1, 13):
+        numero = f"{i:07d}-01.2026.8.11.0001"
+        processo = _processo(db, numero=numero, empresa=f"EMPRESA{i:02d}")
+        db.add(EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"))
+    db.commit()
+
+
+def test_gerar_relatorio_geral_sem_pagina_devolve_tudo_de_uma_vez(db):
+    """`pagina=None` (padrão, usado por PDF/Excel/JSON) nunca pagina —
+    quem baixa um relatório espera o relatório completo."""
+    _processos_em_12_empresas(db)
+
+    relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30))
+
+    assert len(relatorio.secoes) == 12
+    assert relatorio.pagina_atual == 1
+    assert relatorio.total_paginas == 1
+    assert relatorio.total_empresas == 12
+
+
+def test_gerar_relatorio_geral_pagina_por_empresa(db):
+    """A pedido da Clara (2026-11-25): período longo com muitas empresas
+    pagina por empresa (cada seção inteira, nunca quebrada no meio) —
+    EMPRESAS_POR_PAGINA_RELATORIO_GERAL = 10."""
+    _processos_em_12_empresas(db)
+
+    pagina1 = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30), pagina=1)
+    assert [s.empresa for s in pagina1.secoes] == [f"EMPRESA{i:02d}" for i in range(1, 11)]
+    assert pagina1.pagina_atual == 1
+    assert pagina1.total_paginas == 2
+    assert pagina1.total_empresas == 12
+
+    pagina2 = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30), pagina=2)
+    assert [s.empresa for s in pagina2.secoes] == ["EMPRESA11", "EMPRESA12"]
+    assert pagina2.pagina_atual == 2
+    assert pagina2.total_paginas == 2
+
+
+def test_gerar_relatorio_geral_pagina_fora_do_intervalo_e_ajustada(db):
+    _processos_em_12_empresas(db)
+
+    muito_alem = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30), pagina=99)
+    assert muito_alem.pagina_atual == 2  # existem só 2 páginas — cai na última
+
+    negativa = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30), pagina=0)
+    assert negativa.pagina_atual == 1  # nunca menor que 1
+
+
+def test_gerar_relatorio_geral_tipo_nao_catalogado_detectado_mesmo_fora_da_pagina_atual(db):
+    """O aviso de "tipo de evento não cadastrado" tem que cobrir TODAS as
+    empresas do período, não só as da página atual — senão apareceria ou
+    não dependendo de em qual página a empresa com o tipo estranho cai."""
+    _processos_em_12_empresas(db)
+    # EMPRESA12 cai na 2ª página (ver teste de paginação acima) — o tipo
+    # estranho dela tem que aparecer mesmo pedindo só a 1ª página.
+    processo_fora = db.query(Processo).join(EmpresaCliente).filter(EmpresaCliente.nome == "EMPRESA12").one()
+    db.add(EventoProcesso(processo_id=processo_fora.id, data=date(2026, 9, 6), tipo_evento_nome="TIPO ESTRANHO"))
+    db.commit()
+
+    pagina1 = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30), pagina=1)
+
+    assert "TIPO ESTRANHO" in pagina1.tipos_nao_catalogados
