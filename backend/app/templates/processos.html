@@ -168,6 +168,74 @@
           <p class="vazio">Nenhum processo encontrado nesse período.</p>
         {% endif %}
       </div>
+
+      {% if eh_admin and eventos is not none %}
+        <div class="card">
+          <h2>Andamentos desta empresa no período</h2>
+          <p class="subtitulo">Pra corrigir ou excluir um andamento específico sem reimportar a planilha.</p>
+          {% if eventos %}
+            {% for ev in eventos %}
+              <form id="evento-{{ ev.id }}" method="post" action="/app/processos/eventos/{{ ev.id }}/editar">
+                <input type="hidden" name="periodo_ini" value="{{ filtro.periodo_ini }}">
+                <input type="hidden" name="periodo_fim" value="{{ filtro.periodo_fim }}">
+                <input type="hidden" name="empresa" value="{{ filtro.empresa }}">
+                <input type="hidden" name="assistente" value="{{ filtro.assistente }}">
+              </form>
+            {% endfor %}
+            <div class="tabela-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nº do processo</th><th>Cliente</th><th>Data</th><th>Evento</th>
+                    <th>Observação</th><th>Fatal</th><th style="width:1%;"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for ev in eventos %}
+                    <tr>
+                      <td>{{ ev.numero_processo }}</td>
+                      <td>{{ ev.cliente }}</td>
+                      <td><input type="date" name="data" value="{{ ev.data.isoformat() }}" required form="evento-{{ ev.id }}" class="campo-linha"></td>
+                      <td><input type="text" name="tipo_evento_nome" value="{{ ev.tipo_evento_nome }}" required form="evento-{{ ev.id }}" class="campo-linha"></td>
+                      <td><input type="text" name="observacao" value="{{ ev.observacao or '' }}" form="evento-{{ ev.id }}" class="campo-linha"></td>
+                      <td><input type="checkbox" name="prazo_fatal" value="true" form="evento-{{ ev.id }}" {{ "checked" if ev.prazo_fatal else "" }}></td>
+                      <td>
+                        <div class="acoes-linha">
+                          <button type="submit" form="evento-{{ ev.id }}" class="secundario botao-linha">Salvar</button>
+                          <button type="button" class="perigo botao-linha" data-abrir-confirmacao="modal-excluir-evento-{{ ev.id }}">
+                            {{ icones.icone('lixeira') }}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% for ev in eventos %}
+              <dialog id="modal-excluir-evento-{{ ev.id }}" class="modal-confirmacao">
+                <div class="modal-corpo">
+                  <div class="modal-icone">{{ icones.icone('alerta') }}</div>
+                  <h3>Excluir este andamento?</h3>
+                  <p>{{ ev.numero_processo }} — {{ ev.tipo_evento_nome }} ({{ ev.data.strftime("%d/%m/%Y") }}). Isso vai apagar só esse andamento, sem volta.</p>
+                </div>
+                <div class="modal-acoes">
+                  <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
+                  <form method="post" action="/app/processos/eventos/{{ ev.id }}/excluir">
+                    <input type="hidden" name="periodo_ini" value="{{ filtro.periodo_ini }}">
+                    <input type="hidden" name="periodo_fim" value="{{ filtro.periodo_fim }}">
+                    <input type="hidden" name="empresa" value="{{ filtro.empresa }}">
+                    <input type="hidden" name="assistente" value="{{ filtro.assistente }}">
+                    <button type="submit" class="perigo">Excluir definitivamente</button>
+                  </form>
+                </div>
+              </dialog>
+            {% endfor %}
+          {% else %}
+            <p class="vazio">Nenhum andamento encontrado nesse período.</p>
+          {% endif %}
+        </div>
+      {% endif %}
     {% else %}
       {% if resultado.secoes %}
         {% for secao in resultado.secoes %}

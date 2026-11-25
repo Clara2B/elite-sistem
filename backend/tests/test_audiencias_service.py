@@ -9,9 +9,12 @@ from sqlalchemy import Text
 from app.models import Audiencia
 from app.services.audiencias import (
     apagar_todas_audiencias,
+    editar_audiencia,
+    excluir_audiencia,
     gerar_relatorio,
     ids_empresas_com_audiencia,
     importar_planilha,
+    listar_audiencias,
     periodo_quinzenal,
 )
 from app.services.empresas import get_or_create_empresa
@@ -285,3 +288,69 @@ def test_apagar_todas_audiencias_remove_tudo_e_devolve_a_contagem(db):
 
 def test_apagar_todas_audiencias_com_banco_ja_vazio(db):
     assert apagar_todas_audiencias(db) == 0
+
+
+def test_listar_audiencias_filtra_por_empresa_e_periodo(db):
+    """A pedido da Clara (2026-11-25): pra edição/exclusão individual —
+    mesmo filtro de `gerar_relatorio` (empresa + período)."""
+    empresa = get_or_create_empresa(db, "ALFA")
+    outra_empresa = get_or_create_empresa(db, "BETA")
+    db.add_all(
+        [
+            Audiencia(empresa_cliente_id=empresa.id, nome_cliente="Fulano", data_recebimento=date(2026, 9, 5)),
+            Audiencia(empresa_cliente_id=empresa.id, nome_cliente="Beltrano", data_recebimento=date(2026, 10, 1)),
+            Audiencia(empresa_cliente_id=outra_empresa.id, nome_cliente="Ciclano", data_recebimento=date(2026, 9, 5)),
+        ]
+    )
+    db.commit()
+
+    linhas = listar_audiencias(db, "ALFA", date(2026, 9, 1), date(2026, 9, 30))
+
+    assert [l.nome_cliente for l in linhas] == ["Fulano"]
+
+
+def test_listar_audiencias_empresa_inexistente_gera_erro(db):
+    with pytest.raises(ValueError, match="não foi encontrada"):
+        listar_audiencias(db, "NAO EXISTE", date(2026, 9, 1), date(2026, 9, 30))
+
+
+def test_editar_audiencia_atualiza_campos(db):
+    empresa = get_or_create_empresa(db, "ALFA")
+    audiencia = Audiencia(empresa_cliente_id=empresa.id, nome_cliente="Fulano", data_recebimento=date(2026, 9, 5))
+    db.add(audiencia)
+    db.commit()
+
+    editado = editar_audiencia(
+        db, audiencia.id, data_recebimento=date(2026, 9, 10), nome_cliente="Fulano Corrigido",
+        cpf="123.456.789-01", conciliadora="Conciliadora X", advogada="Dra. Y",
+    )
+
+    assert editado is True
+    db.refresh(audiencia)
+    assert audiencia.data_recebimento == date(2026, 9, 10)
+    assert audiencia.nome_cliente == "Fulano Corrigido"
+    assert audiencia.cpf == "123.456.789-01"
+    assert audiencia.conciliadora == "Conciliadora X"
+    assert audiencia.advogada == "Dra. Y"
+
+
+def test_editar_audiencia_inexistente_devolve_false(db):
+    assert editar_audiencia(db, 999999, date(2026, 9, 5), "X", None, None, None) is False
+
+
+def test_excluir_audiencia_remove_so_o_escolhido(db):
+    empresa = get_or_create_empresa(db, "ALFA")
+    manter = Audiencia(empresa_cliente_id=empresa.id, nome_cliente="Fulano", data_recebimento=date(2026, 9, 5))
+    apagar = Audiencia(empresa_cliente_id=empresa.id, nome_cliente="Beltrano", data_recebimento=date(2026, 9, 6))
+    db.add_all([manter, apagar])
+    db.commit()
+    apagar_id = apagar.id
+
+    assert excluir_audiencia(db, apagar_id) is True
+    assert db.query(Audiencia).count() == 1
+    assert db.get(Audiencia, manter.id) is not None
+    assert db.get(Audiencia, apagar_id) is None
+
+
+def test_excluir_audiencia_inexistente_devolve_false(db):
+    assert excluir_audiencia(db, 999999) is False

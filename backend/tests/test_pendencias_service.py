@@ -3,14 +3,18 @@ from datetime import date
 from pathlib import Path
 
 import openpyxl
+import pytest
 
 from app.models import Cobranca
 from app.services.empresas import get_or_create_empresa
 from app.services.pendencias import (
     apagar_todas_pendencias,
+    editar_cobranca,
+    excluir_cobranca,
     gerar_mensagens,
     ids_empresas_com_pendencia,
     importar_planilha,
+    listar_cobrancas,
 )
 
 _NOME_ABA_ANO_ATUAL = f"{date.today().year} - RECEBIMENTOS EMPRESAS"
@@ -235,3 +239,76 @@ def test_ids_empresas_com_pendencia_so_conta_quem_tem_pendencia_de_verdade(db):
     assert ids == {com_pendencia.id}
     assert paga.id not in ids
     assert sem_nenhuma_cobranca.id not in ids
+
+
+def test_listar_cobrancas_traz_todas_pagas_ou_nao(db):
+    """A pedido da Clara (2026-11-25): diferente de `gerar_mensagens`
+    (que só traz as pendentes), a listagem de edição/exclusão traz TODAS
+    as cobranças da empresa."""
+    empresa = get_or_create_empresa(db, "NOVA GLOBAL")
+    db.add_all(
+        [
+            Cobranca(empresa_cliente_id=empresa.id, data=date(2026, 1, 1), tipo_cobranca="MENSALIDADE",
+                      cobrador="ELITE", valor=100.0, status_pagamento="EM ATRASO"),
+            Cobranca(empresa_cliente_id=empresa.id, data=date(2026, 1, 2), tipo_cobranca="MENSALIDADE",
+                      cobrador="ELITE", valor=200.0, status_pagamento="SIM"),
+        ]
+    )
+    db.commit()
+
+    linhas = listar_cobrancas(db, "NOVA GLOBAL")
+
+    assert len(linhas) == 2
+    assert {l.status_pagamento for l in linhas} == {"EM ATRASO", "SIM"}
+
+
+def test_listar_cobrancas_empresa_inexistente_gera_erro(db):
+    with pytest.raises(ValueError, match="não foi encontrada"):
+        listar_cobrancas(db, "NAO EXISTE")
+
+
+def test_editar_cobranca_atualiza_campos(db):
+    """A pedido da Clara (2026-11-25): corrigir um lançamento errado sem
+    precisar reimportar a planilha inteira."""
+    empresa = get_or_create_empresa(db, "NOVA GLOBAL")
+    cobranca = Cobranca(empresa_cliente_id=empresa.id, data=date(2026, 1, 1), tipo_cobranca="MENSALIDADE",
+                          cobrador="ELITE", valor=100.0, status_pagamento="EM ATRASO")
+    db.add(cobranca)
+    db.commit()
+
+    editado = editar_cobranca(
+        db, cobranca.id, data=date(2026, 2, 1), tipo_cobranca="AUDIENCIA EXTRA",
+        cobrador="EXIMIA", valor=250.0, status_pagamento="SIM",
+    )
+
+    assert editado is True
+    db.refresh(cobranca)
+    assert cobranca.data == date(2026, 2, 1)
+    assert cobranca.tipo_cobranca == "AUDIENCIA EXTRA"
+    assert cobranca.cobrador == "EXIMIA"
+    assert cobranca.valor == 250.0
+    assert cobranca.status_pagamento == "SIM"
+
+
+def test_editar_cobranca_inexistente_devolve_false(db):
+    assert editar_cobranca(db, 999999, date(2026, 1, 1), "X", "ELITE", 1.0, None) is False
+
+
+def test_excluir_cobranca_remove_so_o_escolhido(db):
+    empresa = get_or_create_empresa(db, "NOVA GLOBAL")
+    manter = Cobranca(empresa_cliente_id=empresa.id, data=date(2026, 1, 1), tipo_cobranca="MENSALIDADE",
+                        cobrador="ELITE", valor=100.0, status_pagamento="EM ATRASO")
+    apagar = Cobranca(empresa_cliente_id=empresa.id, data=date(2026, 1, 2), tipo_cobranca="MENSALIDADE",
+                        cobrador="ELITE", valor=200.0, status_pagamento="SIM")
+    db.add_all([manter, apagar])
+    db.commit()
+    apagar_id = apagar.id
+
+    assert excluir_cobranca(db, apagar_id) is True
+    assert db.query(Cobranca).count() == 1
+    assert db.get(Cobranca, manter.id) is not None
+    assert db.get(Cobranca, apagar_id) is None
+
+
+def test_excluir_cobranca_inexistente_devolve_false(db):
+    assert excluir_cobranca(db, 999999) is False

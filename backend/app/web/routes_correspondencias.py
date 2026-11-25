@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import date
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Request, UploadFile
+from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -128,6 +128,60 @@ def recalcular_valores(
     )
     mensagem = quote(f"{total} correspondente(s) com valor zerado foram corrigidos.")
     return RedirectResponse(f"/app/correspondencias?mensagem={mensagem}", status_code=303)
+
+
+@router.post("/{correspondencia_id}/editar")
+def editar(
+    correspondencia_id: int,
+    empresa: str = Form(...),
+    mes: str = Form(...),
+    advogado: str = Form(...),
+    autor: str = Form(...),
+    adv_preposto: str = Form(...),
+    valor_texto: str = Form(...),
+    tipo_acao: str = Form(...),
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Edita UM registro específico — a pedido da Clara (2026-11-25), pra
+    corrigir um registro errado sem precisar reimportar a planilha
+    inteira. Só Admin Superior/T.I."""
+    editado = correspondencias_service.editar_correspondencia(
+        db, correspondencia_id, advogado, autor, adv_preposto, valor_texto, tipo_acao,
+    )
+    if editado:
+        registrar(
+            db, usuario, "EDITOU_CORRESPONDENTE", entidade="correspondencia", entidade_id=str(correspondencia_id),
+        )
+        mensagem = quote("Registro atualizado.")
+    else:
+        mensagem = quote("Esse registro já não existe mais (pode já ter sido excluído).")
+    return RedirectResponse(
+        f"/app/correspondencias?empresa={quote(empresa)}&mes={quote(mes)}&mensagem={mensagem}", status_code=303
+    )
+
+
+@router.post("/{correspondencia_id}/excluir")
+def excluir(
+    correspondencia_id: int,
+    empresa: str = Form(...),
+    mes: str = Form(...),
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Exclui UM registro específico — a pedido da Clara (2026-11-25). Só
+    Admin Superior/T.I."""
+    excluido = correspondencias_service.excluir_correspondencia(db, correspondencia_id)
+    if excluido:
+        registrar(
+            db, usuario, "EXCLUIU_CORRESPONDENTE", entidade="correspondencia", entidade_id=str(correspondencia_id),
+        )
+        mensagem = quote("Registro excluído.")
+    else:
+        mensagem = quote("Esse registro já não existe mais (pode já ter sido excluído).")
+    return RedirectResponse(
+        f"/app/correspondencias?empresa={quote(empresa)}&mes={quote(mes)}&mensagem={mensagem}", status_code=303
+    )
 
 
 @router.post("/apagar-tudo")

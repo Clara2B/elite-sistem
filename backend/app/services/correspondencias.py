@@ -158,6 +158,7 @@ def apagar_todas_correspondencias(db: Session) -> int:
 
 @dataclass
 class LinhaCorrespondencia:
+    id: int
     advogado: str
     autor: str
     adv_preposto: str
@@ -206,7 +207,7 @@ def gerar_relatorio(db: Session, empresa_nome: str, mes: str) -> Correspondencia
 
     linhas = [
         LinhaCorrespondencia(
-            advogado=c.advogado, autor=c.autor, adv_preposto=c.adv_preposto,
+            id=c.id, advogado=c.advogado, autor=c.autor, adv_preposto=c.adv_preposto,
             valor_texto=c.valor_texto, valor=c.valor, tipo_acao=c.tipo_acao,
         )
         for c in db.scalars(query)
@@ -216,3 +217,36 @@ def gerar_relatorio(db: Session, empresa_nome: str, mes: str) -> Correspondencia
     total = sum(l.valor for l in linhas if l.valor is not None)
 
     return CorrespondenciasResult(empresa=empresa.nome, mes=mes_normalizado, linhas=linhas, total=total)
+
+
+def editar_correspondencia(
+    db: Session, correspondencia_id: int, advogado: str, autor: str, adv_preposto: str,
+    valor_texto: str, tipo_acao: str,
+) -> bool:
+    """Edita um registro específico de Correspondência — a pedido da
+    Clara (2026-11-25): corrigir um registro errado sem precisar reimportar
+    a planilha inteira. `valor` é recalculado a partir do `valor_texto`
+    novo, mesma regra do import (`parse_valor_monetario`). Devolve False se
+    o id não existir (ex.: já foi excluído por outra aba/pessoa)."""
+    c = db.get(Correspondencia, correspondencia_id)
+    if c is None:
+        return False
+    c.advogado = advogado
+    c.autor = autor
+    c.adv_preposto = adv_preposto
+    c.valor_texto = valor_texto
+    c.valor = parse_valor_monetario(valor_texto)
+    c.tipo_acao = tipo_acao
+    db.commit()
+    return True
+
+
+def excluir_correspondencia(db: Session, correspondencia_id: int) -> bool:
+    """Exclui UM registro específico de Correspondência — a pedido da
+    Clara (2026-11-25). Devolve False se o id não existir."""
+    c = db.get(Correspondencia, correspondencia_id)
+    if c is None:
+        return False
+    db.delete(c)
+    db.commit()
+    return True

@@ -297,6 +297,63 @@ def ids_empresas_com_pendencia(db: Session) -> set[int]:
     return ids
 
 
+@dataclass
+class LinhaCobranca:
+    id: int
+    data: date
+    tipo_cobranca: str
+    cobrador: str
+    valor: float
+    status_pagamento: str | None
+
+
+def listar_cobrancas(db: Session, empresa_nome: str) -> list[LinhaCobranca]:
+    """Todas as cobranças de uma empresa — pagas ou não, diferente de
+    `gerar_mensagens` (que só traz as pendentes) — pra edição/exclusão
+    individual (a pedido da Clara, 2026-11-25)."""
+    empresa = resolver_empresa_por_nome(db, empresa_nome)
+    if empresa is None:
+        raise ValueError(f"A empresa '{empresa_nome}' não foi encontrada.")
+    query = select(Cobranca).where(Cobranca.empresa_cliente_id == empresa.id).order_by(Cobranca.data)
+    return [
+        LinhaCobranca(
+            id=c.id, data=c.data, tipo_cobranca=c.tipo_cobranca, cobrador=c.cobrador,
+            valor=c.valor, status_pagamento=c.status_pagamento,
+        )
+        for c in db.scalars(query)
+    ]
+
+
+def editar_cobranca(
+    db: Session, cobranca_id: int, data: date, tipo_cobranca: str, cobrador: str,
+    valor: float, status_pagamento: str | None,
+) -> bool:
+    """Edita UMA cobrança específica — a pedido da Clara (2026-11-25), pra
+    corrigir um lançamento errado sem precisar reimportar a planilha
+    inteira. Devolve False se o id não existir."""
+    c = db.get(Cobranca, cobranca_id)
+    if c is None:
+        return False
+    c.data = data
+    c.tipo_cobranca = tipo_cobranca
+    c.cobrador = cobrador
+    c.valor = valor
+    c.status_pagamento = status_pagamento
+    db.commit()
+    return True
+
+
+def excluir_cobranca(db: Session, cobranca_id: int) -> bool:
+    """Exclui UMA cobrança específica — a pedido da Clara (2026-11-25).
+    Devolve False se o id não existir."""
+    c = db.get(Cobranca, cobranca_id)
+    if c is None:
+        return False
+    db.delete(c)
+    db.commit()
+    return True
+
+
 def gerar_mensagens(db: Session, empresa_nome: str) -> list[MensagemPendencia]:
     empresa = resolver_empresa_por_nome(db, empresa_nome)
     if empresa is None:
