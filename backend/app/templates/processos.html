@@ -212,6 +212,24 @@
             </div>
           </div>
         {% endfor %}
+        {% if resultado.total_paginas > 1 %}
+          <div class="card">
+            <p class="subtitulo">
+              Página {{ resultado.pagina_atual }} de {{ resultado.total_paginas }}
+              ({{ resultado.total_empresas }} empresa(s) no total — o PDF/Excel abaixo sempre traz todas, não só
+              a página atual)
+            </p>
+            <div class="acoes-linha">
+              {% set base_url = "/app/processos?periodo_ini=" + (filtro.periodo_ini | urlencode) + "&periodo_fim=" + (filtro.periodo_fim | urlencode) + "&tipo=geral&assistente=" + (filtro.assistente | urlencode) %}
+              {% if resultado.pagina_atual > 1 %}
+                <a class="botao secundario" href="{{ base_url }}&pagina={{ resultado.pagina_atual - 1 }}">← Página anterior</a>
+              {% endif %}
+              {% if resultado.pagina_atual < resultado.total_paginas %}
+                <a class="botao secundario" href="{{ base_url }}&pagina={{ resultado.pagina_atual + 1 }}">Próxima página →</a>
+              {% endif %}
+            </div>
+          </div>
+        {% endif %}
         <div class="card">
           <a class="botao secundario"
              href="/processos/relatorio.pdf?periodo_ini={{ filtro.periodo_ini | urlencode }}&periodo_fim={{ filtro.periodo_fim | urlencode }}&tipo=geral&assistente={{ filtro.assistente | urlencode }}">

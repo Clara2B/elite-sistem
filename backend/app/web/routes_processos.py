@@ -52,6 +52,7 @@ def tela(
     tipo: str = "geral",
     empresa: str | None = None,
     assistente: str | None = None,
+    pagina: int = 1,
     mensagem: str | None = None,
     usuario: Usuario = Depends(_acesso_elite),
     db: Session = Depends(get_db),
@@ -80,8 +81,11 @@ def tela(
                 db, empresa, contexto["filtro"]["periodo_ini"], contexto["filtro"]["periodo_fim"], assistente or None,
             )
         else:
+            # Paginado por empresa (a pedido da Clara, 2026-11-25) — período
+            # longo com muitas empresas virava uma página enorme e lenta.
             resultado = processos_service.gerar_relatorio_geral(
                 db, contexto["filtro"]["periodo_ini"], contexto["filtro"]["periodo_fim"], assistente or None,
+                pagina=pagina,
             )
     except ValueError as e:
         contexto["erro"] = str(e)
