@@ -18,11 +18,16 @@ from app.services.empresas import get_or_create_empresa
 
 
 def _planilha_pendencias_bytes() -> bytes:
+    """Schema atual (reestruturado em 2026-11-24, a pedido da Clara): só a
+    aba "<ano atual> - RECEBIMENTOS EMPRESAS" é lida, com "CLIENTE"/"VALOR
+    FALTANTE" em vez de "EMPRESA"/"VALOR" — ver app/services/pendencias.py.
+    "EM ATRASO" (não "NÃO") conta como pendente nessa regra."""
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.append(["DATA", "EMPRESA", "TIPO DE COBRANÇA", "VALOR", "PAGO"])
-    ws.append([date(2026, 9, 5), "ABSOLUTA", "MENSALIDADE", "R$ 180,00", "NÃO"])
-    ws.append([date(2026, 9, 5), "ABSOLUTA", "AUDIÊNCIA EXTRAJUDICIAL", "R$ 400,00", "NÃO"])
+    ws.title = f"{date.today().year} - RECEBIMENTOS EMPRESAS"
+    ws.append(["DATA", "CLIENTE", "CNPJ", "VALOR FALTANTE", "VALOR Á RECEBER", "TIPO DE COBRANÇA", "PAGO"])
+    ws.append([date(2026, 9, 5), "ABSOLUTA", "00.000.000/0001-00", 180.0, None, "MENSALIDADE", "EM ATRASO"])
+    ws.append([date(2026, 9, 5), "ABSOLUTA", "00.000.000/0001-00", 400.0, None, "AUDIÊNCIA EXTRAJUDICIAL", "EM ATRASO"])
     buffer = io.BytesIO()
     wb.save(buffer)
     return buffer.getvalue()

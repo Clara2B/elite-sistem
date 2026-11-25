@@ -2,8 +2,10 @@
 Testes de API JSON continuam em test_auth.py/test_permissoes.py; aqui só o
 que é específico do fluxo de navegador (login por formulário, redirecionamento,
 página 403)."""
+import io
 from datetime import date
 
+import openpyxl
 from sqlalchemy import select
 
 from app.auth import hash_senha
@@ -692,9 +694,16 @@ def test_erro_nao_tratado_em_rota_html_mostra_pagina_estilizada(client, db, monk
     cliente_sem_relancar = TestClient(fastapi_app, raise_server_exceptions=False)
     cliente_sem_relancar.cookies = client.cookies
 
+    # Arquivo .xlsx de verdade (ZIP válido) — não é esse arquivo que
+    # provoca o erro simulado, é `importar_planilha` monkeypatchado acima;
+    # um conteúdo falso (ex.: b"conteudo") seria rejeitado antes disso pela
+    # validação de tipo de arquivo (`app.api._shared.salvar_temp`), sem
+    # nunca chegar no erro que este teste quer provocar.
+    buffer = io.BytesIO()
+    openpyxl.Workbook().save(buffer)
     resposta = cliente_sem_relancar.post(
         "/app/audiencias/import",
-        files={"arquivo": ("planilha.xlsx", b"conteudo", "application/vnd.ms-excel")},
+        files={"arquivo": ("planilha.xlsx", buffer.getvalue(), "application/vnd.ms-excel")},
     )
     assert resposta.status_code == 500
     assert "algo deu errado" in resposta.text.lower()
