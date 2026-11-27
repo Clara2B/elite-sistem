@@ -15,11 +15,13 @@ Agora o import abre SÓ a aba "<ano atual> - RECEBIMENTOS EMPRESAS" (nunca
 outra aba da mesma planilha) e lê pelas colunas reais dela: "CLIENTE"
 (nome da empresa), "VALOR FALTANTE" (valor a cobrar) e "PAGO".
 
-Pendente = campo PAGO em {"VERIFICAR", "ACORDO", "PENDENTE", "EM ATRASO"}
-— lista exata confirmada com a Clara em 2026-11-24. "SIM" é pago (não
-cobra) e "NÃO" foi explicitamente excluído da lista por ela nessa mesma
-data (revoga a regra anterior, de 2026-09-24, que tratava "NÃO" como
-pendência também — ver DECISIONS.md).
+Pendente = campo PAGO em {"VERIFICAR", "PENDENTE", "EM ATRASO"} — lista
+confirmada com a Clara em 2026-11-24. "SIM" é pago (não cobra) e "NÃO" foi
+explicitamente excluído da lista por ela nessa mesma data (revoga a regra
+anterior, de 2026-09-24, que tratava "NÃO" como pendência também — ver
+DECISIONS.md). "ACORDO" também foi tirado da lista a pedido da Clara em
+2026-11-27: uma cobrança já acordada não deve aparecer como pendência nem
+gerar mensagem de cobrança.
 
 Dedup por (data+empresa+tipo+valor) com SIM sempre vencendo;
 classificação automática do cobrador (tipo contendo "AUDIÊNCIA" -> EXIMIA,
@@ -53,7 +55,7 @@ _logger = logging.getLogger("elite_sistem.import")
 NOME_ABA_SUFIXO = "RECEBIMENTOS EMPRESAS"
 COLUNAS_OBRIGATORIAS = ["DATA", "CLIENTE", "TIPO DE COBRANÇA", "VALOR FALTANTE"]
 CHAVE_DUPLICIDADE = ["DATA", "CLIENTE", "TIPO DE COBRANÇA", "VALOR FALTANTE"]
-STATUS_PENDENTE = {normalize(s) for s in ("VERIFICAR", "ACORDO", "PENDENTE", "EM ATRASO")}
+STATUS_PENDENTE = {normalize(s) for s in ("VERIFICAR", "PENDENTE", "EM ATRASO")}
 _PRIORIDADE_PAGO = {"SIM": 0}
 
 PIX_EXIMIA = "✅ PIX: CNPJ: 655965130001-52 \nEXIMIA CAMARA DE CONCILIACAO MEDIACAO & ARBITRAGEM LTDA"

@@ -62,10 +62,11 @@ def test_classifica_cobrador_por_tipo_e_ignora_pago(db):
 
 def test_pago_sim_ou_nao_nao_contam_como_pendente(db):
     """Regra reestruturada em 2026-11-24 a pedido da Clara: só entram na
-    mensagem de cobrança os status VERIFICAR/ACORDO/PENDENTE/EM ATRASO.
-    "SIM" é pago. "NÃO" foi EXCLUÍDO explicitamente por ela nessa mesma
-    conversa — revoga a regra anterior (2026-09-24) que tratava "NÃO"
-    como pendência também."""
+    mensagem de cobrança os status VERIFICAR/PENDENTE/EM ATRASO (ACORDO
+    tirado da lista em 2026-11-27, também a pedido dela). "SIM" é pago.
+    "NÃO" foi EXCLUÍDO explicitamente por ela nessa mesma conversa — revoga
+    a regra anterior (2026-09-24) que tratava "NÃO" como pendência
+    também."""
     empresa = get_or_create_empresa(db, "NOVA GLOBAL")
     db.add(
         Cobranca(
@@ -90,6 +91,28 @@ def test_pago_sim_ou_nao_nao_contam_como_pendente(db):
     db.commit()
 
     assert gerar_mensagens(db, "NOVA GLOBAL") == []
+
+
+def test_pago_acordo_nao_conta_mais_como_pendente(db):
+    """A pedido da Clara (2026-11-27): "ACORDO" foi tirado da lista de
+    status pendentes — uma cobrança já acordada não deve mais aparecer
+    como pendência nem gerar mensagem de cobrança (revoga a regra anterior
+    de 2026-11-24, que incluía ACORDO na lista)."""
+    empresa = get_or_create_empresa(db, "NOVA GLOBAL")
+    db.add(
+        Cobranca(
+            empresa_cliente_id=empresa.id,
+            data=date(2026, 1, 1),
+            tipo_cobranca="MENSALIDADE PROCESSUAL",
+            cobrador="ELITE",
+            valor=150.0,
+            status_pagamento="ACORDO",
+        )
+    )
+    db.commit()
+
+    assert gerar_mensagens(db, "NOVA GLOBAL") == []
+    assert empresa.id not in ids_empresas_com_pendencia(db)
 
 
 def test_pago_vazio_nao_conta_como_pendente(db):
