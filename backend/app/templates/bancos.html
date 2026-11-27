@@ -3,6 +3,7 @@
 {% block conteudo %}
   {% import "_icones.html" as icones %}
   {% import "_flash.html" as flash %}
+  {% import "_paginacao.html" as paginacao %}
   <h1>Bancos</h1>
   <p class="subtitulo">
     Cadastro de bancos — alimenta o seletor "Banco" da Solicitação de Audiência e a Carta Convite Banco.
@@ -41,7 +42,13 @@
   </div>
 
   <div class="card">
-    <div class="card-header"><h2>Cadastrados ({{ bancos|length }})</h2></div>
+    <div class="card-header">
+      <h2>Cadastrados ({{ pagina.total_itens }})</h2>
+      <form method="get" action="/app/bancos">
+        <input type="text" name="busca" value="{{ busca }}" class="busca-lista" placeholder="Buscar por nome, CNPJ ou e-mail..."
+               aria-label="Buscar banco por nome, CNPJ ou e-mail" autocomplete="off">
+      </form>
+    </div>
     {% if bancos %}
       {% for b in bancos %}
         <form id="banco-{{ b.id }}" method="post" action="/app/bancos/{{ b.id }}"></form>
@@ -109,6 +116,9 @@
           </div>
         </dialog>
       {% endfor %}
+      {{ paginacao.nav(pagina, "/app/bancos", busca) }}
+    {% elif busca %}
+      <p class="vazio">Nenhum banco encontrado para essa busca.</p>
     {% else %}
       <p class="vazio">Nenhum banco cadastrado ainda.</p>
     {% endif %}
