@@ -22,9 +22,11 @@ def listar_funcionarios(db: Session, apenas_ativos: bool = True) -> list[Funcion
 def criar_funcionario(db: Session, nome: str) -> Funcionario:
     nome = nome.strip()
     alvo = normalize(nome)
-    for existente in db.scalars(select(Funcionario)):
-        if normalize(existente.nome) == alvo:
-            raise ValueError(f"Já existe um assistente chamado '{existente.nome}'.")
+    # Só id/nome, não os objetos Funcionario completos (2026-10-14,
+    # auditoria M20) — mesmo motivo de app/services/empresas.py.
+    for _, existente_nome in db.execute(select(Funcionario.id, Funcionario.nome)):
+        if normalize(existente_nome) == alvo:
+            raise ValueError(f"Já existe um assistente chamado '{existente_nome}'.")
     funcionario = Funcionario(nome=nome)
     db.add(funcionario)
     db.commit()
@@ -37,9 +39,9 @@ def atualizar_funcionario(db: Session, funcionario_id: int, nome: str) -> Funcio
         raise ValueError(f"Assistente {funcionario_id} não encontrado.")
     nome = nome.strip()
     alvo = normalize(nome)
-    for existente in db.scalars(select(Funcionario)):
-        if existente.id != funcionario_id and normalize(existente.nome) == alvo:
-            raise ValueError(f"Já existe um assistente chamado '{existente.nome}'.")
+    for existente_id, existente_nome in db.execute(select(Funcionario.id, Funcionario.nome)):
+        if existente_id != funcionario_id and normalize(existente_nome) == alvo:
+            raise ValueError(f"Já existe um assistente chamado '{existente_nome}'.")
     funcionario.nome = nome
     db.commit()
     return funcionario

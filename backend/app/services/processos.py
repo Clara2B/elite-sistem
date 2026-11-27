@@ -353,6 +353,12 @@ def apagar_todos_processos(db: Session) -> int:
 
 
 def tipos_evento_cadastrados(db: Session) -> set[str]:
+    """Usada por gerar_relatorio_geral/gerar_relatorio_por_empresa pra
+    avisar quando o "último evento" de um processo tem um tipo fora do
+    catálogo — mesmo padrão de TipoLaudo em Laudos (ver
+    services/laudos.py::_valor_tipo/tipos_sem_valor), completado aqui
+    2026-10-16, auditoria M41 (a Clara confirmou que a ideia original era
+    essa, só tinha ficado pela metade: modelo/seed existiam, nada lia)."""
     return {normalize(t.nome) for t in db.scalars(select(TipoEvento))}
 
 
@@ -406,6 +412,10 @@ class RelatorioGeral:
     periodo_ini: date
     periodo_fim: date
     secoes: list[SecaoEmpresaGeral] = field(default_factory=list)
+    tipos_nao_catalogados: list[str] = field(default_factory=list)
+    pagina_atual: int = 1
+    total_paginas: int = 1
+    total_empresas: int = 0
 
 
 @dataclass
@@ -424,6 +434,7 @@ class RelatorioPorEmpresa:
     periodo_fim: date
     total_processos: int
     linhas: list[LinhaProcessoPorEmpresa] = field(default_factory=list)
+    tipos_nao_catalogados: list[str] = field(default_factory=list)
 
 
 def _processos_em_escopo(
@@ -498,23 +509,62 @@ def _filtrar_por_assistente(processos: list[Processo], filtro_assistente: str | 
     return [p for p in processos if normalize(p.assistente or "") == alvo]
 
 
+def ids_empresas_com_processo(db: Session, periodo_ini: date, periodo_fim: date) -> set[int]:
+    """IDs de empresa-cliente com pelo menos um processo em escopo no
+    período informado — mesmo filtro de `_processos_em_escopo`. Usado pra
+    filtrar o menu de empresas da tela (a pedido da Clara, 2026-11-24: só
+    mostrar quem tem resultado)."""
+    return {p.empresa_cliente_id for p in _processos_em_escopo(db, periodo_ini, periodo_fim)}
+
+
+EMPRESAS_POR_PAGINA_RELATORIO_GERAL = 10
+
+
 def gerar_relatorio_geral(
-    db: Session, periodo_ini: date, periodo_fim: date, filtro_assistente: str | None = None
+    db: Session, periodo_ini: date, periodo_fim: date, filtro_assistente: str | None = None,
+    pagina: int | None = None,
 ) -> RelatorioGeral:
     """Tipo "Geral" (2026-09-25, a pedido da Clara): uma seção por empresa,
     cada uma com duas partes — Parte 1 (Assistente/Nº processo/Evento/Fatal)
     e Parte 2 (Cliente/Nº processo/Último evento/Última observação), uma
     linha por processo em cada parte (não por andamento — por isso o total
-    no topo bate com o número de linhas)."""
+    no topo bate com o número de linhas).
+
+    `pagina`: quando informado, pagina o relatório por EMPRESA (cada seção
+    inteira, nunca quebrada no meio) — a pedido da Clara (2026-11-24): num
+    período longo, com muitas empresas e cada uma com muitos processos, a
+    tela inteira virava uma página enorme e lenta de carregar. `None`
+    (padrão) devolve TODAS as empresas de uma vez, usado pelo PDF/Excel/
+    JSON — quem baixa um relatório espera o relatório completo, não só uma
+    página dele."""
     processos = _filtrar_por_assistente(_processos_em_escopo(db, periodo_ini, periodo_fim), filtro_assistente)
     ultimos = _ultimo_evento_por_processo(db, {p.id for p in processos})
+    tipos_cadastrados = tipos_evento_cadastrados(db)
+    # Cobre TODOS os processos do período, não só os da página atual —
+    # senão o aviso de "tipo de evento não cadastrado" apareceria ou não
+    # dependendo de em qual página a empresa com esse tipo cai.
+    tipos_nao_catalogados = {
+        ultimos[p.id].tipo_evento_nome
+        for p in processos
+        if p.id in ultimos and normalize(ultimos[p.id].tipo_evento_nome) not in tipos_cadastrados
+    }
 
     por_empresa: dict[str, list[Processo]] = {}
     for p in processos:
         por_empresa.setdefault(p.empresa_cliente.nome, []).append(p)
 
+    nomes_empresas = sorted(por_empresa, key=normalize)
+    total_empresas = len(nomes_empresas)
+    if pagina is None:
+        pagina_atual, total_paginas, nomes_pagina = 1, 1, nomes_empresas
+    else:
+        total_paginas = max(1, -(-total_empresas // EMPRESAS_POR_PAGINA_RELATORIO_GERAL))
+        pagina_atual = max(1, min(pagina, total_paginas))
+        inicio = (pagina_atual - 1) * EMPRESAS_POR_PAGINA_RELATORIO_GERAL
+        nomes_pagina = nomes_empresas[inicio:inicio + EMPRESAS_POR_PAGINA_RELATORIO_GERAL]
+
     secoes = []
-    for empresa_nome in sorted(por_empresa, key=normalize):
+    for empresa_nome in nomes_pagina:
         procs = por_empresa[empresa_nome]
         linhas_geral = [
             LinhaProcessoGeral(
@@ -540,7 +590,11 @@ def gerar_relatorio_geral(
             )
         )
 
-    return RelatorioGeral(periodo_ini=periodo_ini, periodo_fim=periodo_fim, secoes=secoes)
+    return RelatorioGeral(
+        periodo_ini=periodo_ini, periodo_fim=periodo_fim, secoes=secoes,
+        tipos_nao_catalogados=sorted(tipos_nao_catalogados),
+        pagina_atual=pagina_atual, total_paginas=total_paginas, total_empresas=total_empresas,
+    )
 
 
 def gerar_relatorio_por_empresa(
@@ -564,6 +618,13 @@ def gerar_relatorio_por_empresa(
     ultimos = _ultimo_evento_por_processo(db, {p.id for p in processos})
     processos.sort(key=lambda p: (normalize(p.assistente or ""), p.numero_processo))
 
+    tipos_cadastrados = tipos_evento_cadastrados(db)
+    tipos_nao_catalogados = {
+        ultimos[p.id].tipo_evento_nome
+        for p in processos
+        if p.id in ultimos and normalize(ultimos[p.id].tipo_evento_nome) not in tipos_cadastrados
+    }
+
     linhas = [
         LinhaProcessoPorEmpresa(
             assistente=p.assistente or "(sem assistente informado)",
@@ -578,7 +639,79 @@ def gerar_relatorio_por_empresa(
     return RelatorioPorEmpresa(
         empresa=empresa.nome, periodo_ini=periodo_ini, periodo_fim=periodo_fim,
         total_processos=len(processos), linhas=linhas,
+        tipos_nao_catalogados=sorted(tipos_nao_catalogados),
     )
+
+
+@dataclass
+class LinhaEventoProcesso:
+    id: int
+    numero_processo: str
+    cliente: str
+    data: date
+    tipo_evento_nome: str
+    observacao: str | None
+    prazo_fatal: bool
+
+
+def listar_eventos(db: Session, empresa_nome: str, periodo_ini: date, periodo_fim: date) -> list[LinhaEventoProcesso]:
+    """Andamentos (EventoProcesso) de uma empresa dentro do período — pra
+    edição/exclusão individual (a pedido da Clara, 2026-11-25). Diferente
+    de `gerar_relatorio_por_empresa` (que mostra só o ÚLTIMO evento de cada
+    processo, excluindo os de "data de liberação" do filtro por período),
+    aqui lista TODOS os andamentos reais do período, pra poder corrigir ou
+    excluir qualquer um deles especificamente."""
+    alvo_empresa = normalize(empresa_nome)
+    empresa = next((e for e in db.scalars(select(EmpresaCliente)) if normalize(e.nome) == alvo_empresa), None)
+    if empresa is None:
+        raise ValueError(f"A empresa '{empresa_nome}' não foi encontrada.")
+
+    query = (
+        select(EventoProcesso, Processo)
+        .join(Processo, EventoProcesso.processo_id == Processo.id)
+        .where(
+            Processo.empresa_cliente_id == empresa.id,
+            EventoProcesso.data >= periodo_ini,
+            EventoProcesso.data <= periodo_fim,
+        )
+        .order_by(EventoProcesso.data)
+    )
+    return [
+        LinhaEventoProcesso(
+            id=evento.id, numero_processo=processo.numero_processo, cliente=processo.nome_cliente or "—",
+            data=evento.data, tipo_evento_nome=evento.tipo_evento_nome, observacao=evento.observacao,
+            prazo_fatal=evento.prazo_fatal,
+        )
+        for evento, processo in db.execute(query)
+    ]
+
+
+def editar_evento(
+    db: Session, evento_id: int, data: date, tipo_evento_nome: str, observacao: str | None, prazo_fatal: bool,
+) -> bool:
+    """Edita UM andamento específico — a pedido da Clara (2026-11-25), pra
+    corrigir um registro errado sem precisar reimportar a planilha
+    inteira. Devolve False se o id não existir."""
+    evento = db.get(EventoProcesso, evento_id)
+    if evento is None:
+        return False
+    evento.data = data
+    evento.tipo_evento_nome = tipo_evento_nome
+    evento.observacao = observacao or None
+    evento.prazo_fatal = prazo_fatal
+    db.commit()
+    return True
+
+
+def excluir_evento(db: Session, evento_id: int) -> bool:
+    """Exclui UM andamento específico — a pedido da Clara (2026-11-25).
+    Devolve False se o id não existir."""
+    evento = db.get(EventoProcesso, evento_id)
+    if evento is None:
+        return False
+    db.delete(evento)
+    db.commit()
+    return True
 
 
 def formatar_texto_geral(relatorio: RelatorioGeral) -> str:

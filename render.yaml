@@ -1,0 +1,63 @@
+# Blueprint do Render (M36 da auditoria, docs/auditoria-melhorias.md) —
+# versiona a configuração que hoje só existe no painel deles, pra não
+# perder acesso a ela se perder acesso ao painel. Espelha o que está
+# configurado em produção (confirmado com a Clara em 2026-10-15); não
+# muda nada sozinho — o Render só aplica isto se o serviço for conectado
+# a este blueprint (New > Blueprint, ou "Sync" na página do serviço), o
+# que não é automático só por este arquivo existir no repositório.
+#
+# As variáveis de ambiente (envVars) ficam com `sync: false` de
+# propósito: o Render preserva o valor já configurado no painel, nunca
+# sobrescreve com algo vindo daqui — os segredos (connection string do
+# banco, etc.) nunca aparecem neste arquivo, só os nomes.
+services:
+  - type: web
+    name: elite-sistem
+    runtime: python
+    plan: free
+    region: oregon
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # Connection string do Supabase (Postgres) — obrigatória em produção.
+      - key: DATABASE_URL
+        sync: false
+      # Só usadas pra criar o primeiro Admin Superior, quando ainda não
+      # existe nenhum usuário com papel_global no banco (ver
+      # app/db.py::_bootstrap_admin). Podem ser removidas do Render depois
+      # do primeiro login, sem afetar nada (ver app/config.py).
+      - key: ADMIN_BOOTSTRAP_EMAIL
+        sync: false
+      - key: ADMIN_BOOTSTRAP_SENHA
+        sync: false
+      # Opcional — aviso complementar no Discord quando um chamado é
+      # aberto (ver services/suporte.py). Sem ela, o chamado continua
+      # sendo salvo normalmente, só não avisa ninguém na hora.
+      - key: DISCORD_WEBHOOK_SUPORTE
+        sync: false
+      # Fase 1 — Solicitação de Audiência (2026-10-16): acesso à planilha
+      # de controle (Google Sheets) via conta de serviço do Google (ver
+      # app/services/google_sheets.py). GOOGLE_SERVICE_ACCOUNT_JSON é o
+      # conteúdo inteiro do .json da conta de serviço, não um caminho de
+      # arquivo. GOOGLE_SHEETS_ID é o ID da planilha (trecho entre /d/ e
+      # /edit na URL) — em produção, a planilha real; em dev/teste, a
+      # cópia com dados fictícios.
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: GOOGLE_SHEETS_ID
+        sync: false
+      # Envio das Cartas Convite por e-mail (Fase 1, 2026-10-16) — Resend
+      # (ver app/services/email_resend.py e DECISIONS.md; trocado da
+      # Postmark em 2026-10-23, conta presa em aprovação pendente).
+      # RESEND_REMETENTE precisa ser um e-mail de um domínio verificado na
+      # conta Resend. EMAIL_ENVIO_REAL fica de fora de propósito — sem ela
+      # (ausente = false), todo e-mail vai só pra EMAIL_DESTINATARIO_TESTE,
+      # nunca pro cliente/banco real; só ligar EMAIL_ENVIO_REAL=true quando
+      # a Clara decidir ir pra produção de verdade.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_REMETENTE
+        sync: false
+      - key: EMAIL_DESTINATARIO_TESTE
+        sync: false

@@ -1,0 +1,15 @@
+{% macro nav(pagina, base_url, busca) %}
+  {% if pagina.total_paginas > 1 %}
+    <div class="paginacao">
+      {% if pagina.pagina_atual > 1 %}
+        <a class="botao secundario botao-linha"
+           href="{{ base_url }}?busca={{ busca | urlencode }}&pagina={{ pagina.pagina_atual - 1 }}">← Anterior</a>
+      {% endif %}
+      <span class="subtitulo">Página {{ pagina.pagina_atual }} de {{ pagina.total_paginas }}</span>
+      {% if pagina.pagina_atual < pagina.total_paginas %}
+        <a class="botao secundario botao-linha"
+           href="{{ base_url }}?busca={{ busca | urlencode }}&pagina={{ pagina.pagina_atual + 1 }}">Próxima →</a>
+      {% endif %}
+    </div>
+  {% endif %}
+{% endmacro %}

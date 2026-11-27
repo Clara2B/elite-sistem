@@ -3,22 +3,29 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import openpyxl
+import pytest
 from sqlalchemy import event
 
-from app.models import EventoProcesso, Processo
+from app.models import EmpresaCliente, EventoProcesso, Processo
 from app.services.empresas import get_or_create_empresa
 from app.services.processos import (
     _mes_referencia_da_aba,
     _pessoa_valida,
     _separar_assessoria,
     apagar_todos_processos,
+    editar_evento,
+    excluir_evento,
     formatar_texto_geral,
     formatar_texto_por_empresa,
     gerar_relatorio_geral,
     gerar_relatorio_por_empresa,
+    ids_empresas_com_processo,
     importar_planilha,
+    listar_eventos,
     marcar_resolvido,
+    prazos_proximos,
     status_prazo,
+    tipos_evento_cadastrados,
 )
 
 
@@ -95,6 +102,83 @@ def test_marcar_resolvido(db):
     resolvido = marcar_resolvido(db, evento.id)
     assert resolvido.resolvido is True
     assert resolvido.resolvido_em is not None
+
+
+# --- prazos_proximos (M31: função mais sensível do módulo, sem nenhum
+# teste até então — alimenta o painel "Prazos próximos" mostrado em toda
+# tela de Processos e a API equivalente) -------------------------------
+
+
+def _evento_prazo(db, processo, data_prazo, prazo_fatal=True, resolvido=False):
+    evento = EventoProcesso(
+        processo_id=processo.id, data=date(2026, 9, 1), tipo_evento_nome="CUSTAS",
+        prazo_fatal=prazo_fatal, data_prazo=data_prazo, resolvido=resolvido,
+    )
+    db.add(evento)
+    db.commit()
+    return evento
+
+
+def test_prazos_proximos_inclui_prazo_exatamente_no_limite_de_dias(db):
+    processo = _processo(db)
+    _evento_prazo(db, processo, date.today() + timedelta(days=30))
+
+    resultado = prazos_proximos(db, dias=30)
+    assert len(resultado) == 1
+
+
+def test_prazos_proximos_exclui_prazo_um_dia_apos_o_limite(db):
+    processo = _processo(db)
+    _evento_prazo(db, processo, date.today() + timedelta(days=31))
+
+    resultado = prazos_proximos(db, dias=30)
+    assert resultado == []
+
+
+def test_prazos_proximos_inclui_prazo_ja_vencido(db):
+    """Sem limite inferior de propósito — um prazo vencido há muito tempo
+    continua alertando até alguém marcar como resolvido (ver docstring da
+    função: "vencendo nos próximos `dias` dias (ou já vencidos)")."""
+    processo = _processo(db)
+    _evento_prazo(db, processo, date.today() - timedelta(days=200))
+
+    resultado = prazos_proximos(db, dias=30)
+    assert len(resultado) == 1
+    assert resultado[0].dias_restantes == -200
+
+
+def test_prazos_proximos_ignora_evento_sem_data_prazo(db):
+    processo = _processo(db)
+    _evento_prazo(db, processo, data_prazo=None)
+
+    resultado = prazos_proximos(db, dias=30)
+    assert resultado == []
+
+
+def test_prazos_proximos_ignora_evento_nao_fatal(db):
+    processo = _processo(db)
+    _evento_prazo(db, processo, date.today(), prazo_fatal=False)
+
+    resultado = prazos_proximos(db, dias=30)
+    assert resultado == []
+
+
+def test_prazos_proximos_ignora_evento_ja_resolvido(db):
+    processo = _processo(db)
+    _evento_prazo(db, processo, date.today(), resolvido=True)
+
+    resultado = prazos_proximos(db, dias=30)
+    assert resultado == []
+
+
+def test_prazos_proximos_ordena_do_mais_urgente_pro_menos_urgente(db):
+    processo = _processo(db)
+    _evento_prazo(db, processo, date.today() + timedelta(days=10))
+    _evento_prazo(db, processo, date.today() - timedelta(days=5))
+    _evento_prazo(db, processo, date.today() + timedelta(days=1))
+
+    resultado = prazos_proximos(db, dias=30)
+    assert [p.dias_restantes for p in resultado] == [-5, 1, 10]
 
 
 def test_import_prazo_fatal_so_quando_coluna_e_sim(db, tmp_path):
@@ -343,6 +427,26 @@ def test_apagar_todos_processos_remove_processos_e_eventos_e_devolve_a_contagem(
 
 def test_apagar_todos_processos_com_banco_ja_vazio(db):
     assert apagar_todos_processos(db) == 0
+
+
+def test_ids_empresas_com_processo_so_conta_quem_tem_processo_em_escopo_no_periodo(db):
+    """A pedido da Clara (2026-11-24): usado pra tirar do menu de empresas
+    quem não tem processo em escopo naquele período (ex.: "Juros Justos"
+    não aparece se nunca tiver um)."""
+    com_evento_no_periodo = _processo(db, numero="1111111-11.2026.8.11.0001", empresa="ABSOLUTA")
+    so_fora_do_periodo = _processo(db, numero="2222222-22.2026.8.11.0002", empresa="ALFA")
+    get_or_create_empresa(db, "JUROS JUSTOS")  # nunca tem processo
+    db.add_all(
+        [
+            EventoProcesso(processo_id=com_evento_no_periodo.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
+            EventoProcesso(processo_id=so_fora_do_periodo.id, data=date(2026, 8, 1), tipo_evento_nome="CUSTAS"),
+        ]
+    )
+    db.commit()
+
+    ids = ids_empresas_com_processo(db, date(2026, 9, 1), date(2026, 9, 30))
+
+    assert ids == {com_evento_no_periodo.empresa_cliente_id}
 
 
 def test_import_reconhece_empresa_em_coluna_propria_alem_do_formato_com_hifen(db):
@@ -645,6 +749,42 @@ def test_relatorio_por_empresa_inexistente_gera_erro(db):
         assert "NAO EXISTE" in str(e)
 
 
+# --- tipos_evento_cadastrados / aviso de tipo não catalogado (M41) ---------
+
+
+def test_tipos_evento_cadastrados_normaliza_os_nomes(db):
+    cadastrados = tipos_evento_cadastrados(db)
+    assert "CUSTAS" in cadastrados
+    assert "TIPO FICTÍCIO" not in cadastrados
+
+
+def test_relatorio_geral_avisa_tipo_de_evento_nao_catalogado(db):
+    processo = _processo(db, numero="1231231-23.2026.8.11.0111", assistente="DANILO")
+    db.add(EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="TIPO FICTÍCIO"))
+    db.commit()
+
+    relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30))
+    assert relatorio.tipos_nao_catalogados == ["TIPO FICTÍCIO"]
+
+
+def test_relatorio_geral_sem_tipo_nao_catalogado_fica_vazio(db):
+    processo = _processo(db, numero="3213214-32.2026.8.11.0112", assistente="DANILO")
+    db.add(EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"))
+    db.commit()
+
+    relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30))
+    assert relatorio.tipos_nao_catalogados == []
+
+
+def test_relatorio_por_empresa_avisa_tipo_de_evento_nao_catalogado(db):
+    processo = _processo(db, numero="4564564-56.2026.8.11.0113", assistente="DANILO")
+    db.add(EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="OUTRO TIPO FICTÍCIO"))
+    db.commit()
+
+    relatorio = gerar_relatorio_por_empresa(db, "ABSOLUTA", date(2026, 9, 1), date(2026, 9, 30))
+    assert relatorio.tipos_nao_catalogados == ["OUTRO TIPO FICTÍCIO"]
+
+
 def test_relatorio_geral_nao_carrega_processos_fora_do_periodo(db):
     """Regressão de performance (já cobria a versão antiga do relatório):
     confirma que o número de consultas SQL não escala com o total de
@@ -669,7 +809,9 @@ def test_relatorio_geral_nao_carrega_processos_fora_do_periodo(db):
 
     assert len(relatorio.secoes) == 1
     assert relatorio.secoes[0].linhas[0].assistente == "DANILO"  # "JULIA" (fora do período) nem aparece
-    assert len(consultas) <= 3  # processos do período + último evento por processo
+    # processos do período + último evento por processo + catálogo de tipos de
+    # evento (M41, consulta única por chamada, não por processo)
+    assert len(consultas) <= 4
 
 
 def test_formatar_texto_geral_sem_coluna_assistente(db):
@@ -698,3 +840,141 @@ def test_formatar_texto_por_empresa_sem_coluna_assistente(db):
     assert "DANILO" not in texto
     assert "ASSISTENTE" not in texto
     assert "2020202-02.2026.8.11.0111" in texto
+
+
+def _processos_em_12_empresas(db):
+    """12 empresas (EMPRESA01..EMPRESA12, ordem alfabética previsível via
+    normalize), cada uma com 1 processo com andamento dentro do período —
+    usado pra testar a paginação de `gerar_relatorio_geral`."""
+    for i in range(1, 13):
+        numero = f"{i:07d}-01.2026.8.11.0001"
+        processo = _processo(db, numero=numero, empresa=f"EMPRESA{i:02d}")
+        db.add(EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"))
+    db.commit()
+
+
+def test_gerar_relatorio_geral_sem_pagina_devolve_tudo_de_uma_vez(db):
+    """`pagina=None` (padrão, usado por PDF/Excel/JSON) nunca pagina —
+    quem baixa um relatório espera o relatório completo."""
+    _processos_em_12_empresas(db)
+
+    relatorio = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30))
+
+    assert len(relatorio.secoes) == 12
+    assert relatorio.pagina_atual == 1
+    assert relatorio.total_paginas == 1
+    assert relatorio.total_empresas == 12
+
+
+def test_gerar_relatorio_geral_pagina_por_empresa(db):
+    """A pedido da Clara (2026-11-25): período longo com muitas empresas
+    pagina por empresa (cada seção inteira, nunca quebrada no meio) —
+    EMPRESAS_POR_PAGINA_RELATORIO_GERAL = 10."""
+    _processos_em_12_empresas(db)
+
+    pagina1 = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30), pagina=1)
+    assert [s.empresa for s in pagina1.secoes] == [f"EMPRESA{i:02d}" for i in range(1, 11)]
+    assert pagina1.pagina_atual == 1
+    assert pagina1.total_paginas == 2
+    assert pagina1.total_empresas == 12
+
+    pagina2 = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30), pagina=2)
+    assert [s.empresa for s in pagina2.secoes] == ["EMPRESA11", "EMPRESA12"]
+    assert pagina2.pagina_atual == 2
+    assert pagina2.total_paginas == 2
+
+
+def test_gerar_relatorio_geral_pagina_fora_do_intervalo_e_ajustada(db):
+    _processos_em_12_empresas(db)
+
+    muito_alem = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30), pagina=99)
+    assert muito_alem.pagina_atual == 2  # existem só 2 páginas — cai na última
+
+    negativa = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30), pagina=0)
+    assert negativa.pagina_atual == 1  # nunca menor que 1
+
+
+def test_gerar_relatorio_geral_tipo_nao_catalogado_detectado_mesmo_fora_da_pagina_atual(db):
+    """O aviso de "tipo de evento não cadastrado" tem que cobrir TODAS as
+    empresas do período, não só as da página atual — senão apareceria ou
+    não dependendo de em qual página a empresa com o tipo estranho cai."""
+    _processos_em_12_empresas(db)
+    # EMPRESA12 cai na 2ª página (ver teste de paginação acima) — o tipo
+    # estranho dela tem que aparecer mesmo pedindo só a 1ª página.
+    processo_fora = db.query(Processo).join(EmpresaCliente).filter(EmpresaCliente.nome == "EMPRESA12").one()
+    db.add(EventoProcesso(processo_id=processo_fora.id, data=date(2026, 9, 6), tipo_evento_nome="TIPO ESTRANHO"))
+    db.commit()
+
+    pagina1 = gerar_relatorio_geral(db, date(2026, 9, 1), date(2026, 9, 30), pagina=1)
+
+    assert "TIPO ESTRANHO" in pagina1.tipos_nao_catalogados
+
+
+def test_listar_eventos_filtra_por_empresa_e_periodo_e_traz_todos_nao_so_o_ultimo(db):
+    """A pedido da Clara (2026-11-25): pra edição/exclusão individual —
+    diferente de `gerar_relatorio_por_empresa` (que mostra só o último
+    evento de cada processo), aqui lista TODOS os andamentos do período."""
+    processo = _processo(db, numero="3030303-03.2026.8.11.0003", empresa="ABSOLUTA")
+    outro_processo = _processo(db, numero="4040404-04.2026.8.11.0004", empresa="ALFA")
+    db.add_all(
+        [
+            EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS"),
+            EventoProcesso(processo_id=processo.id, data=date(2026, 9, 10), tipo_evento_nome="DOCUMENTOS"),
+            EventoProcesso(processo_id=processo.id, data=date(2026, 8, 1), tipo_evento_nome="FORA DO PERIODO"),
+            EventoProcesso(processo_id=outro_processo.id, data=date(2026, 9, 6), tipo_evento_nome="CUSTAS"),
+        ]
+    )
+    db.commit()
+
+    linhas = listar_eventos(db, "ABSOLUTA", date(2026, 9, 1), date(2026, 9, 30))
+
+    assert {l.tipo_evento_nome for l in linhas} == {"CUSTAS", "DOCUMENTOS"}
+    assert all(l.numero_processo == "3030303-03.2026.8.11.0003" for l in linhas)
+
+
+def test_listar_eventos_empresa_inexistente_gera_erro(db):
+    with pytest.raises(ValueError, match="não foi encontrada"):
+        listar_eventos(db, "NAO EXISTE", date(2026, 9, 1), date(2026, 9, 30))
+
+
+def test_editar_evento_atualiza_campos(db):
+    """A pedido da Clara (2026-11-25): corrigir um andamento errado sem
+    precisar reimportar a planilha inteira."""
+    processo = _processo(db, numero="5050505-05.2026.8.11.0005")
+    evento = EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS")
+    db.add(evento)
+    db.commit()
+
+    editado = editar_evento(
+        db, evento.id, data=date(2026, 9, 12), tipo_evento_nome="DOCUMENTOS",
+        observacao="Corrigido", prazo_fatal=True,
+    )
+
+    assert editado is True
+    db.refresh(evento)
+    assert evento.data == date(2026, 9, 12)
+    assert evento.tipo_evento_nome == "DOCUMENTOS"
+    assert evento.observacao == "Corrigido"
+    assert evento.prazo_fatal is True
+
+
+def test_editar_evento_inexistente_devolve_false(db):
+    assert editar_evento(db, 999999, date(2026, 9, 5), "X", None, False) is False
+
+
+def test_excluir_evento_remove_so_o_escolhido(db):
+    processo = _processo(db, numero="6060606-06.2026.8.11.0006")
+    manter = EventoProcesso(processo_id=processo.id, data=date(2026, 9, 5), tipo_evento_nome="CUSTAS")
+    apagar = EventoProcesso(processo_id=processo.id, data=date(2026, 9, 6), tipo_evento_nome="DOCUMENTOS")
+    db.add_all([manter, apagar])
+    db.commit()
+    apagar_id = apagar.id
+
+    assert excluir_evento(db, apagar_id) is True
+    assert db.query(EventoProcesso).count() == 1
+    assert db.get(EventoProcesso, manter.id) is not None
+    assert db.get(EventoProcesso, apagar_id) is None
+
+
+def test_excluir_evento_inexistente_devolve_false(db):
+    assert excluir_evento(db, 999999) is False

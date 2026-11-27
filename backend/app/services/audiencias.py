@@ -5,11 +5,16 @@ Regras já auditadas em ARCHITECTURE.md seção 1.4: período quinzenal (1-15 /
 16-fim), sem status (sempre solicitação), valor definido pela faixa do
 acumulado mensal da empresa-cliente — a 2ª quinzena usa a faixa nova só para
 as audiências novas, sem recalcular a 1ª quinzena.
+
+Reimportar depois de CONCILIADORA/ADVOGADA serem corrigidas na planilha
+ATUALIZA o registro existente (bug corrigido em 2026-11-24, mesma classe
+de bug já visto em Laudos/TIPO e Pendências/PAGO — ver `importar_planilha`).
 """
 from __future__ import annotations
 
 import calendar
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import date
@@ -18,9 +23,23 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.excel_reader import load_data_sheets
-from app.models import Audiencia, EmpresaCliente, FaixaAudiencia
-from app.services.empresas import get_or_create_empresa
+from app.models import Audiencia, FaixaAudiencia
+from app.services.cartas import cnpj_valido
+from app.services.empresas import get_or_create_empresa, resolver_empresa_por_nome
 from app.utils import cell_text, normalize, parse_date_cell
+
+_RE_SOMENTE_DIGITOS = re.compile(r"\D")
+
+
+def _normalizar_cpf(cpf: str | None) -> str:
+    """Só os dígitos do CPF (2026-10-13, auditoria M14) — usado SÓ na
+    chave de deduplicação, nunca pra sobrescrever o valor gravado. Antes,
+    a chave comparava o nome normalizado (sem acento/maiúscula) mas o CPF
+    em texto cru (só `.strip()`): reimportar a mesma pessoa com o CPF
+    formatado diferente entre uma planilha e outra ("123.456.789-01" vs
+    "12345678901") criava uma duplicata silenciosa, inflando a contagem
+    usada pra calcular a faixa de cobrança."""
+    return _RE_SOMENTE_DIGITOS.sub("", cpf or "")
 
 _logger = logging.getLogger("elite_sistem.import")
 
@@ -29,6 +48,12 @@ CHAVE_DUPLICIDADE = ["DATA DE RECEBIMENTO", "EMPRESA", "NOME COMPLETO", "CPF"]
 
 
 def periodo_quinzenal(ano: int, mes: int, quinzena: int) -> tuple[date, date]:
+    # Validação explícita (2026-10-13, auditoria M13) — antes, qualquer
+    # valor diferente de 1 (ex.: 0, 3, 99) caía silenciosamente no "else" e
+    # devolvia o período da 2ª quinzena, sem erro. A tela só oferece 1/2,
+    # mas a API aceita um inteiro livre.
+    if quinzena not in (1, 2):
+        raise ValueError(f"Quinzena inválida: {quinzena}. Use 1 ou 2.")
     if quinzena == 1:
         return date(ano, mes, 1), date(ano, mes, 15)
     ultimo_dia = calendar.monthrange(ano, mes)[1]
@@ -54,6 +79,7 @@ class ImportResumo:
     linhas_lidas: int = 0
     linhas_novas: int = 0
     linhas_ja_existentes: int = 0
+    linhas_atualizadas: int = 0
 
 
 def importar_planilha(db: Session, path: str) -> ImportResumo:
@@ -72,8 +98,16 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
     col_conciliadora = _col_optional(df, "CONCILIADORA")
     col_advogada = _col_optional(df, "ADVOGADA")
 
-    existentes = {
-        (a.empresa_cliente_id, a.data_recebimento, normalize(a.nome_cliente), (a.cpf or "").strip())
+    # dict (não set): reimportar depois de CONCILIADORA/ADVOGADA serem
+    # corrigidas na planilha (bug real reportado pela Clara, 2026-11-24)
+    # precisa ATUALIZAR o registro existente em vez de só contar "já
+    # existe" e ignorar — mesma classe de bug já corrigida em Laudos (TIPO)
+    # e Pendências (PAGO): a identidade contra o banco (empresa+data+
+    # cliente+cpf) de propósito não inclui esses dois campos, porque eles
+    # podem ser corrigidos entre uma importação e outra sem que isso
+    # signifique "é uma audiência diferente".
+    existentes: dict[tuple, Audiencia] = {
+        (a.empresa_cliente_id, a.data_recebimento, normalize(a.nome_cliente), _normalizar_cpf(a.cpf)): a
         for a in db.scalars(select(Audiencia))
     }
     # Cache de empresa-cliente pro import inteiro — ver nota equivalente em
@@ -94,24 +128,35 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
             continue
         cpf = cell_text(row.get(col_cpf)) if col_cpf else ""
 
+        conciliadora = (cell_text(row.get(col_conciliadora)) or None) if col_conciliadora else None
+        advogada = (cell_text(row.get(col_advogada)) or None) if col_advogada else None
+
         empresa = get_or_create_empresa(db, empresa_nome, cache=empresa_cache)
-        chave = (empresa.id, data_val, normalize(cliente), cpf)
-        if chave in existentes:
-            resumo.linhas_ja_existentes += 1
+        chave = (empresa.id, data_val, normalize(cliente), _normalizar_cpf(cpf))
+        audiencia_existente = existentes.get(chave)
+        if audiencia_existente is not None:
+            if (
+                normalize(audiencia_existente.conciliadora) != normalize(conciliadora)
+                or normalize(audiencia_existente.advogada) != normalize(advogada)
+            ):
+                audiencia_existente.conciliadora = conciliadora
+                audiencia_existente.advogada = advogada
+                resumo.linhas_atualizadas += 1
+            else:
+                resumo.linhas_ja_existentes += 1
             continue
 
-        db.add(
-            Audiencia(
-                empresa_cliente_id=empresa.id,
-                nome_cliente=cliente,
-                cpf=cpf or None,
-                data_recebimento=data_val,
-                data_agendamento=(cell_text(row.get(col_data_agendamento)) or None) if col_data_agendamento else None,
-                conciliadora=(cell_text(row.get(col_conciliadora)) or None) if col_conciliadora else None,
-                advogada=(cell_text(row.get(col_advogada)) or None) if col_advogada else None,
-            )
+        nova = Audiencia(
+            empresa_cliente_id=empresa.id,
+            nome_cliente=cliente,
+            cpf=cpf or None,
+            data_recebimento=data_val,
+            data_agendamento=(cell_text(row.get(col_data_agendamento)) or None) if col_data_agendamento else None,
+            conciliadora=conciliadora,
+            advogada=advogada,
         )
-        existentes.add(chave)
+        db.add(nova)
+        existentes[chave] = nova
         resumo.linhas_novas += 1
 
     db.commit()
@@ -140,11 +185,75 @@ class AudienciasResult:
     valor_unitario: float | None
     clientes: list[str] = field(default_factory=list)
     total: float | None = None
-    valor_cadastrado: bool = True
     quantidade_mes_anterior: int = 0
     quantidade_mes: int = 0
     faixa_inicio: int | None = None
     faixa_fim: int | None = None
+
+
+@dataclass
+class LinhaAudiencia:
+    id: int
+    data_recebimento: date
+    nome_cliente: str
+    cpf: str | None
+    conciliadora: str | None
+    advogada: str | None
+
+
+def listar_audiencias(db: Session, empresa_nome: str, periodo_ini: date, periodo_fim: date) -> list[LinhaAudiencia]:
+    """Audiências de uma empresa dentro do período (mesmo filtro de
+    `gerar_relatorio`) — pra edição/exclusão individual (a pedido da
+    Clara, 2026-11-25)."""
+    empresa = resolver_empresa_por_nome(db, empresa_nome)
+    if empresa is None:
+        raise ValueError(f"A empresa '{empresa_nome}' não foi encontrada.")
+    query = (
+        select(Audiencia)
+        .where(
+            Audiencia.empresa_cliente_id == empresa.id,
+            Audiencia.data_recebimento >= periodo_ini,
+            Audiencia.data_recebimento <= periodo_fim,
+        )
+        .order_by(Audiencia.data_recebimento)
+    )
+    return [
+        LinhaAudiencia(
+            id=a.id, data_recebimento=a.data_recebimento, nome_cliente=a.nome_cliente,
+            cpf=a.cpf, conciliadora=a.conciliadora, advogada=a.advogada,
+        )
+        for a in db.scalars(query)
+    ]
+
+
+def editar_audiencia(
+    db: Session, audiencia_id: int, data_recebimento: date, nome_cliente: str,
+    cpf: str | None, conciliadora: str | None, advogada: str | None,
+) -> bool:
+    """Edita UMA audiência específica — a pedido da Clara (2026-11-25), pra
+    corrigir um registro errado sem precisar reimportar a planilha
+    inteira. Devolve False se o id não existir."""
+    a = db.get(Audiencia, audiencia_id)
+    if a is None:
+        return False
+    a.data_recebimento = data_recebimento
+    a.nome_cliente = nome_cliente
+    a.cpf = cpf or None
+    a.conciliadora = conciliadora or None
+    a.advogada = advogada or None
+    db.commit()
+    return True
+
+
+def excluir_audiencia(db: Session, audiencia_id: int) -> bool:
+    """Exclui UMA audiência específica — a pedido da Clara (2026-11-25).
+    Devolve False se o id não existir."""
+    a = db.get(Audiencia, audiencia_id)
+    if a is None:
+        return False
+    db.delete(a)
+    db.commit()
+    return True
 
 
 def _clientes_no_periodo(db: Session, empresa_id: int, periodo_ini: date, periodo_fim: date) -> list[str]:
@@ -164,6 +273,18 @@ def _faixa_para_quantidade(db: Session, quantidade: int) -> FaixaAudiencia | Non
     return None
 
 
+def ids_empresas_com_audiencia(db: Session, periodo_ini: date, periodo_fim: date) -> set[int]:
+    """IDs de empresa-cliente com pelo menos uma audiência no período
+    informado — mesmo filtro de `_clientes_no_periodo`/`gerar_relatorio`.
+    Usado pra filtrar o menu de empresas da tela (a pedido da Clara,
+    2026-11-24: só mostrar quem tem resultado)."""
+    query = select(Audiencia.empresa_cliente_id).where(
+        Audiencia.data_recebimento >= periodo_ini,
+        Audiencia.data_recebimento <= periodo_fim,
+    )
+    return set(db.scalars(query))
+
+
 def gerar_relatorio(
     db: Session,
     empresa_nome: str,
@@ -171,14 +292,21 @@ def gerar_relatorio(
     periodo_fim: date,
     cnpj: str | None = None,
 ) -> AudienciasResult:
-    alvo_empresa = normalize(empresa_nome)
-    empresa = None
-    for e in db.scalars(select(EmpresaCliente)):
-        if normalize(e.nome) == alvo_empresa:
-            empresa = e
-            break
+    empresa = resolver_empresa_por_nome(db, empresa_nome)
     if empresa is None:
-        raise ValueError(f"A empresa '{empresa_nome}' não foi encontrada.")
+        # LookupError (não ValueError) de propósito — diferencia "recurso
+        # não encontrado" (404) de "erro de regra de negócio" (a falta de
+        # faixa de preço, logo abaixo, continua ValueError -> 422) pra quem
+        # consome a API (auditoria M43, 2026-10-16).
+        raise LookupError(f"A empresa '{empresa_nome}' não foi encontrada.")
+
+    # Validação do CNPJ sobrescrito via parâmetro (2026-10-13, auditoria
+    # M12) — antes, um CNPJ qualquer passado por query param aparecia no
+    # PDF/Excel/JSON oficial no lugar do CNPJ cadastrado, sem nenhuma
+    # checagem de formato (quem chama decide registrar a sobrescrita no
+    # log de auditoria — ver app/api/audiencias.py).
+    if cnpj and not cnpj_valido(cnpj):
+        raise ValueError(f"CNPJ '{cnpj}' inválido.")
 
     clientes = _clientes_no_periodo(db, empresa.id, periodo_ini, periodo_fim)
 
@@ -206,7 +334,6 @@ def gerar_relatorio(
         valor_unitario=valor_unitario,
         clientes=clientes,
         total=total,
-        valor_cadastrado=faixa is not None or not clientes,
         quantidade_mes_anterior=quantidade_mes_anterior,
         quantidade_mes=quantidade_mes,
         faixa_inicio=faixa.inicio if faixa else None,

@@ -1,11 +1,31 @@
 import hashlib
+from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from fastapi.templating import Jinja2Templates
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+_FUSO_BRASIL = ZoneInfo("America/Sao_Paulo")
+
+
+def _horario_brasil(valor: datetime | None, formato: str = "%d/%m/%Y %H:%M") -> str:
+    """Filtro `|horario_brasil` — todo `criado_em`/`enviado_em` etc. é
+    gravado em UTC (`datetime.utcnow()`, ver app/models.py), mas a equipe
+    inteira está no fuso de Brasília; exibir o valor cru fazia a tela
+    mostrar um horário 2h ou 3h à frente do real (reportado pela Clara em
+    2026-10-19, na tela de Auditoria). Este filtro só converte pra exibição
+    — nada gravado no banco muda."""
+    if valor is None:
+        return ""
+    com_fuso = valor.replace(tzinfo=timezone.utc) if valor.tzinfo is None else valor
+    return com_fuso.astimezone(_FUSO_BRASIL).strftime(formato)
+
+
+templates.env.filters["horario_brasil"] = _horario_brasil
 
 
 def _versao_estatico() -> str:

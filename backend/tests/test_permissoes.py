@@ -3,7 +3,15 @@ from datetime import date
 from sqlalchemy import select
 
 from app.auth import criar_sessao, hash_senha, modulos_acessiveis
-from app.models import Cobranca, Operadora, Setor, SetorModulo, Usuario, UsuarioSetor
+from app.models import (
+    Audiencia,
+    Cobranca,
+    Operadora,
+    Setor,
+    SetorModulo,
+    Usuario,
+    UsuarioSetor,
+)
 from app.services.empresas import get_or_create_empresa
 
 
@@ -14,7 +22,8 @@ def _usuario_com_setor(db, operadora_nome: str, email: str) -> str:
     db.flush()
     db.add(UsuarioSetor(usuario_id=usuario.id, setor_id=setor.id, papel="COLABORADOR"))
     db.commit()
-    return criar_sessao(db, usuario).token
+    _, token = criar_sessao(db, usuario)
+    return token
 
 
 def test_setor_elite_acessa_laudos_mas_nao_audiencias(client, db):
@@ -78,6 +87,33 @@ def test_admin_superior_acessa_os_dois(client, db, admin_token):
         assert resp.status_code != 403
 
 
+def test_relatorio_audiencias_empresa_nao_encontrada_e_404(client, db, admin_token):
+    """Auditoria M43: "empresa não encontrada" é um 404 de verdade (recurso
+    não encontrado)."""
+    resp = client.get(
+        "/audiencias/relatorio", params={"empresa": "NÃO EXISTE", "ano": 2026, "mes": 1, "quinzena": 1},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 404
+
+
+def test_relatorio_audiencias_faixa_nao_cadastrada_e_422(client, db, admin_token):
+    """Auditoria M43: "faixa de preço não cadastrada" é erro de regra de
+    negócio (422), diferente de "empresa não encontrada" (404) — antes os
+    dois caíam no mesmo 404."""
+    empresa = get_or_create_empresa(db, "EMPRESA CHEIA")
+    for i in range(101):  # DEFAULT_FAIXAS_AUDIENCIA só vai até 100
+        db.add(Audiencia(empresa_cliente_id=empresa.id, nome_cliente=f"Cliente {i}", data_recebimento=date(2026, 1, 1)))
+    db.commit()
+
+    resp = client.get(
+        "/audiencias/relatorio", params={"empresa": "EMPRESA CHEIA", "ano": 2026, "mes": 1, "quinzena": 1},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 422
+    assert "faixa de preço" in resp.json()["detail"]
+
+
 def test_rota_de_usuarios_exige_admin(client, db):
     token = _usuario_com_setor(db, "ELITE", "colaborador@teste.local")
     resp = client.get("/usuarios", headers={"Authorization": f"Bearer {token}"})
@@ -90,7 +126,7 @@ def test_admin_cria_usuario(client, admin_token, db):
         "/usuarios",
         json={
             "nome": "Dra. Fulana",
-            "email": "dra.fulana@teste.local",
+            "email": "dra.fulana@teste.com",
             "senha": "senha123",
             "setores": [{"setor_id": setor.id, "papel": "COLABORADOR"}],
         },
@@ -100,7 +136,7 @@ def test_admin_cria_usuario(client, admin_token, db):
     body = resp.json()
     assert body["setores"][0]["setor"] == "Doutores(as)"
 
-    login = client.post("/auth/login", json={"email": "dra.fulana@teste.local", "senha": "senha123"})
+    login = client.post("/auth/login", json={"email": "dra.fulana@teste.com", "senha": "senha123"})
     assert login.status_code == 200
 
 
@@ -108,7 +144,7 @@ def test_admin_edita_usuario(client, admin_token, db):
     setor = db.scalar(select(Setor).where(Setor.nome == "Doutores(as)"))
     criado = client.post(
         "/usuarios",
-        json={"nome": "Dra. Fulana", "email": "fulana@teste.local", "senha": "senha123"},
+        json={"nome": "Dra. Fulana", "email": "fulana@teste.com", "senha": "senha123"},
         headers={"Authorization": f"Bearer {admin_token}"},
     ).json()
 
@@ -116,7 +152,7 @@ def test_admin_edita_usuario(client, admin_token, db):
         f"/usuarios/{criado['id']}",
         json={
             "nome": "Dra. Fulana de Tal",
-            "email": "fulana.novo@teste.local",
+            "email": "fulana.novo@teste.com",
             "senha": "senha-nova",
             "setores": [{"setor_id": setor.id, "papel": "LIDER"}],
         },
@@ -125,35 +161,35 @@ def test_admin_edita_usuario(client, admin_token, db):
     assert resp.status_code == 200
     body = resp.json()
     assert body["nome"] == "Dra. Fulana de Tal"
-    assert body["email"] == "fulana.novo@teste.local"
+    assert body["email"] == "fulana.novo@teste.com"
     assert body["setores"] == [{"setor_id": setor.id, "setor": "Doutores(as)", "operadora": "ELITE", "papel": "LIDER"}]
 
     # senha antiga não funciona mais, a nova sim
-    assert client.post("/auth/login", json={"email": "fulana.novo@teste.local", "senha": "senha123"}).status_code == 401
-    assert client.post("/auth/login", json={"email": "fulana.novo@teste.local", "senha": "senha-nova"}).status_code == 200
+    assert client.post("/auth/login", json={"email": "fulana.novo@teste.com", "senha": "senha123"}).status_code == 401
+    assert client.post("/auth/login", json={"email": "fulana.novo@teste.com", "senha": "senha-nova"}).status_code == 200
 
 
 def test_edicao_sem_senha_mantem_a_senha_atual(client, admin_token, db):
     criado = client.post(
         "/usuarios",
-        json={"nome": "Dra. Fulana", "email": "mantem@teste.local", "senha": "senha123"},
+        json={"nome": "Dra. Fulana", "email": "mantem@teste.com", "senha": "senha123"},
         headers={"Authorization": f"Bearer {admin_token}"},
     ).json()
 
     resp = client.patch(
         f"/usuarios/{criado['id']}",
-        json={"nome": "Dra. Fulana", "email": "mantem@teste.local"},
+        json={"nome": "Dra. Fulana", "email": "mantem@teste.com"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200
-    assert client.post("/auth/login", json={"email": "mantem@teste.local", "senha": "senha123"}).status_code == 200
+    assert client.post("/auth/login", json={"email": "mantem@teste.com", "senha": "senha123"}).status_code == 200
 
 
 def test_edicao_nao_pode_deixar_sistema_sem_admin(client, admin_token, db):
     admin_id = db.scalar(select(Usuario.id).where(Usuario.email == "admin@teste.local"))
     resp = client.patch(
         f"/usuarios/{admin_id}",
-        json={"nome": "Admin Teste", "email": "admin@teste.local", "papel_global": None},
+        json={"nome": "Admin Teste", "email": "admin@teste.com", "papel_global": None},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 400
@@ -164,18 +200,31 @@ def test_edicao_nao_pode_deixar_sistema_sem_admin(client, admin_token, db):
 def test_edicao_permite_trocar_admin_se_houver_outro(client, admin_token, db):
     client.post(
         "/usuarios",
-        json={"nome": "Segundo Admin", "email": "segundo@teste.local", "senha": "senha123", "papel_global": "ADMIN_TI"},
+        json={"nome": "Segundo Admin", "email": "segundo@teste.com", "senha": "senha123", "papel_global": "ADMIN_TI"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     admin_id = db.scalar(select(Usuario.id).where(Usuario.email == "admin@teste.local"))
 
     resp = client.patch(
         f"/usuarios/{admin_id}",
-        json={"nome": "Admin Teste", "email": "admin@teste.local", "papel_global": None},
+        json={"nome": "Admin Teste", "email": "admin@teste.com", "papel_global": None},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200
     assert resp.json()["papel_global"] is None
+
+
+def test_criar_usuario_com_email_mal_formado_e_recusado(client, admin_token, db):
+    """M34: e-mail sem "@" (ou qualquer formato inválido) não é mais aceito
+    como e-mail de usuário via API — antes só o <input type="email"> do
+    navegador impedia isso."""
+    resp = client.post(
+        "/usuarios",
+        json={"nome": "Fulana", "email": "nao-e-um-email", "senha": "senha123"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 422
+    assert db.scalar(select(Usuario.id).where(Usuario.nome == "Fulana")) is None
 
 
 # --- Seleção de abas (módulos) por setor (2026-09-28) ------------------------
@@ -228,7 +277,7 @@ def test_setor_restrito_a_laudos_nao_acessa_processos_nem_pendencias(client, db)
     db.add(SetorModulo(setor_id=setor.id, modulo="LAUDOS"))
     db.commit()
     usuario = _usuario_no_setor(db, setor.id, "restrito.laudos@teste.local")
-    token = criar_sessao(db, usuario).token
+    _, token = criar_sessao(db, usuario)
     headers = {"Authorization": f"Bearer {token}"}
 
     resp_laudos = client.get("/laudos/relatorio", params={"empresa": "X", "ano": 2026, "mes": 1}, headers=headers)

@@ -9,6 +9,7 @@
 {% block conteudo %}
   {% import "_icones.html" as icones %}
   {% import "_flash.html" as flash %}
+  {% import "_paginacao.html" as paginacao %}
   <h1>Assistentes</h1>
   <p class="subtitulo">Assistentes de Gestão de Processos — alimenta o dropdown "Assistente" do relatório.</p>
 
@@ -16,7 +17,13 @@
   {{ flash.toast('erro', erro) }}
 
   <div class="card">
-    <div class="card-header"><h2>Cadastrados ({{ funcionarios|length }})</h2></div>
+    <div class="card-header">
+      <h2>Cadastrados ({{ pagina.total_itens }})</h2>
+      <form method="get" action="/app/funcionarios">
+        <input type="text" name="busca" value="{{ busca }}" class="busca-lista" placeholder="Buscar por nome..."
+               aria-label="Buscar assistente por nome" autocomplete="off">
+      </form>
+    </div>
     {% if funcionarios %}
       {% for f in funcionarios %}
         <form id="funcionario-{{ f.id }}" method="post" action="/app/funcionarios/{{ f.id }}"></form>
@@ -36,13 +43,13 @@
                 </td>
                 <td>
                   <div class="acoes-linha">
-                    <button type="submit" form="funcionario-{{ f.id }}" class="secundario" style="padding:7px 12px; font-size:0.8rem;">Salvar</button>
+                    <button type="submit" form="funcionario-{{ f.id }}" class="secundario botao-linha">Salvar</button>
                     <form method="post" action="/app/funcionarios/{{ f.id }}/ativo?ativo={{ 'false' if f.ativo else 'true' }}">
-                      <button type="submit" class="{{ 'perigo' if f.ativo else 'secundario' }}" style="padding:7px 12px; font-size:0.8rem;">
+                      <button type="submit" class="{{ 'perigo' if f.ativo else 'secundario' }} botao-linha">
                         {{ "Desativar" if f.ativo else "Ativar" }}
                       </button>
                     </form>
-                    <button type="button" class="perigo" style="padding:7px 10px; font-size:0.8rem;"
+                    <button type="button" class="perigo botao-linha"
                             data-abrir-confirmacao="modal-excluir-{{ f.id }}" data-nome-alvo="{{ f.nome }}"
                             aria-label="Excluir {{ f.nome }}">
                       {{ icones.icone('lixeira') }}
@@ -73,6 +80,9 @@
           </div>
         </dialog>
       {% endfor %}
+      {{ paginacao.nav(pagina, "/app/funcionarios", busca) }}
+    {% elif busca %}
+      <p class="vazio">Nenhum assistente encontrado para essa busca.</p>
     {% else %}
       <p class="vazio">Nenhum assistente cadastrado ainda.</p>
     {% endif %}

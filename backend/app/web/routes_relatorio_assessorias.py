@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
 
-from app.api._shared import salvar_temp
+from app.api._shared import remover_temp, salvar_temp
 from app.db import get_db
 from app.models import Usuario
 from app.relatorio_assessorias import armazenamento, mapas, processamento
@@ -86,12 +86,14 @@ async def processar(
     extrajudicial: UploadFile = None,
     contrarias: UploadFile = None,
     procon: UploadFile = None,
+    pauta_contrarias: UploadFile = None,
     usuario: Usuario = Depends(admin_logado_web),
     db: Session = Depends(get_db),
 ):
     arquivos = {
         "laudo": laudo, "iniciais": iniciais, "agendamento": agendamento,
         "extrajudicial": extrajudicial, "contrarias": contrarias, "procon": procon,
+        "pauta_contrarias": pauta_contrarias,
     }
     faltando = [campo for campo, arquivo in arquivos.items() if arquivo is None or not arquivo.filename]
     if faltando:
@@ -102,7 +104,22 @@ async def processar(
         })
         return templates.TemplateResponse(request, "relatorio_assessorias_upload.html", contexto)
 
-    caminhos = {campo: salvar_temp(arquivo) for campo, arquivo in arquivos.items()}
+    # Um por um (não dict comprehension) pra poder limpar os arquivos já
+    # salvos com sucesso se um dos de trás (ex.: o 5º dos 7) falhar na
+    # validação — sem isso, ficariam temp files órfãos no servidor.
+    caminhos: dict[str, str] = {}
+    try:
+        for campo, arquivo in arquivos.items():
+            caminhos[campo] = salvar_temp(arquivo)
+    except ValueError as e:
+        for caminho in caminhos.values():
+            remover_temp(caminho)
+        contexto = _contexto_base(request, usuario, db)
+        contexto.update({
+            "mes": mes, "ano": ano, "data_corte": data_corte.isoformat(),
+            "erro": str(e),
+        })
+        return templates.TemplateResponse(request, "relatorio_assessorias_upload.html", contexto)
 
     try:
         resultados, desconhecidas = processamento.processar_upload(db, caminhos, mes, ano, data_corte, usuario)
@@ -113,6 +130,9 @@ async def processar(
             "erro": f"Não consegui ler uma das planilhas: {e}",
         })
         return templates.TemplateResponse(request, "relatorio_assessorias_upload.html", contexto)
+    finally:
+        for caminho in caminhos.values():
+            remover_temp(caminho)
 
     mensagem = quote(
         f"{len(resultados)} assessoria(s) processada(s)."

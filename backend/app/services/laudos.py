@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
@@ -44,7 +44,25 @@ STATUS_OPCAO_MAP = {
 }
 
 REQUIRED_HEADERS = ["EMPRESA", "TIPO DE LAUDO", "DATA"]
+# Usada só por `load_data_sheets` (descarta linha repetida DENTRO da mesma
+# planilha, ex. a mesma linha presente em duas abas por engano) — inclui
+# TIPO DE LAUDO de propósito, porque dois laudos do mesmo cliente no mesmo
+# dia com tipos diferentes são, dentro de UM import só, casos distintos de
+# verdade (não duplicata).
 CHAVE_DUPLICIDADE = ["DATA", "NOME DO CLIENTE", "EMPRESA", "TIPO DE LAUDO"]
+# Identidade do laudo PRA COMPARAR COM O QUE JÁ ESTÁ NO BANCO (entre
+# importações diferentes) — sem TIPO DE LAUDO de propósito. Bug real
+# corrigido em 2026-11-24 (reportado pela Clara, planilha de Guardiã,
+# cliente LEANDRO SILVA PESSANHA): ela reimportou a planilha com o TIPO DE
+# LAUDO de um cliente corrigido (de "AUTO" pra "EMPRÉSTIMO"), e por esse
+# campo fazer parte da identidade do laudo, o sistema não reconheceu como
+# "o mesmo laudo com um dado corrigido" — criou um registro NOVO, deixando
+# os dois salvos (contando duas vezes no relatório, inflando o valor a
+# cobrar). Mesma classe de bug já vista antes com a coluna DATA (ver
+# `apagar_todos_laudos`). Com a identidade mais estreita, uma reimportação
+# com TIPO (ou STATUS) diferente agora ATUALIZA o registro existente em
+# vez de duplicar.
+CHAVE_IDENTIDADE_LAUDO = ["DATA", "NOME DO CLIENTE", "EMPRESA"]
 
 
 def periodo_20_a_20(ano: int, mes: int) -> tuple[date, date]:
@@ -76,6 +94,7 @@ class ImportResumo:
     linhas_lidas: int = 0
     linhas_novas: int = 0
     linhas_ja_existentes: int = 0
+    linhas_atualizadas: int = 0
 
 
 def importar_planilha(db: Session, path: str) -> ImportResumo:
@@ -92,8 +111,8 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
     col_cliente = _col_optional(df, "NOME DO CLIENTE") or _col_optional(df, "CLIENTE")
     col_status = _col_optional(df, "ENTRADA DE LAUDO") or _col_optional(df, "STATUS")
 
-    existentes = {
-        (laudo.empresa_cliente_id, normalize(laudo.tipo_laudo_nome), laudo.data, normalize(laudo.nome_cliente))
+    existentes: dict[tuple, Laudo] = {
+        (laudo.empresa_cliente_id, laudo.data, normalize(laudo.nome_cliente)): laudo
         for laudo in db.scalars(select(Laudo))
     }
     # Cache de empresa-cliente pro import inteiro — sem isso,
@@ -132,22 +151,40 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
         cliente = cell_text(row.get(col_cliente)) if col_cliente else ""
 
         empresa = get_or_create_empresa(db, empresa_nome, cache=empresa_cache)
-        chave = (empresa.id, normalize(tipo), data_val, normalize(cliente))
-        if chave in existentes:
-            resumo.linhas_ja_existentes += 1
+        chave = (empresa.id, data_val, normalize(cliente))
+        laudo_existente = existentes.get(chave)
+        if laudo_existente is not None:
+            tipo_novo = tipo.upper()
+            if normalize(laudo_existente.tipo_laudo_nome) != normalize(tipo_novo) or laudo_existente.status != status_normalizado:
+                laudo_existente.tipo_laudo_nome = tipo_novo
+                laudo_existente.status = status_normalizado
+                resumo.linhas_atualizadas += 1
+            else:
+                resumo.linhas_ja_existentes += 1
             continue
 
-        db.add(
-            Laudo(
-                empresa_cliente_id=empresa.id,
-                tipo_laudo_nome=tipo.upper(),
-                data=data_val,
-                nome_cliente=cliente,
-                status=status_normalizado,
-            )
+        novo = Laudo(
+            empresa_cliente_id=empresa.id,
+            tipo_laudo_nome=tipo.upper(),
+            data=data_val,
+            nome_cliente=cliente,
+            status=status_normalizado,
         )
-        existentes.add(chave)
+        db.add(novo)
+        existentes[chave] = novo
         resumo.linhas_novas += 1
+
+        # Mesmo padrão já usado em app/services/processos.py (2026-10-13,
+        # auditoria M19) — sem isso, um import grande fica inteiro numa
+        # única transação até o fim do loop, pesando memória e mantendo
+        # uma transação aberta por muito tempo no pooler do Supabase; se
+        # uma linha no meio do lote tiver um valor longo o bastante pra
+        # violar algum limite de coluna, o lote inteiro é revertido em vez
+        # de só o que já tinha sido comitado. Seguro aqui pelo mesmo
+        # motivo: nenhuma exceção é levantada dentro do loop por dado
+        # ruim (só contadores e "continue").
+        if resumo.linhas_novas % 2000 == 0:
+            db.commit()
 
     db.commit()
     _logger.info("import laudos: %.1fs total — %s", time.perf_counter() - inicio, resumo)
@@ -167,6 +204,73 @@ def apagar_todos_laudos(db: Session) -> int:
     db.execute(delete(Laudo))
     db.commit()
     return total
+
+
+@dataclass
+class LaudoDuplicado:
+    id: int
+    tipo_laudo_nome: str
+    status: str
+    valor: float
+    criado_em: datetime
+
+
+@dataclass
+class GrupoDuplicata:
+    empresa: str
+    data: date
+    cliente: str
+    laudos: list[LaudoDuplicado] = field(default_factory=list)
+
+
+def detectar_duplicatas(db: Session) -> list[GrupoDuplicata]:
+    """Grupos de laudos com a mesma identidade (empresa+data+cliente, ver
+    CHAVE_IDENTIDADE_LAUDO) mas tipo/status diferente — sobra de ANTES do
+    bug corrigido em 2026-11-24 (reimportar com o TIPO DE LAUDO corrigido
+    criava um registro novo em vez de atualizar o existente; caso real:
+    Guardiã/LEANDRO SILVA PESSANHA, dia 21/10, "AUTO" x "EMPRÉSTIMO"). A
+    partir da correção, um grupo como esse não é mais criado — isso só
+    lista o que ficou de duplicata ANTIGA no banco. Não decide sozinho
+    qual apagar: só a Clara sabe qual dos dois está certo (ela mesma
+    conferiu o caso da Guardiã na planilha); por isso aqui só agrupa e
+    mostra pra ela escolher, em vez de apagar um dos dois automaticamente."""
+    por_identidade: dict[tuple, list[Laudo]] = {}
+    for laudo in db.scalars(select(Laudo)):
+        chave = (laudo.empresa_cliente_id, laudo.data, normalize(laudo.nome_cliente))
+        por_identidade.setdefault(chave, []).append(laudo)
+
+    empresas_cache = {e.id: e.nome for e in db.scalars(select(EmpresaCliente))}
+    grupos = [
+        GrupoDuplicata(
+            empresa=empresas_cache.get(laudos[0].empresa_cliente_id, "?"),
+            data=laudos[0].data,
+            cliente=laudos[0].nome_cliente,
+            laudos=[
+                LaudoDuplicado(
+                    id=l.id, tipo_laudo_nome=l.tipo_laudo_nome, status=l.status,
+                    valor=l.valor, criado_em=l.criado_em,
+                )
+                for l in sorted(laudos, key=lambda l: l.criado_em)
+            ],
+        )
+        for laudos in por_identidade.values()
+        if len(laudos) > 1
+    ]
+    grupos.sort(key=lambda g: (normalize(g.empresa), g.data, normalize(g.cliente)))
+    return grupos
+
+
+def excluir_laudo(db: Session, laudo_id: int) -> bool:
+    """Exclui UM laudo específico por id — usado pra resolver uma
+    duplicata apontada por `detectar_duplicatas`, depois da Clara decidir
+    qual dos dois manter. Devolve False se o id não existir (ex.: já foi
+    excluído por outra aba/pessoa)."""
+    laudo = db.get(Laudo, laudo_id)
+    if laudo is None:
+        return False
+    db.delete(laudo)
+    db.commit()
+    return True
 
 
 @dataclass
@@ -230,6 +334,59 @@ def _resolver_empresa(db: Session, empresa_nome: str) -> EmpresaCliente | None:
     return None
 
 
+# EWS trocou de nome (era "SW") em agosto/2026 — mesmo fato de negócio já
+# tratado em app/relatorio_assessorias/config/assessorias.yaml pros
+# relatórios de assessoria. Aqui, a pedido da Clara (2026-11-24): os laudos
+# das duas sempre aparecem juntos, num relatório só, com o nome "EWS". As
+# duas continuam sendo EmpresaCliente separadas no cadastro (CNPJs
+# diferentes, cada laudo com FK pra uma ou pra outra dependendo de quando
+# foi importado) — só os relatórios de Laudos é que juntam as duas.
+GRUPOS_RELATORIO_LAUDO: dict[str, set[str]] = {
+    "EWS": {normalize("EWS"), normalize("SW")},
+}
+
+
+def _nome_canonico_grupo(empresa_nome: str) -> str:
+    alvo = normalize(empresa_nome)
+    for nome_canonico, nomes_grupo in GRUPOS_RELATORIO_LAUDO.items():
+        if alvo in nomes_grupo:
+            return nome_canonico
+    return empresa_nome
+
+
+def _grupo_relatorio(db: Session, empresa: EmpresaCliente) -> tuple[list[int], str, str | None]:
+    """IDs de TODAS as EmpresaCliente que entram no mesmo relatório que
+    `empresa` (ela mesma, e as outras do mesmo grupo em
+    GRUPOS_RELATORIO_LAUDO, se houver), o nome canônico a exibir e o CNPJ
+    canônico — da empresa que dá nome ao grupo, não necessariamente a que
+    foi buscada (ex.: buscar "SW" devolve o CNPJ cadastrado da EWS).
+    Empresa sem grupo conhecido devolve só ela mesma."""
+    nome_canonico = _nome_canonico_grupo(empresa.nome)
+    nomes_grupo = GRUPOS_RELATORIO_LAUDO.get(nome_canonico)
+    if nomes_grupo is None:
+        return [empresa.id], empresa.nome, empresa.cnpj
+    empresas_grupo = [e for e in db.scalars(select(EmpresaCliente)) if normalize(e.nome) in nomes_grupo]
+    canonica = next((e for e in empresas_grupo if normalize(e.nome) == nome_canonico), empresa)
+    return [e.id for e in empresas_grupo], nome_canonico, canonica.cnpj
+
+
+def ids_empresas_com_laudo(db: Session, periodo_ini: date, periodo_fim: date, status_opcao: str) -> set[int]:
+    """IDs de empresa-cliente com pelo menos um laudo no período/status
+    informado — mesmo filtro que `gerar_relatorio` usa linha a linha
+    (`_status_bate`). Usado pra filtrar o menu de empresas da tela (a
+    pedido da Clara, 2026-11-24: só mostrar quem tem resultado)."""
+    status_normalizado, _ = _resolver_status(status_opcao)
+    query = select(Laudo.empresa_cliente_id, Laudo.status).where(
+        Laudo.data >= periodo_ini,
+        Laudo.data <= periodo_fim,
+    )
+    return {
+        empresa_id
+        for empresa_id, status_laudo in db.execute(query)
+        if _status_bate(status_laudo, status_normalizado)
+    }
+
+
 def gerar_relatorio(
     db: Session,
     empresa_nome: str,
@@ -244,8 +401,9 @@ def gerar_relatorio(
 
     status_normalizado, status_label = _resolver_status(status_opcao)
 
+    ids_empresas, nome_relatorio, cnpj_relatorio = _grupo_relatorio(db, empresa)
     query = select(Laudo).where(
-        Laudo.empresa_cliente_id == empresa.id,
+        Laudo.empresa_cliente_id.in_(ids_empresas),
         Laudo.data >= periodo_ini,
         Laudo.data <= periodo_fim,
     )
@@ -278,8 +436,8 @@ def gerar_relatorio(
     total = sum(linha.valor for linha in linhas)
 
     return LaudosResult(
-        empresa=empresa.nome,
-        cnpj=cnpj or empresa.cnpj,
+        empresa=nome_relatorio,
+        cnpj=cnpj or cnpj_relatorio,
         periodo_ini=periodo_ini,
         periodo_fim=periodo_fim,
         status=status_label,
@@ -341,30 +499,33 @@ def gerar_resumo_por_assessoria(
     ver `formatar_texto_resumo_assessorias`)."""
     status_normalizado, _ = _resolver_status(status_opcao)
 
-    empresa_id_filtro = None
+    ids_empresas_filtro = None
     if filtro_empresa:
         empresa = _resolver_empresa(db, filtro_empresa)
         if empresa is None:
             raise ValueError(f"A empresa '{filtro_empresa}' não foi encontrada.")
-        empresa_id_filtro = empresa.id
+        ids_empresas_filtro, _, _ = _grupo_relatorio(db, empresa)
 
     query = (
         select(Laudo.tipo_laudo_nome, Laudo.status, EmpresaCliente.nome)
         .join(EmpresaCliente, Laudo.empresa_cliente_id == EmpresaCliente.id)
         .where(Laudo.data >= periodo_ini, Laudo.data <= periodo_fim)
     )
-    if empresa_id_filtro is not None:
-        query = query.where(Laudo.empresa_cliente_id == empresa_id_filtro)
+    if ids_empresas_filtro is not None:
+        query = query.where(Laudo.empresa_cliente_id.in_(ids_empresas_filtro))
 
     # assessoria -> tipo -> quantidade. Só entra quem realmente tem laudo
     # contado — sem isso apareceriam assessorias/tipos com zero, que a
-    # Clara pediu explicitamente pra não listar.
+    # Clara pediu explicitamente pra não listar. Nome passa por
+    # `_nome_canonico_grupo` pra SW entrar somado junto de EWS, igual
+    # `gerar_relatorio` (ver GRUPOS_RELATORIO_LAUDO).
     contagem: dict[str, dict[str, int]] = {}
     for tipo, status_laudo, empresa_nome in db.execute(query):
         if not _status_bate(status_laudo, status_normalizado):
             continue
-        contagem.setdefault(empresa_nome, {}).setdefault(tipo, 0)
-        contagem[empresa_nome][tipo] += 1
+        nome_canonico = _nome_canonico_grupo(empresa_nome)
+        contagem.setdefault(nome_canonico, {}).setdefault(tipo, 0)
+        contagem[nome_canonico][tipo] += 1
 
     valor_cache: dict[str, float | None] = {}
     resultado: list[ResumoAssessoria] = []

@@ -13,9 +13,13 @@ import pytest
 from app.models import Correspondencia
 from app.services.correspondencias import (
     apagar_todas_correspondencias,
+    editar_correspondencia,
+    excluir_correspondencia,
     gerar_relatorio,
+    ids_empresas_com_correspondencia,
     importar_planilha,
     parse_valor,
+    recalcular_valores_zerados,
 )
 from app.services.empresas import get_or_create_empresa
 
@@ -31,6 +35,10 @@ from app.services.empresas import get_or_create_empresa
         ("R$ 280,00.", 280.0),  # ponto final sobrando — visto na planilha real
         ("  R$ 90,00  ", 90.0),
         ("90,00", 90.0),  # sem "R$" na frente
+        ("280.50", 280.5),  # célula de texto simples, ponto decimal — a pedido da Clara, 2026-11-04
+        ("280.5", 280.5),
+        ("280", 280.0),
+        ("-50.5", -50.5),
     ],
 )
 def test_parse_valor_reconhece_formatos_validos(texto, esperado):
@@ -147,6 +155,27 @@ def test_gerar_relatorio_filtra_por_empresa_e_mes(db):
     assert r.total == 100.0
 
 
+def test_ids_empresas_com_correspondencia_so_conta_quem_tem_no_mes(db):
+    """A pedido da Clara (2026-11-24): usado pra tirar do menu de empresas
+    quem não tem correspondência naquele mês (ex.: "Juros Justos" não
+    aparece se nunca tiver uma)."""
+    path = _planilha([
+        ["Janeiro", "Dra. A", "Cliente A", "Eros", "ADVOGADO", "R$ 100,00", "PROCON"],
+        ["Fevereiro", "Dra. C", "Cliente C", "Zenith", "ADVOGADO", "R$ 300,00", "PROCON"],
+    ])
+    importar_planilha(db, path)
+    sem_correspondencia = get_or_create_empresa(db, "Juros Justos")
+    db.commit()
+
+    ids_janeiro = ids_empresas_com_correspondencia(db, "Janeiro")
+
+    eros = get_or_create_empresa(db, "Eros")
+    zenith = get_or_create_empresa(db, "Zenith")
+    assert ids_janeiro == {eros.id}
+    assert zenith.id not in ids_janeiro
+    assert sem_correspondencia.id not in ids_janeiro
+
+
 def test_gerar_relatorio_soma_so_os_valores_validos(db):
     path = _planilha([
         ["Janeiro", "Dra. A", "Cliente A", "Eros", "ADVOGADO", "R$ 100,00", "PROCON"],
@@ -172,3 +201,119 @@ def test_gerar_relatorio_sem_correspondencia_devolve_lista_vazia(db):
     r = gerar_relatorio(db, "Eros", "Janeiro")
     assert r.linhas == []
     assert r.total == 0.0
+
+
+def test_gerar_relatorio_mes_sem_acento_na_planilha_bate_com_mes_acentuado(db):
+    """Auditoria M15: a comparação de "mês" era sensível a acento,
+    diferente da de empresa (que já usa normalize()) — "MARCO" (erro de
+    digitação, sem cedilha, no estilo de outros já vistos neste sistema)
+    importado da planilha não batia com "Março" vindo do dropdown da
+    tela, e o relatório mostrava "Nenhuma correspondência encontrada"
+    mesmo havendo a linha."""
+    path = _planilha([
+        ["MARCO", "Dra. A", "Cliente A", "Eros", "ADVOGADO", "R$ 100,00", "PROCON"],
+    ])
+    importar_planilha(db, path)
+
+    r = gerar_relatorio(db, "Eros", "Março")
+    assert len(r.linhas) == 1
+    assert r.linhas[0].autor == "Cliente A"
+
+
+def test_recalcular_valores_zerados_corrige_so_quem_tinha_valor_nulo(db):
+    """Bug real reportado pela Clara (SIMPLIFICA/Outubro aparecia com Total
+    R$ 0,00): registros importados ANTES do bug de "280.50" ser corrigido
+    ficaram com valor=None pra sempre — reimportar a planilha sem mudar
+    nada não corrige (chave de duplicidade usa o valor_texto original, que
+    não mudou). `recalcular_valores_zerados` reaplica o parser atual direto
+    nesses registros."""
+    empresa = get_or_create_empresa(db, "SIMPLIFICA")
+    zerado_mas_corrigivel = Correspondencia(
+        empresa_cliente_id=empresa.id, mes="OUTUBRO", advogado="Dra. A", autor="Cliente A",
+        adv_preposto="ADVOGADO", valor_texto="280.50", valor=None, tipo_acao="PROCON",
+    )
+    zerado_sem_conserto = Correspondencia(
+        empresa_cliente_id=empresa.id, mes="OUTUBRO", advogado="Dra. B", autor="Cliente B",
+        adv_preposto="ADVOGADO", valor_texto="a combinar", valor=None, tipo_acao="PROCON",
+    )
+    ja_tinha_valor = Correspondencia(
+        empresa_cliente_id=empresa.id, mes="OUTUBRO", advogado="Dra. C", autor="Cliente C",
+        adv_preposto="ADVOGADO", valor_texto="R$ 100,00", valor=100.0, tipo_acao="PROCON",
+    )
+    db.add_all([zerado_mas_corrigivel, zerado_sem_conserto, ja_tinha_valor])
+    db.commit()
+
+    corrigidos = recalcular_valores_zerados(db)
+
+    assert corrigidos == 1
+    db.refresh(zerado_mas_corrigivel)
+    db.refresh(zerado_sem_conserto)
+    db.refresh(ja_tinha_valor)
+    assert zerado_mas_corrigivel.valor == 280.5
+    assert zerado_sem_conserto.valor is None  # continua sem valor reconhecível
+    assert ja_tinha_valor.valor == 100.0  # não foi tocado
+
+
+def test_recalcular_valores_zerados_com_banco_sem_pendencia(db):
+    assert recalcular_valores_zerados(db) == 0
+
+
+def test_editar_correspondencia_atualiza_campos_e_recalcula_valor(db):
+    """A pedido da Clara (2026-11-25): corrigir um registro errado sem
+    precisar reimportar a planilha inteira."""
+    path = _planilha([["Janeiro", "Dra. A", "Cliente A", "Eros", "ADVOGADO", "R$ 100,00", "PROCON"]])
+    importar_planilha(db, path)
+    linha = gerar_relatorio(db, "Eros", "Janeiro").linhas[0]
+
+    editado = editar_correspondencia(
+        db, linha.id, advogado="Dra. B", autor="Cliente B", adv_preposto="PREPOSTO",
+        valor_texto="R$ 250,00", tipo_acao="EXTRAJUDICIAL",
+    )
+
+    assert editado is True
+    nova_linha = gerar_relatorio(db, "Eros", "Janeiro").linhas[0]
+    assert nova_linha.advogado == "Dra. B"
+    assert nova_linha.autor == "Cliente B"
+    assert nova_linha.adv_preposto == "PREPOSTO"
+    assert nova_linha.valor_texto == "R$ 250,00"
+    assert nova_linha.valor == 250.0
+    assert nova_linha.tipo_acao == "EXTRAJUDICIAL"
+
+
+def test_editar_correspondencia_com_valor_nao_reconhecido_zera_valor(db):
+    path = _planilha([["Janeiro", "Dra. A", "Cliente A", "Eros", "ADVOGADO", "R$ 100,00", "PROCON"]])
+    importar_planilha(db, path)
+    linha = gerar_relatorio(db, "Eros", "Janeiro").linhas[0]
+
+    editar_correspondencia(
+        db, linha.id, advogado="Dra. A", autor="Cliente A", adv_preposto="ADVOGADO",
+        valor_texto="a combinar", tipo_acao="PROCON",
+    )
+
+    nova_linha = gerar_relatorio(db, "Eros", "Janeiro").linhas[0]
+    assert nova_linha.valor is None
+    assert nova_linha.valor_texto == "a combinar"
+
+
+def test_editar_correspondencia_inexistente_devolve_false(db):
+    assert editar_correspondencia(db, 999999, "a", "b", "c", "d", "e") is False
+
+
+def test_excluir_correspondencia_remove_so_o_escolhido(db):
+    path = _planilha([
+        ["Janeiro", "Dra. A", "Cliente A", "Eros", "ADVOGADO", "R$ 100,00", "PROCON"],
+        ["Janeiro", "Dra. B", "Cliente B", "Eros", "ADVOGADO", "R$ 200,00", "PROCON"],
+    ])
+    importar_planilha(db, path)
+    linhas = gerar_relatorio(db, "Eros", "Janeiro").linhas
+    manter_id = next(l.id for l in linhas if l.autor == "Cliente A")
+    apagar_id = next(l.id for l in linhas if l.autor == "Cliente B")
+
+    assert excluir_correspondencia(db, apagar_id) is True
+
+    linhas_depois = gerar_relatorio(db, "Eros", "Janeiro").linhas
+    assert [l.id for l in linhas_depois] == [manter_id]
+
+
+def test_excluir_correspondencia_inexistente_devolve_false(db):
+    assert excluir_correspondencia(db, 999999) is False

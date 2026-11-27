@@ -1,4 +1,8 @@
-from app.db import _normalizar_url
+from datetime import datetime, timedelta
+
+from app.auth import hash_senha
+from app.db import _limpar_sessoes_expiradas, _normalizar_url
+from app.models import Sessao, Usuario
 
 
 def test_normaliza_postgresql_para_psycopg():
@@ -32,3 +36,21 @@ def test_remove_pgbouncer_da_query_string():
 def test_preserva_outros_parametros_da_query_string():
     url = "postgresql://user:pass@host:5432/postgres?sslmode=require&pgbouncer=true"
     assert _normalizar_url(url) == "postgresql+psycopg://user:pass@host:5432/postgres?sslmode=require"
+
+
+def test_limpar_sessoes_expiradas_remove_so_as_vencidas(db):
+    """Auditoria M11: Sessao nunca era podada — toda sessão criada ficava
+    pra sempre no banco, mesmo depois de expirada."""
+    usuario = Usuario(nome="Fulano", email="sessao.limpa@teste.local", senha_hash=hash_senha("x"))
+    db.add(usuario)
+    db.flush()
+
+    expirada = Sessao(token="t" * 64, usuario_id=usuario.id, expira_em=datetime.utcnow() - timedelta(hours=1))
+    valida = Sessao(token="v" * 64, usuario_id=usuario.id, expira_em=datetime.utcnow() + timedelta(hours=1))
+    db.add_all([expirada, valida])
+    db.commit()
+
+    _limpar_sessoes_expiradas(db)
+
+    assert db.get(Sessao, "t" * 64) is None
+    assert db.get(Sessao, "v" * 64) is not None

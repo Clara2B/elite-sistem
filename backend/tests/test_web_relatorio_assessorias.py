@@ -52,11 +52,17 @@ def _agendamento():
     wb.remove(wb.active)
     ws_judicial = wb.create_sheet("JUDICIAL")
     ws_judicial.append([None, "NOME DO CLIENTE", "PROCESSO", "EMPRESA"])
-    ws_judicial.append(["01/03/2026", "Fulano", "0001", "TESTE WEB SA"])
-    ws_pauta = wb.create_sheet("PAUTA DA SEMANA CONTRARIA")
-    ws_pauta.append(["PAUTA DA SEMANA CONTRARIA"])
-    ws_pauta.append(["DATA", "NOME DO CLIENTE", "ESTADO", "PROCESSO", "EMPRESA"])
-    ws_pauta.append(["01/04/2026", "Beltrano", "SP", "0002", "TESTE WEB SA"])
+    ws_judicial.append(["10/08/2026", "Fulano", "0001", "TESTE WEB SA"])
+    return wb
+
+
+def _pauta_contrarias():
+    wb = Workbook()
+    wb.remove(wb.active)
+    ws = wb.create_sheet("PAUTAS")
+    ws.append(["PAUTA DA SEMANA 03 DE AGOSTO ATE 07 DE AGOSTO DE 2026"])
+    ws.append(["DATA DA AUDIÊNCIA", "HORÁRIO", "CLIENTE", "PROCESSO", "TIPO", "ASSESSORIA"])
+    ws.append(["04/08/2026", "10:00", "Beltrano", "0002", "JUDICIAL", "TESTE WEB SA"])
     return wb
 
 
@@ -99,6 +105,7 @@ def _arquivos():
         "extrajudicial": ("extrajudicial.xlsx", _bytes_planilha(_extrajudicial), tipo),
         "contrarias": ("contrarias.xlsx", _bytes_planilha(_contrarias), tipo),
         "procon": ("procon.xlsx", _bytes_planilha(_procon), tipo),
+        "pauta_contrarias": ("pauta_contrarias.xlsx", _bytes_planilha(_pauta_contrarias), tipo),
     }
 
 
@@ -106,6 +113,20 @@ def test_colaborador_sem_acesso(client, db):
     _logar_colaborador(db, client)
     resposta = client.get("/app/relatorios-assessorias", follow_redirects=False)
     assert resposta.status_code == 403
+
+
+def test_tela_upload_usa_o_mesmo_padrao_visual_das_outras_telas(client, db):
+    """Auditoria M23: os campos de arquivo usam a mesma zona de
+    arrastar-arquivo (data-upload/upload-zona) das telas de Laudos,
+    Processos, Audiências, Correspondências e Pendências — não inputs
+    nativos simples."""
+    _logar_admin(db, client)
+    resposta = client.get("/app/relatorios-assessorias")
+    assert resposta.status_code == 200
+    for campo in ("laudo", "iniciais", "agendamento", "extrajudicial", "contrarias", "procon"):
+        assert f'<input type="file" id="{campo}"' in resposta.text
+    assert resposta.text.count("data-upload") >= 6
+    assert resposta.text.count("upload-zona") >= 6
 
 
 def test_fluxo_completo_upload_painel_revisao_download(client, db):

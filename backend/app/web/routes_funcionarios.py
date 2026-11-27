@@ -16,6 +16,7 @@ from app.services.funcionarios import (
     excluir_funcionario,
     listar_funcionarios,
 )
+from app.utils import normalize, paginar
 from app.web.areas_configuracao import AREAS_CONFIGURACAO
 from app.web.auth import admin_logado_web
 from app.web.menu import itens_menu
@@ -24,12 +25,19 @@ from app.web.templates import templates
 router = APIRouter(prefix="/app/funcionarios")
 
 
-def _contexto_base(db: Session, usuario: Usuario) -> dict:
+def _contexto_base(db: Session, usuario: Usuario, busca: str | None = None, pagina: int = 1) -> dict:
+    todos = listar_funcionarios(db, apenas_ativos=False)
+    if busca:
+        alvo = normalize(busca)
+        todos = [f for f in todos if alvo in normalize(f.nome)]
+    pagina_dados = paginar(todos, pagina)
     return {
         "usuario": usuario,
         "menu": itens_menu(db, usuario),
         "areas_configuracao": AREAS_CONFIGURACAO,
-        "funcionarios": listar_funcionarios(db, apenas_ativos=False),
+        "funcionarios": pagina_dados.itens,
+        "pagina": pagina_dados,
+        "busca": busca or "",
         "mensagem": None,
         "erro": None,
     }
@@ -38,12 +46,14 @@ def _contexto_base(db: Session, usuario: Usuario) -> dict:
 @router.get("")
 def tela(
     request: Request,
+    busca: str | None = None,
+    pagina: int = 1,
     erro: str | None = None,
     mensagem: str | None = None,
     usuario: Usuario = Depends(admin_logado_web),
     db: Session = Depends(get_db),
 ):
-    contexto = _contexto_base(db, usuario)
+    contexto = _contexto_base(db, usuario, busca, pagina)
     contexto["erro"] = erro
     contexto["mensagem"] = mensagem
     return templates.TemplateResponse(request, "funcionarios.html", contexto)

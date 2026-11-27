@@ -9,6 +9,7 @@
 {% block conteudo %}
   {% import "_icones.html" as icones %}
   {% import "_flash.html" as flash %}
+  {% import "_paginacao.html" as paginacao %}
   <h1>Empresas-clientes</h1>
   <p class="subtitulo">Cadastro, CNPJ e ativação das empresas atendidas por ELITE e EXÍMIA.</p>
 
@@ -17,11 +18,11 @@
 
   <div class="card">
     <div class="card-header">
-      <h2>Cadastradas ({{ empresas|length }})</h2>
-      {% if empresas %}
-        <input type="text" id="busca-empresas" class="busca-lista" placeholder="Buscar por nome ou CNPJ..."
+      <h2>Cadastradas ({{ pagina.total_itens }})</h2>
+      <form method="get" action="/app/empresas">
+        <input type="text" name="busca" value="{{ busca }}" class="busca-lista" placeholder="Buscar por nome ou CNPJ..."
                aria-label="Buscar empresa por nome ou CNPJ" autocomplete="off">
-      {% endif %}
+      </form>
     </div>
     {% if empresas %}
       {% for e in empresas %}
@@ -69,13 +70,13 @@
                 </td>
                 <td>
                   <div class="acoes-linha">
-                    <button type="submit" form="empresa-{{ e.id }}" class="secundario" style="padding:7px 12px; font-size:0.8rem;">Salvar</button>
+                    <button type="submit" form="empresa-{{ e.id }}" class="secundario botao-linha">Salvar</button>
                     <form method="post" action="/app/empresas/{{ e.id }}/ativo?ativo={{ 'false' if e.ativo else 'true' }}">
-                      <button type="submit" class="{{ 'perigo' if e.ativo else 'secundario' }}" style="padding:7px 12px; font-size:0.8rem;">
+                      <button type="submit" class="{{ 'perigo' if e.ativo else 'secundario' }} botao-linha">
                         {{ "Desativar" if e.ativo else "Ativar" }}
                       </button>
                     </form>
-                    <button type="button" class="perigo botao-excluir-linha" style="padding:7px 10px; font-size:0.8rem;"
+                    <button type="button" class="perigo botao-excluir-linha botao-linha"
                             data-abrir-confirmacao="modal-excluir-{{ e.id }}" data-nome-alvo="{{ e.nome }}"
                             title="Excluir {{ e.nome }}" aria-label="Excluir {{ e.nome }}">
                       {{ icones.icone('lixeira') }}
@@ -84,9 +85,6 @@
                 </td>
               </tr>
             {% endfor %}
-            <tr id="linha-busca-vazia" style="display:none;">
-              <td colspan="5" class="vazio">Nenhuma empresa encontrada para essa busca.</td>
-            </tr>
           </tbody>
         </table>
       </div>
@@ -110,7 +108,7 @@
                 <label for="destino-{{ e.id }}">Mover histórico vinculado para</label>
                 <select id="destino-{{ e.id }}" name="empresa_destino_id" form="excluir-{{ e.id }}" required>
                   <option value="">Selecione...</option>
-                  {% for outra in empresas %}
+                  {% for outra in todas_empresas %}
                     {% if outra.id != e.id %}
                       <option value="{{ outra.id }}">{{ outra.nome }}</option>
                     {% endif %}
@@ -134,7 +132,7 @@
           <h3>Excluir <span data-contador-modal>0</span> empresa(s) selecionada(s)?</h3>
           <p>
             Isso vai apagar definitivamente, sem volta, as empresas selecionadas que não tiverem
-            laudo, audiência, cobrança, processo ou correspondência vinculado. As que tiverem só
+            laudo, audiência, cobrança, processo ou correspondente vinculado. As que tiverem só
             são excluídas se você escolher abaixo uma empresa de destino — o histórico delas é
             movido pra lá antes da exclusão. Sem destino, essas ficam de fora (as demais são
             excluídas normalmente).
@@ -143,17 +141,22 @@
             <label for="destino-em-massa-excluir">Mover histórico vinculado para</label>
             <select id="destino-em-massa-excluir" name="empresa_destino_id" form="form-excluir-em-massa">
               <option value="">Selecione...</option>
-              {% for outra in empresas %}
+              {% for outra in todas_empresas %}
                 <option value="{{ outra.id }}" data-opcao-destino>{{ outra.nome }}</option>
               {% endfor %}
             </select>
+          </div>
+          <div class="campo" style="margin-top: 14px;">
+            <label for="confirmar-excluir-em-massa">Digite EXCLUIR para confirmar</label>
+            <input type="text" id="confirmar-excluir-em-massa" autocomplete="off"
+                   data-confirmar-texto="EXCLUIR" placeholder="EXCLUIR">
           </div>
         </div>
         <div class="modal-acoes">
           <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
           <form id="form-excluir-em-massa" method="post" action="/app/empresas/excluir-em-massa">
             <span data-ids-selecionados></span>
-            <button type="submit" class="perigo">Excluir selecionadas</button>
+            <button type="submit" class="perigo" data-confirmar-alvo>Excluir selecionadas</button>
           </form>
         </div>
       </dialog>
@@ -164,27 +167,35 @@
           <h3>Realocar <span data-contador-modal>0</span> empresa(s) selecionada(s)?</h3>
           <p>
             Isso vai mover todo o histórico (laudos, audiências, cobranças, processos e
-            correspondências) das empresas selecionadas para a empresa de destino escolhida
+            correspondentes) das empresas selecionadas para a empresa de destino escolhida
             abaixo. As empresas de origem continuam cadastradas e ativas — nada é excluído.
           </p>
           <div class="campo" style="margin-top: 14px;">
             <label for="destino-em-massa-realocar">Mover todo o histórico para</label>
             <select id="destino-em-massa-realocar" name="empresa_destino_id" form="form-realocar-em-massa" required>
               <option value="">Selecione...</option>
-              {% for outra in empresas %}
+              {% for outra in todas_empresas %}
                 <option value="{{ outra.id }}" data-opcao-destino>{{ outra.nome }}</option>
               {% endfor %}
             </select>
+          </div>
+          <div class="campo" style="margin-top: 14px;">
+            <label for="confirmar-realocar-em-massa">Digite REALOCAR para confirmar</label>
+            <input type="text" id="confirmar-realocar-em-massa" autocomplete="off"
+                   data-confirmar-texto="REALOCAR" placeholder="REALOCAR">
           </div>
         </div>
         <div class="modal-acoes">
           <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
           <form id="form-realocar-em-massa" method="post" action="/app/empresas/realocar-em-massa">
             <span data-ids-selecionados></span>
-            <button type="submit" class="perigo">Realocar selecionadas</button>
+            <button type="submit" class="perigo" data-confirmar-alvo>Realocar selecionadas</button>
           </form>
         </div>
       </dialog>
+      {{ paginacao.nav(pagina, "/app/empresas", busca) }}
+    {% elif busca %}
+      <p class="vazio">Nenhuma empresa encontrada para essa busca.</p>
     {% else %}
       <p class="vazio">Nenhuma empresa-cliente cadastrada ainda.</p>
     {% endif %}
@@ -218,7 +229,7 @@
       {{ icones.icone('empresas') }} Sincronizar com a lista oficial
     </button>
 
-    {% set inativas = empresas | selectattr('ativo', 'equalto', false) | list %}
+    {% set inativas = todas_empresas | selectattr('ativo', 'equalto', false) | list %}
     <p class="subtitulo" style="margin-top: 22px;">
       Exclui de verdade todas as {{ inativas | length }} empresa(s) marcada(s) como
       <strong>Inativa</strong> hoje (mesma proteção: uma empresa só é excluída se não tiver laudo,

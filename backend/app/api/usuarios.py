@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -27,7 +27,7 @@ class SetorVinculo(BaseModel):
 
 class NovoUsuario(BaseModel):
     nome: str
-    email: str
+    email: EmailStr
     senha: str
     papel_global: str | None = None  # 'ADMIN_SUPERIOR' | 'ADMIN_TI' | None
     setores: list[SetorVinculo] = []
@@ -35,7 +35,7 @@ class NovoUsuario(BaseModel):
 
 class EdicaoUsuario(BaseModel):
     nome: str
-    email: str
+    email: EmailStr
     papel_global: str | None = None  # 'ADMIN_SUPERIOR' | 'ADMIN_TI' | None
     senha: str | None = None  # None/vazio = mantém a senha atual
     setores: list[SetorVinculo] | None = None  # None = não mexe nos vínculos atuais

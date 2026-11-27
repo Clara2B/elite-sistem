@@ -1,10 +1,29 @@
-"""Fluxo de PENDÊNCIAS — portado de core/pendencias.py (leitor-relatorio).
+"""Fluxo de PENDÊNCIAS — reestruturado em 2026-11-24 a pedido da Clara
+("já está errado desde o começo, vamos reestruturar").
 
-Regras já auditadas em ARCHITECTURE.md seção 1.4: pendente = campo PAGO com
-qualquer status diferente de SIM (vazio não conta) — inclui "NÃO"
-explicitamente como pendência, a pedido da Clara (2026-09-24; antes disso
-"NÃO" era tratado como resolvido, igual "SIM", o que estava errado — ver
-DECISIONS.md). Dedup por (data+empresa+tipo+valor) com SIM sempre vencendo;
+Raiz do problema anterior: o import genérico (`load_data_sheets`, que varre
+TODAS as abas da planilha e usa a primeira que bater com os cabeçalhos
+exigidos) sempre acabava lendo a aba "2025 - RECEBIMENTOS EMPRESAS" — que
+tem literalmente as colunas "EMPRESA"/"VALOR"/"PAGO (SIM/NÃO)" — porque a
+aba atual, "2026 - RECEBIMENTOS EMPRESAS", usa nomes diferentes ("CLIENTE",
+"VALOR FALTANTE") que nunca batiam com os cabeçalhos exigidos. Ou seja: o
+gerador de mensagens de cobrança vinha puxando dados do ANO PASSADO, sem
+nenhum erro aparecer (a aba de 2025 "servia" pro import, só com os dados
+errados) — ver DECISIONS.md.
+
+Agora o import abre SÓ a aba "<ano atual> - RECEBIMENTOS EMPRESAS" (nunca
+outra aba da mesma planilha) e lê pelas colunas reais dela: "CLIENTE"
+(nome da empresa), "VALOR FALTANTE" (valor a cobrar) e "PAGO".
+
+Pendente = campo PAGO em {"VERIFICAR", "PENDENTE", "EM ATRASO"} — lista
+confirmada com a Clara em 2026-11-24. "SIM" é pago (não cobra) e "NÃO" foi
+explicitamente excluído da lista por ela nessa mesma data (revoga a regra
+anterior, de 2026-09-24, que tratava "NÃO" como pendência também — ver
+DECISIONS.md). "ACORDO" também foi tirado da lista a pedido da Clara em
+2026-11-27: uma cobrança já acordada não deve aparecer como pendência nem
+gerar mensagem de cobrança.
+
+Dedup por (data+empresa+tipo+valor) com SIM sempre vencendo;
 classificação automática do cobrador (tipo contendo "AUDIÊNCIA" -> EXIMIA,
 resto -> ELITE).
 """
@@ -14,21 +33,29 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
+from datetime import date
 
+import openpyxl
 import pandas as pd
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from app.excel_reader import load_data_sheets
-from app.models import Cobranca, EmpresaCliente
-from app.services.empresas import get_or_create_empresa
-from app.utils import cell_text, format_brl, normalize, parse_date_cell
+from app.models import Cobranca
+from app.services.empresas import get_or_create_empresa, resolver_empresa_por_nome
+from app.utils import (
+    cell_text,
+    format_brl,
+    normalize,
+    parse_date_cell,
+    parse_valor_monetario,
+)
 
 _logger = logging.getLogger("elite_sistem.import")
 
-REQUIRED_HEADERS = ["EMPRESA", "TIPO DE COBRANÇA", "VALOR"]
-CHAVE_DUPLICIDADE = ["DATA", "EMPRESA", "TIPO DE COBRANÇA", "VALOR"]
-STATUS_PAGO_OK = {normalize("SIM")}
+NOME_ABA_SUFIXO = "RECEBIMENTOS EMPRESAS"
+COLUNAS_OBRIGATORIAS = ["DATA", "CLIENTE", "TIPO DE COBRANÇA", "VALOR FALTANTE"]
+CHAVE_DUPLICIDADE = ["DATA", "CLIENTE", "TIPO DE COBRANÇA", "VALOR FALTANTE"]
+STATUS_PENDENTE = {normalize(s) for s in ("VERIFICAR", "PENDENTE", "EM ATRASO")}
 _PRIORIDADE_PAGO = {"SIM": 0}
 
 PIX_EXIMIA = "✅ PIX: CNPJ: 655965130001-52 \nEXIMIA CAMARA DE CONCILIACAO MEDIACAO & ARBITRAGEM LTDA"
@@ -43,25 +70,24 @@ def _e_pendente(pago_valor) -> bool:
     texto = normalize(pago_valor)
     if not texto:
         return False
-    return texto not in STATUS_PAGO_OK
+    return texto in STATUS_PENDENTE
 
 
 def _parse_valor(valor) -> float | None:
+    """Número já vindo como int/float da planilha (célula numérica de
+    verdade) é usado direto; texto passa por `parse_valor_monetario`
+    (compartilhada com `services/correspondencias.py` desde 2026-11-24 —
+    bug real corrigido: um valor de texto simples com ponto decimal, ex.
+    "280.50", era interpretado como formato brasileiro cegamente (ponto =
+    separador de milhar), virando 28050.0 — 100x maior, sem nenhum
+    aviso)."""
     if valor is None:
         return None
     if isinstance(valor, (int, float)):
         if isinstance(valor, float) and pd.isna(valor):
             return None
         return float(valor)
-    texto = str(valor).strip()
-    if not texto:
-        return None
-    texto = texto.replace("R$", "").replace("r$", "").strip()
-    texto = texto.replace(".", "").replace(",", ".")
-    try:
-        return float(texto)
-    except ValueError:
-        return None
+    return parse_valor_monetario(valor)
 
 
 def _classificar_cobrador(tipo_cobranca: str) -> str:
@@ -85,6 +111,40 @@ def _col_optional(df, nome: str) -> str | None:
         return _col(df, nome)
     except KeyError:
         return None
+
+
+def _nome_aba_esperado(ano: int) -> str:
+    return f"{ano} - {NOME_ABA_SUFIXO}"
+
+
+def _ler_aba_recebimentos(path: str) -> pd.DataFrame:
+    """Lê SÓ a aba "<ano atual> - RECEBIMENTOS EMPRESAS" — nunca outra aba
+    da mesma planilha (ex.: "PAGAMENTOS", "CNPJs" ou a aba de um ano
+    anterior), a pedido explícito da Clara (2026-11-24). `read_only=True`
+    pelo mesmo motivo de `excel_reader.load_data_sheets`: não carregar a
+    planilha inteira (que tem ~10 abas) na memória."""
+    nome_esperado = _nome_aba_esperado(date.today().year)
+    wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
+    try:
+        nome_aba = next((s for s in wb.sheetnames if normalize(s) == normalize(nome_esperado)), None)
+        if nome_aba is None:
+            raise ValueError(
+                f'Não encontrei a aba "{nome_esperado}" nesta planilha. '
+                f"Abas disponíveis: {', '.join(wb.sheetnames)}."
+            )
+        linhas = list(wb[nome_aba].iter_rows(values_only=True))
+    finally:
+        wb.close()
+
+    linhas = [l for l in linhas if any(v is not None for v in l)]
+    if not linhas:
+        return pd.DataFrame()
+    header = linhas[0]
+    largura = len(header)
+    dados = [l + (None,) * (largura - len(l)) if len(l) < largura else l[:largura] for l in linhas[1:]]
+    cols = [cell_text(c) or f"col_{i}" for i, c in enumerate(header)]
+    df = pd.DataFrame(dados, columns=cols)
+    return df.dropna(how="all")
 
 
 def _resolver_lancamentos_duplicados(df: pd.DataFrame) -> pd.DataFrame:
@@ -113,26 +173,42 @@ class ImportResumo:
     linhas_lidas: int = 0
     linhas_novas: int = 0
     linhas_ja_existentes: int = 0
+    linhas_atualizadas: int = 0
 
 
 def importar_planilha(db: Session, path: str) -> ImportResumo:
     inicio = time.perf_counter()
-    df = load_data_sheets(path, REQUIRED_HEADERS)
+    df = _ler_aba_recebimentos(path)
     if df.empty:
+        raise ValueError(f'A aba "{_nome_aba_esperado(date.today().year)}" está vazia nesta planilha.')
+
+    faltando = [nome for nome in COLUNAS_OBRIGATORIAS if _col_optional(df, nome) is None]
+    if faltando:
         raise ValueError(
-            "Não encontrei nenhuma aba com as colunas 'EMPRESA', 'TIPO DE COBRANÇA' e 'VALOR' "
-            "(ou 'VALOR FALTANTE') nesta planilha."
+            f'A aba "{_nome_aba_esperado(date.today().year)}" está sem a(s) coluna(s) obrigatória(s): '
+            + ", ".join(f'"{c}"' for c in faltando) + "."
         )
+
     df = _resolver_lancamentos_duplicados(df)
 
-    col_empresa = _col(df, "EMPRESA")
+    col_empresa = _col(df, "CLIENTE")
     col_tipo = _col(df, "TIPO DE COBRANÇA")
-    col_valor = _col(df, "VALOR")
+    col_valor = _col(df, "VALOR FALTANTE")
     col_pago = _col_optional(df, "PAGO")
     col_data = _col_optional(df, "DATA")
 
-    existentes = {
-        (c.empresa_cliente_id, c.data, normalize(c.tipo_cobranca), c.valor)
+    # Identidade da cobrança contra o que já está no banco — sem PAGO de
+    # propósito. Bug real corrigido em 2026-11-24 (mesma classe do bug já
+    # corrigido em Laudos): PAGO fazia parte da chave original de
+    # duplicidade contra o banco, então reimportar a planilha depois do
+    # cliente pagar (PAGO corrigido de "NÃO"/vazio pra "SIM") não era
+    # reconhecido como "a mesma cobrança, só que paga agora" — criava um
+    # registro NOVO, deixando o antigo (ainda pendente) intacto, e o
+    # sistema continuava cobrando o cliente pra sempre por uma dívida já
+    # quitada. Agora a reimportação ATUALIZA o status de pagamento do
+    # registro existente em vez de duplicar.
+    existentes: dict[tuple, Cobranca] = {
+        (c.empresa_cliente_id, c.data, normalize(c.tipo_cobranca), c.valor): c
         for c in db.scalars(select(Cobranca))
     }
     # Cache de empresa-cliente pro import inteiro — ver nota equivalente em
@@ -156,21 +232,25 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
 
         empresa = get_or_create_empresa(db, empresa_nome, cache=empresa_cache)
         chave = (empresa.id, data_val, normalize(tipo), valor)
-        if chave in existentes:
-            resumo.linhas_ja_existentes += 1
+        cobranca_existente = existentes.get(chave)
+        if cobranca_existente is not None:
+            if normalize(cobranca_existente.status_pagamento) != normalize(status_pago):
+                cobranca_existente.status_pagamento = status_pago
+                resumo.linhas_atualizadas += 1
+            else:
+                resumo.linhas_ja_existentes += 1
             continue
 
-        db.add(
-            Cobranca(
-                empresa_cliente_id=empresa.id,
-                data=data_val,
-                tipo_cobranca=tipo,
-                cobrador=_classificar_cobrador(tipo),
-                valor=valor,
-                status_pagamento=status_pago,
-            )
+        nova = Cobranca(
+            empresa_cliente_id=empresa.id,
+            data=data_val,
+            tipo_cobranca=tipo,
+            cobrador=_classificar_cobrador(tipo),
+            valor=valor,
+            status_pagamento=status_pago,
         )
-        existentes.add(chave)
+        db.add(nova)
+        existentes[chave] = nova
         resumo.linhas_novas += 1
 
     db.commit()
@@ -204,13 +284,80 @@ class MensagemPendencia:
     total: float = 0.0
 
 
+def ids_empresas_com_pendencia(db: Session) -> set[int]:
+    """IDs de empresa-cliente com pelo menos uma cobrança pendente agora
+    — mesma regra de `gerar_mensagens` (status em STATUS_PENDENTE e valor >
+    0). Usado pra filtrar o menu de empresas da tela (a pedido da Clara,
+    2026-11-24: só mostrar quem tem resultado — ex.: "Juros Justos" não
+    aparece se nunca tiver uma cobrança pendente)."""
+    ids: set[int] = set()
+    for empresa_id, status, valor in db.execute(
+        select(Cobranca.empresa_cliente_id, Cobranca.status_pagamento, Cobranca.valor)
+    ):
+        if _e_pendente(status) and valor is not None and valor > 0:
+            ids.add(empresa_id)
+    return ids
+
+
+@dataclass
+class LinhaCobranca:
+    id: int
+    data: date
+    tipo_cobranca: str
+    cobrador: str
+    valor: float
+    status_pagamento: str | None
+
+
+def listar_cobrancas(db: Session, empresa_nome: str) -> list[LinhaCobranca]:
+    """Todas as cobranças de uma empresa — pagas ou não, diferente de
+    `gerar_mensagens` (que só traz as pendentes) — pra edição/exclusão
+    individual (a pedido da Clara, 2026-11-25)."""
+    empresa = resolver_empresa_por_nome(db, empresa_nome)
+    if empresa is None:
+        raise ValueError(f"A empresa '{empresa_nome}' não foi encontrada.")
+    query = select(Cobranca).where(Cobranca.empresa_cliente_id == empresa.id).order_by(Cobranca.data)
+    return [
+        LinhaCobranca(
+            id=c.id, data=c.data, tipo_cobranca=c.tipo_cobranca, cobrador=c.cobrador,
+            valor=c.valor, status_pagamento=c.status_pagamento,
+        )
+        for c in db.scalars(query)
+    ]
+
+
+def editar_cobranca(
+    db: Session, cobranca_id: int, data: date, tipo_cobranca: str, cobrador: str,
+    valor: float, status_pagamento: str | None,
+) -> bool:
+    """Edita UMA cobrança específica — a pedido da Clara (2026-11-25), pra
+    corrigir um lançamento errado sem precisar reimportar a planilha
+    inteira. Devolve False se o id não existir."""
+    c = db.get(Cobranca, cobranca_id)
+    if c is None:
+        return False
+    c.data = data
+    c.tipo_cobranca = tipo_cobranca
+    c.cobrador = cobrador
+    c.valor = valor
+    c.status_pagamento = status_pagamento
+    db.commit()
+    return True
+
+
+def excluir_cobranca(db: Session, cobranca_id: int) -> bool:
+    """Exclui UMA cobrança específica — a pedido da Clara (2026-11-25).
+    Devolve False se o id não existir."""
+    c = db.get(Cobranca, cobranca_id)
+    if c is None:
+        return False
+    db.delete(c)
+    db.commit()
+    return True
+
+
 def gerar_mensagens(db: Session, empresa_nome: str) -> list[MensagemPendencia]:
-    alvo_empresa = normalize(empresa_nome)
-    empresa = None
-    for e in db.scalars(select(EmpresaCliente)):
-        if normalize(e.nome) == alvo_empresa:
-            empresa = e
-            break
+    empresa = resolver_empresa_por_nome(db, empresa_nome)
     if empresa is None:
         raise ValueError(f"A empresa '{empresa_nome}' não foi encontrada.")
 

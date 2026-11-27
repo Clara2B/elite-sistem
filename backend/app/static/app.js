@@ -24,6 +24,14 @@ function mostrarToast(texto, tipo) {
   return div;
 }
 
+// Filtra uma lista (array ou NodeList) de elementos pelos que estão
+// visíveis no momento (M40: era implementado duas vezes, quase idêntico,
+// em iniciarSelecionarTodosModulos e iniciarSelecaoEmMassaDeEmpresas —
+// extraído aqui como helper único).
+function caixasVisiveis(lista) {
+  return Array.prototype.filter.call(lista, function (caixa) { return caixa.offsetParent !== null; });
+}
+
 function iniciarZonasDeUpload() {
   document.querySelectorAll("[data-upload]").forEach(function (zona) {
     var input = zona.querySelector("[data-upload-input]");
@@ -44,9 +52,19 @@ function iniciarZonasDeUpload() {
   });
 }
 
+// Mesmo limite de app/api/_shared.py::TAMANHO_MAXIMO_UPLOAD_BYTES — checado
+// aqui também só pra dar o erro na hora (sem esperar o upload inteiro
+// terminar pra descobrir que passou do limite); o servidor valida de novo
+// e é quem decide de verdade, então os dois lados nunca precisam ficar
+// sincronizados byte a byte.
+var TAMANHO_MAXIMO_UPLOAD_BYTES = 20 * 1024 * 1024;
+
 // Troca a bolha nativa do navegador ("Selecione um arquivo.") por um toast
-// no estilo do resto do sistema — só a validação de arquivo obrigatório,
-// as outras validações HTML5 (email, required de texto) continuam nativas.
+// no estilo do resto do sistema — e também valida tipo (.xlsx) e tamanho
+// do arquivo antes de enviar (a pedido da Clara: um arquivo errado ou
+// grande demais só se mostrava como erro depois do upload inteiro
+// terminar). As outras validações HTML5 (email, required de texto)
+// continuam nativas.
 function iniciarValidacaoDeUpload() {
   document.querySelectorAll("form").forEach(function (form) {
     var camposArquivo = form.querySelectorAll("input[type=file][required]");
@@ -63,14 +81,58 @@ function iniciarValidacaoDeUpload() {
     form.addEventListener("submit", function (evento) {
       for (var i = 0; i < camposArquivo.length; i++) {
         var campo = camposArquivo[i];
+        var zona = campo.closest("[data-upload]");
         if (!campo.files || campo.files.length === 0) {
           evento.preventDefault();
-          var zona = campo.closest("[data-upload]");
           if (zona) zona.classList.add("upload-erro");
           mostrarToast("Selecione um arquivo antes de importar.", "erro");
           return;
         }
+        var arquivo = campo.files[0];
+        if (!/\.xlsx$/i.test(arquivo.name)) {
+          evento.preventDefault();
+          if (zona) zona.classList.add("upload-erro");
+          mostrarToast('O arquivo "' + arquivo.name + '" não é uma planilha .xlsx.', "erro");
+          return;
+        }
+        if (arquivo.size > TAMANHO_MAXIMO_UPLOAD_BYTES) {
+          evento.preventDefault();
+          if (zona) zona.classList.add("upload-erro");
+          var tamanhoMb = (arquivo.size / (1024 * 1024)).toFixed(1);
+          var limiteMb = TAMANHO_MAXIMO_UPLOAD_BYTES / (1024 * 1024);
+          mostrarToast("O arquivo tem " + tamanhoMb + " MB — o limite é " + limiteMb + " MB.", "erro");
+          return;
+        }
       }
+    });
+  });
+}
+
+// Desativa o botão de envio e troca o texto por "Importando..." assim que
+// a planilha passa pela validação de arquivo obrigatório (`
+// iniciarValidacaoDeUpload`, registrado antes deste no DOMContentLoaded —
+// por isso `evento.defaultPrevented` já reflete a validação quando este
+// listener roda). A pedido da Clara: planilhas grandes demoram alguns
+// segundos pra importar, e sem nenhum feedback a tela parecia travada —
+// dava pra clicar "Importar" de novo e mandar a mesma planilha duas vezes.
+function iniciarFeedbackDeEnvioDeUpload() {
+  document.querySelectorAll("form").forEach(function (form) {
+    if (!form.querySelector("[data-upload]")) return;
+    var botao = form.querySelector("button[type=submit]");
+    if (!botao) return;
+    var textoOriginal = botao.textContent;
+
+    form.addEventListener("submit", function (evento) {
+      if (evento.defaultPrevented) return;
+      botao.disabled = true;
+      botao.textContent = "Importando...";
+    });
+
+    // "Voltar" do navegador depois de enviar pode restaurar a página com o
+    // botão ainda desativado (bfcache) — devolve ao estado normal.
+    window.addEventListener("pageshow", function () {
+      botao.disabled = false;
+      botao.textContent = textoOriginal;
     });
   });
 }
@@ -263,17 +325,11 @@ function iniciarModulosPorOperadora() {
 // mexe nas caixas que estão visíveis no momento (as escondidas pela
 // operadora escolhida, via `iniciarModulosPorOperadora`, ficam de fora).
 function iniciarSelecionarTodosModulos() {
-  function caixasVisiveis(bloco) {
-    return Array.prototype.filter.call(bloco.querySelectorAll("input[type=checkbox]"), function (caixa) {
-      return caixa.offsetParent !== null;
-    });
-  }
-
   document.querySelectorAll("[data-marcar-todos-modulos]").forEach(function (botao) {
     var alvo = document.getElementById(botao.getAttribute("data-marcar-todos-modulos"));
     if (!alvo) return;
     botao.addEventListener("click", function () {
-      caixasVisiveis(alvo).forEach(function (caixa) {
+      caixasVisiveis(alvo.querySelectorAll("input[type=checkbox]")).forEach(function (caixa) {
         caixa.checked = true;
       });
     });
@@ -283,7 +339,7 @@ function iniciarSelecionarTodosModulos() {
     var alvo = document.getElementById(botao.getAttribute("data-limpar-modulos"));
     if (!alvo) return;
     botao.addEventListener("click", function () {
-      caixasVisiveis(alvo).forEach(function (caixa) {
+      caixasVisiveis(alvo.querySelectorAll("input[type=checkbox]")).forEach(function (caixa) {
         caixa.checked = false;
       });
     });
@@ -424,14 +480,11 @@ function iniciarSelecaoEmMassaDeEmpresas() {
   }
 
   // Igual ao "Marcar todas" de Setores (`iniciarSelecionarTodosModulos`) —
-  // só mexe/considera nas caixas visíveis no momento, pra "Selecionar
-  // todas" não marcar (sem a pessoa ver) empresas escondidas pela busca
-  // (`iniciarBuscaDeEmpresas`). A seleção em si (`selecionadas()`) continua
-  // contando tudo marcado, visível ou não — filtrar a lista não deve
-  // desmarcar nada escondido por engano.
-  function caixasVisiveis() {
-    return caixas.filter(function (caixa) { return caixa.offsetParent !== null; });
-  }
+  // só mexe/considera nas caixas visíveis no momento (a busca agora é
+  // server-side — cada página só traz no DOM as empresas da busca/página
+  // atual, então "visível" já é só isso). A seleção em si (`selecionadas()`)
+  // continua contando tudo marcado, visível ou não. (`caixasVisiveis`
+  // compartilhado, ver topo do arquivo.)
 
   // Causa real do bug "seleciono várias mas só apaga uma" (2026-10-06, 3ª
   // rodada — a própria Clara encontrou): com várias caixinhas marcadas, o
@@ -447,7 +500,7 @@ function iniciarSelecaoEmMassaDeEmpresas() {
     barra.style.display = sel.length ? "" : "none";
     if (contador) contador.textContent = sel.length + " selecionada(s)";
     if (caixaTodas) {
-      var visiveis = caixasVisiveis();
+      var visiveis = caixasVisiveis(caixas);
       var selVisiveis = visiveis.filter(function (c) { return c.checked; });
       caixaTodas.checked = visiveis.length > 0 && selVisiveis.length === visiveis.length;
       caixaTodas.indeterminate = selVisiveis.length > 0 && selVisiveis.length < visiveis.length;
@@ -463,10 +516,9 @@ function iniciarSelecaoEmMassaDeEmpresas() {
   caixas.forEach(function (caixa) {
     caixa.addEventListener("change", atualizarBarra);
   });
-  document.addEventListener("empresas:busca-atualizada", atualizarBarra);
   if (caixaTodas) {
     caixaTodas.addEventListener("change", function () {
-      caixasVisiveis().forEach(function (caixa) { caixa.checked = caixaTodas.checked; });
+      caixasVisiveis(caixas).forEach(function (caixa) { caixa.checked = caixaTodas.checked; });
       atualizarBarra();
     });
   }
@@ -569,54 +621,10 @@ function iniciarCliqueNaLinhaParaSelecionar() {
   });
 }
 
-// Busca por nome/CNPJ na tela de Empresas-clientes (2026-10-08, varredura de
-// otimização/produtividade — nenhuma lista do sistema tinha busca; com 48+
-// empresas cadastradas, achar uma específica era rolar a página toda). Só
-// client-side (sem ida ao servidor) — a lista já está inteira na página e é
-// pequena o bastante pra filtrar instantaneamente a cada tecla digitada.
-// Ignora acentos/maiúsculas (mesma ideia de `app/utils.py::normalize`, só
-// que em JS). Não mexe na seleção em massa — só esconde linhas; ver
-// `caixasVisiveis()`/`empresas:busca-atualizada` em
-// `iniciarSelecaoEmMassaDeEmpresas` pra como as duas features convivem.
-function _normalizarTextoBusca(texto) {
-  return (texto || "")
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .trim()
-    .toLowerCase();
-}
-
-function iniciarBuscaDeEmpresas() {
-  var campo = document.getElementById("busca-empresas");
-  var linhaVazia = document.getElementById("linha-busca-vazia");
-  var linhas = Array.prototype.slice.call(document.querySelectorAll("tbody tr")).filter(function (linha) {
-    return linha !== linhaVazia;
-  });
-  if (!campo || !linhas.length) return;
-
-  var dados = linhas.map(function (linha) {
-    var nome = linha.querySelector("input[name=nome]");
-    var cnpj = linha.querySelector("input[name=cnpj]");
-    var texto = _normalizarTextoBusca((nome ? nome.value : "") + " " + (cnpj ? cnpj.value : ""));
-    return { linha: linha, texto: texto };
-  });
-
-  campo.addEventListener("input", function () {
-    var termo = _normalizarTextoBusca(campo.value);
-    var algumaVisivel = false;
-    dados.forEach(function (item) {
-      var bate = !termo || item.texto.indexOf(termo) !== -1;
-      item.linha.style.display = bate ? "" : "none";
-      if (bate) algumaVisivel = true;
-    });
-    if (linhaVazia) linhaVazia.style.display = algumaVisivel ? "none" : "";
-    document.dispatchEvent(new Event("empresas:busca-atualizada"));
-  });
-}
-
 document.addEventListener("DOMContentLoaded", function () {
   iniciarZonasDeUpload();
   iniciarValidacaoDeUpload();
+  iniciarFeedbackDeEnvioDeUpload();
   iniciarAlternanciaTipoRelatorio();
   iniciarModaisDeConfirmacao();
   iniciarConfirmacaoPorTexto();
@@ -629,5 +637,4 @@ document.addEventListener("DOMContentLoaded", function () {
   iniciarPopupSuporte();
   iniciarSelecaoEmMassaDeEmpresas();
   iniciarCliqueNaLinhaParaSelecionar();
-  iniciarBuscaDeEmpresas();
 });

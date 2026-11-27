@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block titulo %}Faixas de Audiências — Elite Sistem{% endblock %}
+{% block voltar %}
+  {% import "_icones.html" as icones %}
+  {% from "_config_subnav.html" import subnav %}
+  <a href="/app/configuracao" class="link-voltar">{{ icones.icone('voltar') }} Voltar à Configuração</a>
+  {{ subnav(areas_configuracao, request.url.path) }}
+{% endblock %}
+{% block conteudo %}
+  {% import "_icones.html" as icones %}
+  {% import "_flash.html" as flash %}
+  <h1>Faixas de Audiências</h1>
+  <p class="subtitulo">
+    Faixas de preço por quantidade de audiências acumuladas no mês, usadas no relatório de
+    Audiências. As faixas não podem se sobrepor e precisam cobrir, sem buracos, toda quantidade
+    que algum cliente possa atingir — se uma empresa acumular mais audiências do que a última
+    faixa cobre, o relatório dela para de ser gerado até existir uma faixa pra essa quantidade.
+  </p>
+
+  {{ flash.toast('sucesso', mensagem) }}
+  {{ flash.toast('erro', erro) }}
+
+  <div class="card">
+    <div class="card-header"><h2>Cadastradas ({{ faixas|length }})</h2></div>
+    {% if faixas %}
+      {% for f in faixas %}
+        <form id="faixa-{{ f.id }}" method="post" action="/app/faixas-audiencia/{{ f.id }}"></form>
+      {% endfor %}
+      <div class="tabela-wrap">
+        <table>
+          <thead><tr><th>Início</th><th>Fim</th><th>Valor</th><th style="width:1%;"></th></tr></thead>
+          <tbody>
+            {% for f in faixas %}
+              <tr>
+                <td>
+                  <input type="number" name="inicio" value="{{ f.inicio }}" min="1" required form="faixa-{{ f.id }}"
+                         style="width:90px; padding:6px 9px; border:1px solid var(--border); border-radius:7px; font-size:0.86rem;">
+                </td>
+                <td>
+                  <input type="number" name="fim" value="{{ f.fim }}" min="1" required form="faixa-{{ f.id }}"
+                         style="width:90px; padding:6px 9px; border:1px solid var(--border); border-radius:7px; font-size:0.86rem;">
+                </td>
+                <td>
+                  <input type="number" name="valor" value="{{ f.valor }}" min="0" step="0.01" required form="faixa-{{ f.id }}"
+                         style="width:120px; padding:6px 9px; border:1px solid var(--border); border-radius:7px; font-size:0.86rem;">
+                </td>
+                <td>
+                  <div class="acoes-linha">
+                    <button type="submit" form="faixa-{{ f.id }}" class="secundario" style="padding:7px 12px; font-size:0.8rem;">Salvar</button>
+                    <button type="button" class="perigo" style="padding:7px 10px; font-size:0.8rem;"
+                            data-abrir-confirmacao="modal-excluir-faixa-{{ f.id }}"
+                            data-nome-alvo="{{ f.inicio }}-{{ f.fim }}"
+                            aria-label="Excluir faixa {{ f.inicio }}-{{ f.fim }}">
+                      {{ icones.icone('lixeira') }}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% for f in faixas %}
+        <dialog id="modal-excluir-faixa-{{ f.id }}" class="modal-confirmacao">
+          <div class="modal-corpo">
+            <div class="modal-icone">{{ icones.icone('alerta') }}</div>
+            <h3>Excluir faixa?</h3>
+            <p>
+              Isso vai apagar a faixa <strong data-nome-alvo-destino>{{ f.inicio }}-{{ f.fim }}</strong>
+              definitivamente, sem volta. Se isso deixar alguma quantidade de audiências sem faixa
+              correspondente, o relatório de uma empresa que chegue nessa quantidade vai parar de
+              gerar até você cadastrar uma faixa que cubra esse intervalo.
+            </p>
+          </div>
+          <div class="modal-acoes">
+            <button type="button" class="secundario" data-fechar-modal>Cancelar</button>
+            <form method="post" action="/app/faixas-audiencia/{{ f.id }}/excluir">
+              <button type="submit" class="perigo">Excluir definitivamente</button>
+            </form>
+          </div>
+        </dialog>
+      {% endfor %}
+    {% else %}
+      <p class="vazio">Nenhuma faixa cadastrada ainda.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Nova faixa</h2></div>
+    <form id="nova-faixa" class="formulario" method="post" action="/app/faixas-audiencia">
+      <div class="campo">
+        <label for="inicio">Início</label>
+        <input type="number" id="inicio" name="inicio" min="1" required placeholder="Ex.: 101">
+      </div>
+      <div class="campo">
+        <label for="fim">Fim</label>
+        <input type="number" id="fim" name="fim" min="1" required placeholder="Ex.: 150">
+      </div>
+      <div class="campo">
+        <label for="valor">Valor por audiência</label>
+        <input type="number" id="valor" name="valor" min="0" step="0.01" required placeholder="Ex.: 250.00">
+      </div>
+      <button type="submit">Cadastrar</button>
+    </form>
+  </div>
+{% endblock %}

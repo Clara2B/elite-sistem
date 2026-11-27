@@ -4,13 +4,14 @@ empresa, PDF/Excel. Ver app/web/routes_laudos.py pro espelho exato dessa
 rota."""
 from __future__ import annotations
 
+from datetime import date
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Request, UploadFile
+from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.api._shared import salvar_temp
+from app.api._shared import remover_temp, salvar_temp
 from app.auth import PAPEIS_GLOBAIS
 from app.db import get_db
 from app.models import Usuario
@@ -60,13 +61,19 @@ def tela(
     contexto["mensagem"] = mensagem
     contexto["erro"] = erro
 
+    # Só quem tem correspondência nesse mês aparece no menu — a pedido da
+    # Clara (2026-11-24). Sem mês escolhido ainda, usa o mês atual.
+    mes_menu = mes or MESES[date.today().month - 1]
+    ids_com_correspondencia = correspondencias_service.ids_empresas_com_correspondencia(db, mes_menu)
+    contexto["empresas"] = [e for e in contexto["empresas"] if e.id in ids_com_correspondencia]
+
     if empresa and mes and not erro:
         try:
             resultado = correspondencias_service.gerar_relatorio(db, empresa, mes)
         except ValueError as e:
             contexto["erro"] = str(e)
         else:
-            registrar(db, usuario, "GEROU_RELATORIO_CORRESPONDENCIAS", entidade="empresa_cliente", entidade_id=empresa)
+            registrar(db, usuario, "GEROU_RELATORIO_CORRESPONDENTES", entidade="empresa_cliente", entidade_id=empresa)
             contexto["resultado"] = resultado
     return templates.TemplateResponse(request, "correspondencias.html", contexto)
 
@@ -78,19 +85,23 @@ async def importar(
     usuario: Usuario = Depends(_acesso_elite),
     db: Session = Depends(get_db),
 ):
-    path = salvar_temp(arquivo)
     mensagem = None
     erro = None
+    path = None
     try:
+        path = salvar_temp(arquivo)
         resumo = correspondencias_service.importar_planilha(db, path)
     except ValueError as e:
         erro = str(e)
     else:
-        registrar(db, usuario, "IMPORTOU_CORRESPONDENCIAS", entidade="correspondencia", detalhes=str(resumo))
+        registrar(db, usuario, "IMPORTOU_CORRESPONDENTES", entidade="correspondencia", detalhes=str(resumo))
         mensagem = (
             f"{resumo.linhas_novas} linha(s) nova(s) importada(s) "
             f"({resumo.linhas_ja_existentes} já existiam de antes)."
         )
+    finally:
+        if path:
+            remover_temp(path)
     # _contexto_base DEPOIS do import (não antes): a planilha pode trazer
     # empresa nova, que só existe no banco depois de importar_planilha
     # rodar — calculado antes, o dropdown de empresa saía sem a que acabou
@@ -99,6 +110,78 @@ async def importar(
     contexto["mensagem"] = mensagem
     contexto["erro"] = erro
     return templates.TemplateResponse(request, "correspondencias.html", contexto)
+
+
+@router.post("/recalcular-valores")
+def recalcular_valores(
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Corrige registros antigos com valor zerado (importados antes do bug
+    de "280.50" ser corrigido) — ação segura, não some com nada, só
+    preenche o que estava vazio. Só Admin Superior/T.I., mesmo acesso de
+    "apagar tudo"."""
+    total = correspondencias_service.recalcular_valores_zerados(db)
+    registrar(
+        db, usuario, "RECALCULOU_VALORES_CORRESPONDENTES",
+        entidade="correspondencia", detalhes=f"{total} correspondente(s) corrigido(s)",
+    )
+    mensagem = quote(f"{total} correspondente(s) com valor zerado foram corrigidos.")
+    return RedirectResponse(f"/app/correspondencias?mensagem={mensagem}", status_code=303)
+
+
+@router.post("/{correspondencia_id}/editar")
+def editar(
+    correspondencia_id: int,
+    empresa: str = Form(...),
+    mes: str = Form(...),
+    advogado: str = Form(...),
+    autor: str = Form(...),
+    adv_preposto: str = Form(...),
+    valor_texto: str = Form(...),
+    tipo_acao: str = Form(...),
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Edita UM registro específico — a pedido da Clara (2026-11-25), pra
+    corrigir um registro errado sem precisar reimportar a planilha
+    inteira. Só Admin Superior/T.I."""
+    editado = correspondencias_service.editar_correspondencia(
+        db, correspondencia_id, advogado, autor, adv_preposto, valor_texto, tipo_acao,
+    )
+    if editado:
+        registrar(
+            db, usuario, "EDITOU_CORRESPONDENTE", entidade="correspondencia", entidade_id=str(correspondencia_id),
+        )
+        mensagem = quote("Registro atualizado.")
+    else:
+        mensagem = quote("Esse registro já não existe mais (pode já ter sido excluído).")
+    return RedirectResponse(
+        f"/app/correspondencias?empresa={quote(empresa)}&mes={quote(mes)}&mensagem={mensagem}", status_code=303
+    )
+
+
+@router.post("/{correspondencia_id}/excluir")
+def excluir(
+    correspondencia_id: int,
+    empresa: str = Form(...),
+    mes: str = Form(...),
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Exclui UM registro específico — a pedido da Clara (2026-11-25). Só
+    Admin Superior/T.I."""
+    excluido = correspondencias_service.excluir_correspondencia(db, correspondencia_id)
+    if excluido:
+        registrar(
+            db, usuario, "EXCLUIU_CORRESPONDENTE", entidade="correspondencia", entidade_id=str(correspondencia_id),
+        )
+        mensagem = quote("Registro excluído.")
+    else:
+        mensagem = quote("Esse registro já não existe mais (pode já ter sido excluído).")
+    return RedirectResponse(
+        f"/app/correspondencias?empresa={quote(empresa)}&mes={quote(mes)}&mensagem={mensagem}", status_code=303
+    )
 
 
 @router.post("/apagar-tudo")
@@ -111,8 +194,8 @@ def apagar_tudo(
     antes desse POST). Só Admin Superior/T.I."""
     total = correspondencias_service.apagar_todas_correspondencias(db)
     registrar(
-        db, usuario, "APAGOU_TODAS_CORRESPONDENCIAS",
-        entidade="correspondencia", detalhes=f"{total} correspondência(s) apagada(s)",
+        db, usuario, "APAGOU_TODOS_CORRESPONDENTES",
+        entidade="correspondencia", detalhes=f"{total} correspondente(s) apagado(s)",
     )
-    mensagem = quote(f"{total} correspondência(s) apagada(s). Pode importar a planilha do zero agora.")
+    mensagem = quote(f"{total} correspondente(s) apagado(s). Pode importar a planilha do zero agora.")
     return RedirectResponse(f"/app/correspondencias?mensagem={mensagem}", status_code=303)

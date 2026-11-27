@@ -21,6 +21,7 @@ from app.services.empresas import (
     realocar_empresas_em_massa,
     sincronizar_lista_oficial,
 )
+from app.utils import normalize, paginar
 from app.web.areas_configuracao import AREAS_CONFIGURACAO
 from app.web.auth import admin_logado_web
 from app.web.menu import itens_menu
@@ -29,13 +30,27 @@ from app.web.templates import templates
 router = APIRouter(prefix="/app/empresas")
 
 
-def _contexto_base(db: Session, usuario: Usuario) -> dict:
-    empresas = listar_empresas(db, apenas_ativas=False)
+def _contexto_base(db: Session, usuario: Usuario, busca: str | None = None, pagina: int = 1) -> dict:
+    todas_empresas = listar_empresas(db, apenas_ativas=False)
+    empresas_filtradas = todas_empresas
+    if busca:
+        alvo = normalize(busca)
+        empresas_filtradas = [
+            e for e in todas_empresas if alvo in normalize(e.nome) or alvo in normalize(e.cnpj or "")
+        ]
+    pagina_dados = paginar(empresas_filtradas, pagina)
     return {
         "usuario": usuario,
         "menu": itens_menu(db, usuario),
         "areas_configuracao": AREAS_CONFIGURACAO,
-        "empresas": empresas,
+        "empresas": pagina_dados.itens,
+        # Lista COMPLETA (sem busca/paginação) — os dropdowns "mover
+        # histórico para" (exclusão/realocação, individual e em massa)
+        # precisam poder apontar pra QUALQUER empresa, não só pras da
+        # página/busca atual.
+        "todas_empresas": todas_empresas,
+        "pagina": pagina_dados,
+        "busca": busca or "",
         "vinculos_por_empresa": contar_vinculos_todas_empresas(db),
         "mensagem": None,
         "erro": None,
@@ -45,12 +60,14 @@ def _contexto_base(db: Session, usuario: Usuario) -> dict:
 @router.get("")
 def tela(
     request: Request,
+    busca: str | None = None,
+    pagina: int = 1,
     erro: str | None = None,
     mensagem: str | None = None,
     usuario: Usuario = Depends(admin_logado_web),
     db: Session = Depends(get_db),
 ):
-    contexto = _contexto_base(db, usuario)
+    contexto = _contexto_base(db, usuario, busca, pagina)
     # erro/mensagem por query string: só usado depois de um redirect (ex.:
     # excluir, que precisa de POST + redirect, então não pode simplesmente
     # devolver a página com o erro no corpo da mesma resposta como os

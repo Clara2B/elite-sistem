@@ -80,6 +80,39 @@ def test_listar_filtra_por_periodo(db):
     assert resultado.registros[0].acao == "LOGOUT"
 
 
+def test_listar_filtra_por_periodo_inclui_evento_tarde_da_noite_em_brasilia(db):
+    """Bug real reportado pela Clara em 2026-10-19: `criado_em` é gravado em
+    UTC, mas o filtro de data pensa em dias de Brasília. Um evento às 23:30
+    (Brasília) do dia 19 é gravado como 02:30 UTC do dia 20 — filtrando só
+    pelo dia 19, isso tinha que aparecer, mas o bug antigo (comparando
+    direto contra o horário UTC) excluía."""
+    usuario = _usuario(db)
+    registrar(db, usuario, "LOGIN")
+    registro = db.query(LogAuditoria).order_by(LogAuditoria.id.desc()).first()
+    registro.criado_em = datetime(2026, 10, 20, 2, 30)  # 23:30 de 19/10 em Brasília
+    db.commit()
+
+    resultado = listar(db, data_inicio=date(2026, 10, 19), data_fim=date(2026, 10, 19))
+
+    assert resultado.total_registros == 1
+
+
+def test_listar_filtra_por_periodo_exclui_evento_do_dia_anterior_em_brasilia(db):
+    """Espelho do teste acima: um evento às 23:30 (Brasília) do dia 18 é
+    gravado como 02:30 UTC do dia 19 — filtrando só pelo dia 19, isso NÃO
+    pode aparecer (aconteceu no dia 18 de Brasília), mas o bug antigo
+    incluía por engano."""
+    usuario = _usuario(db)
+    registrar(db, usuario, "LOGIN")
+    registro = db.query(LogAuditoria).order_by(LogAuditoria.id.desc()).first()
+    registro.criado_em = datetime(2026, 10, 19, 2, 30)  # 23:30 de 18/10 em Brasília
+    db.commit()
+
+    resultado = listar(db, data_inicio=date(2026, 10, 19), data_fim=date(2026, 10, 19))
+
+    assert resultado.total_registros == 0
+
+
 def test_listar_pagina_corretamente(db):
     usuario = _usuario(db)
     for _ in range(POR_PAGINA + 5):
@@ -160,6 +193,19 @@ def test_tela_filtra_por_acao_na_url(client, db):
 
     assert resposta.status_code == 200
     assert "Registros (1)" in resposta.text
+
+
+def test_tela_mostra_horario_convertido_para_brasilia(client, db):
+    _logar_admin(db, client)
+    registrar(db, None, "LOGIN")
+    registro = db.query(LogAuditoria).order_by(LogAuditoria.id.desc()).first()
+    registro.criado_em = datetime(2026, 10, 20, 2, 30)  # 23:30 de 19/10 em Brasília
+    db.commit()
+
+    resposta = client.get("/app/auditoria")
+
+    assert "19/10/2026 23:30" in resposta.text
+    assert "20/10/2026 02:30" not in resposta.text
 
 
 def test_tela_aceita_campos_de_filtro_vazios(client, db):

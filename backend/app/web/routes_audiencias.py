@@ -3,11 +3,11 @@ from __future__ import annotations
 from datetime import date
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Request, UploadFile
+from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.api._shared import salvar_temp
+from app.api._shared import remover_temp, salvar_temp
 from app.auth import PAPEIS_GLOBAIS
 from app.db import get_db
 from app.models import Usuario
@@ -31,6 +31,7 @@ def _contexto_base(db: Session, usuario: Usuario) -> dict:
         "hoje": date.today(),
         "filtro": {},
         "resultado": None,
+        "audiencias": None,
         "mensagem": None,
         "erro": None,
         "eh_admin": usuario.papel_global in PAPEIS_GLOBAIS,
@@ -51,15 +52,34 @@ def tela(
     contexto = _contexto_base(db, usuario)
     contexto["mensagem"] = mensagem
     contexto["filtro"] = {"empresa": empresa, "ano": ano, "mes": mes, "quinzena": quinzena}
+
+    # Só quem tem audiência nessa quinzena aparece no menu — a pedido da
+    # Clara (2026-11-24). Sem filtro escolhido ainda, usa a quinzena atual
+    # (mesmo default de mês/ano já pré-selecionado na tela).
+    hoje = date.today()
+    periodo_ini_menu, periodo_fim_menu = audiencias_service.periodo_quinzenal(
+        ano or hoje.year, mes or hoje.month, quinzena or (1 if hoje.day <= 15 else 2)
+    )
+    ids_com_audiencia = audiencias_service.ids_empresas_com_audiencia(db, periodo_ini_menu, periodo_fim_menu)
+    contexto["empresas"] = [e for e in contexto["empresas"] if e.id in ids_com_audiencia]
+
     if empresa and ano and mes and quinzena:
-        periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
         try:
+            periodo_ini, periodo_fim = audiencias_service.periodo_quinzenal(ano, mes, quinzena)
             resultado = audiencias_service.gerar_relatorio(db, empresa, periodo_ini, periodo_fim)
-        except ValueError as e:
+        except (LookupError, ValueError) as e:
+            # LookupError (empresa não encontrada) e ValueError (regra de
+            # negócio, ex.: faixa de preço não cadastrada) — a tela mostra o
+            # mesmo erro inline pros dois; só a API (app/api/audiencias.py)
+            # precisa diferenciar por status HTTP (auditoria M43).
             contexto["erro"] = str(e)
         else:
             registrar(db, usuario, "GEROU_RELATORIO_AUDIENCIAS", entidade="empresa_cliente", entidade_id=empresa)
             contexto["resultado"] = resultado
+            # Lista EDITÁVEL com as audiências dessa empresa no período — só
+            # admin, mesmo padrão de Laudos/duplicatas e Pendências.
+            if contexto["eh_admin"]:
+                contexto["audiencias"] = audiencias_service.listar_audiencias(db, empresa, periodo_ini, periodo_fim)
     return templates.TemplateResponse(request, "audiencias.html", contexto)
 
 
@@ -70,19 +90,80 @@ async def importar(
     usuario: Usuario = Depends(_acesso_eximia),
     db: Session = Depends(get_db),
 ):
-    path = salvar_temp(arquivo)
     contexto = _contexto_base(db, usuario)
+    path = None
     try:
+        path = salvar_temp(arquivo)
         resumo = audiencias_service.importar_planilha(db, path)
     except ValueError as e:
         contexto["erro"] = str(e)
     else:
         registrar(db, usuario, "IMPORTOU_AUDIENCIAS", entidade="audiencia", detalhes=str(resumo))
         contexto["mensagem"] = (
-            f"{resumo.linhas_novas} linha(s) nova(s) importada(s) "
-            f"({resumo.linhas_ja_existentes} já existiam de antes)."
+            f"{resumo.linhas_novas} linha(s) nova(s) importada(s), "
+            f"{resumo.linhas_atualizadas} atualizada(s) "
+            f"({resumo.linhas_ja_existentes} já existiam sem mudança)."
         )
+    finally:
+        if path:
+            remover_temp(path)
     return templates.TemplateResponse(request, "audiencias.html", contexto)
+
+
+@router.post("/{audiencia_id}/editar")
+def editar(
+    audiencia_id: int,
+    empresa: str = Form(...),
+    ano: int = Form(...),
+    mes: int = Form(...),
+    quinzena: int = Form(...),
+    data_recebimento: date = Form(...),
+    nome_cliente: str = Form(...),
+    cpf: str = Form(""),
+    conciliadora: str = Form(""),
+    advogada: str = Form(""),
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Edita UMA audiência específica — a pedido da Clara (2026-11-25), pra
+    corrigir um registro errado sem precisar reimportar a planilha
+    inteira. Só Admin Superior/T.I."""
+    editado = audiencias_service.editar_audiencia(
+        db, audiencia_id, data_recebimento, nome_cliente, cpf or None, conciliadora or None, advogada or None,
+    )
+    if editado:
+        registrar(db, usuario, "EDITOU_AUDIENCIA", entidade="audiencia", entidade_id=str(audiencia_id))
+        mensagem = quote("Registro atualizado.")
+    else:
+        mensagem = quote("Esse registro já não existe mais (pode já ter sido excluído).")
+    return RedirectResponse(
+        f"/app/audiencias?empresa={quote(empresa)}&ano={ano}&mes={mes}&quinzena={quinzena}&mensagem={mensagem}",
+        status_code=303,
+    )
+
+
+@router.post("/{audiencia_id}/excluir")
+def excluir(
+    audiencia_id: int,
+    empresa: str = Form(...),
+    ano: int = Form(...),
+    mes: int = Form(...),
+    quinzena: int = Form(...),
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Exclui UMA audiência específica — a pedido da Clara (2026-11-25). Só
+    Admin Superior/T.I."""
+    excluido = audiencias_service.excluir_audiencia(db, audiencia_id)
+    if excluido:
+        registrar(db, usuario, "EXCLUIU_AUDIENCIA", entidade="audiencia", entidade_id=str(audiencia_id))
+        mensagem = quote("Registro excluído.")
+    else:
+        mensagem = quote("Esse registro já não existe mais (pode já ter sido excluído).")
+    return RedirectResponse(
+        f"/app/audiencias?empresa={quote(empresa)}&ano={ano}&mes={mes}&quinzena={quinzena}&mensagem={mensagem}",
+        status_code=303,
+    )
 
 
 @router.post("/apagar-tudo")

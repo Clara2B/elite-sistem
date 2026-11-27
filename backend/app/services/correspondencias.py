@@ -5,7 +5,6 @@ app/models.py::Correspondencia)."""
 from __future__ import annotations
 
 import logging
-import re
 import time
 from dataclasses import dataclass, field
 
@@ -13,9 +12,9 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.excel_reader import load_data_sheets
-from app.models import Correspondencia, EmpresaCliente
-from app.services.empresas import get_or_create_empresa
-from app.utils import cell_text, normalize
+from app.models import Correspondencia
+from app.services.empresas import get_or_create_empresa, resolver_empresa_por_nome
+from app.utils import cell_text, normalize, parse_valor_monetario
 
 _logger = logging.getLogger("elite_sistem.import")
 
@@ -25,8 +24,6 @@ _logger = logging.getLogger("elite_sistem.import")
 # genérica de "nenhuma aba com essas colunas" que load_data_sheets dá.
 REQUIRED_HEADERS = ["MÊS", "EMPRESA"]
 COLUNAS_OBRIGATORIAS = ["MÊS", "EMPRESA", "ADVOGADO", "AUTOR", "ADV / PREPOSTO", "VALOR", "TIPO DE AÇÃO"]
-
-_RE_NUMERO = re.compile(r"-?\d{1,3}(\.\d{3})*(,\d+)?$|-?\d+(,\d+)?$")
 
 
 def _col(df, nome: str) -> str | None:
@@ -38,24 +35,16 @@ def _col(df, nome: str) -> str | None:
 
 def parse_valor(texto: str) -> float | None:
     """"R$ 180,00" / "R$160,00" (sem espaço) / "R$ 1.234,56" -> 180.0 /
-    160.0 / 1234.56. `None` quando o texto não é um valor reconhecível
-    (ex.: "a combinar") — nesse caso a Clara pediu pra manter o texto
-    original da planilha no relatório em vez de zerar ou travar o import
-    inteiro (ver `services/correspondencias.py::gerar_relatorio` e
-    `LinhaCorrespondencia.valor_texto`)."""
-    limpo = (texto or "").strip()
-    if not limpo:
-        return None
-    sem_prefixo = re.sub(r"(?i)^r\$\s*", "", limpo).strip()
-    # Ponto final sobrando (típico de digitação, ex.: "R$ 280,00.") não
-    # muda o valor pretendido — visto na planilha real da Clara.
-    sem_prefixo = sem_prefixo.removesuffix(".")
-    if not _RE_NUMERO.match(sem_prefixo):
-        return None
-    try:
-        return float(sem_prefixo.replace(".", "").replace(",", "."))
-    except ValueError:
-        return None
+    160.0 / 1234.56, e também número "simples" (célula de texto sem "R$",
+    com ponto decimal — ex.: "280.50"). `None` quando o texto não é um
+    valor reconhecível (ex.: "a combinar") — nesse caso a Clara pediu pra
+    manter o texto original da planilha no relatório em vez de zerar ou
+    travar o import inteiro (ver `gerar_relatorio` e
+    `LinhaCorrespondencia.valor_texto`).
+
+    A conversão em si é `app.utils.parse_valor_monetario`, compartilhada
+    com `services/pendencias.py` desde 2026-11-24."""
+    return parse_valor_monetario(texto)
 
 
 @dataclass
@@ -134,6 +123,29 @@ def importar_planilha(db: Session, path: str) -> ImportResumo:
     return resumo
 
 
+def recalcular_valores_zerados(db: Session) -> int:
+    """Corrige registros ANTIGOS que ficaram com `valor=None` porque foram
+    importados antes do bug de "280.50" (texto simples com ponto decimal
+    sendo descartado) ser corrigido em `parse_valor_monetario` — reimportar
+    a planilha sem mudar nada NÃO corrige esses registros (a chave de
+    duplicidade usa o `valor_texto` original, que não mudou, então a linha
+    é tratada como "já existe" e nunca é reprocessada; ver `importar_planilha`
+    acima). Aqui, em vez disso, reaplica o parser atual direto em cima do
+    `valor_texto` já salvo de cada registro com `valor` nulo — ação
+    administrativa, segura (só preenche o que estava vazio, nunca sobrescreve
+    um valor já calculado), disparada manualmente a pedido da Clara
+    (SIMPLIFICA/Outubro aparecia com Total R$ 0,00 mesmo depois do bug
+    corrigido). Devolve quantos registros foram corrigidos."""
+    corrigidos = 0
+    for c in db.scalars(select(Correspondencia).where(Correspondencia.valor.is_(None))):
+        novo_valor = parse_valor_monetario(c.valor_texto)
+        if novo_valor is not None:
+            c.valor = novo_valor
+            corrigidos += 1
+    db.commit()
+    return corrigidos
+
+
 def apagar_todas_correspondencias(db: Session) -> int:
     """Apaga TODO o histórico de correspondências — mesmo padrão de
     `laudos.py::apagar_todos_laudos` (zona de perigo, confirmação
@@ -146,6 +158,7 @@ def apagar_todas_correspondencias(db: Session) -> int:
 
 @dataclass
 class LinhaCorrespondencia:
+    id: int
     advogado: str
     autor: str
     adv_preposto: str
@@ -162,33 +175,78 @@ class CorrespondenciasResult:
     total: float = 0.0
 
 
-def _resolver_empresa(db: Session, empresa_nome: str) -> EmpresaCliente | None:
-    alvo = normalize(empresa_nome)
-    for e in db.scalars(select(EmpresaCliente)):
-        if normalize(e.nome) == alvo:
-            return e
-    return None
+def ids_empresas_com_correspondencia(db: Session, mes: str) -> set[int]:
+    """IDs de empresa-cliente com pelo menos uma correspondência no mês
+    informado — mesma comparação de `gerar_relatorio` (normalize(), sem
+    acento). Usado pra filtrar o menu de empresas da tela (a pedido da
+    Clara, 2026-11-24: só mostrar quem tem resultado)."""
+    alvo_mes = normalize(mes)
+    return {
+        empresa_id
+        for empresa_id, mes_registro in db.execute(select(Correspondencia.empresa_cliente_id, Correspondencia.mes))
+        if normalize(mes_registro) == alvo_mes
+    }
 
 
 def gerar_relatorio(db: Session, empresa_nome: str, mes: str) -> CorrespondenciasResult:
-    empresa = _resolver_empresa(db, empresa_nome)
+    empresa = resolver_empresa_por_nome(db, empresa_nome)
     if empresa is None:
         raise ValueError(f"A empresa '{empresa_nome}' não foi encontrada.")
 
     mes_normalizado = mes.strip().upper()
-    query = select(Correspondencia).where(
-        Correspondencia.empresa_cliente_id == empresa.id,
-        Correspondencia.mes == mes_normalizado,
-    )
+    # Comparação por normalize() (sem acento), não por igualdade direta
+    # (2026-10-13, auditoria M15) — a importação já normaliza o mês na
+    # chave de deduplicação (ver import_planilha, mais acima), mas o texto
+    # gravado em Correspondencia.mes mantém o acento como veio da planilha
+    # (só .upper()). Comparar sem normalizar fazia "MARCO" (sem cedilha,
+    # erro de digitação já visto em outras colunas deste sistema) nunca
+    # bater com "Março" vindo do dropdown da tela — o relatório mostrava
+    # "Nenhuma correspondência encontrada" mesmo havendo linhas.
+    alvo_mes = normalize(mes_normalizado)
+    query = select(Correspondencia).where(Correspondencia.empresa_cliente_id == empresa.id)
 
     linhas = [
         LinhaCorrespondencia(
-            advogado=c.advogado, autor=c.autor, adv_preposto=c.adv_preposto,
+            id=c.id, advogado=c.advogado, autor=c.autor, adv_preposto=c.adv_preposto,
             valor_texto=c.valor_texto, valor=c.valor, tipo_acao=c.tipo_acao,
         )
         for c in db.scalars(query)
+        if normalize(c.mes) == alvo_mes
     ]
     linhas.sort(key=lambda l: normalize(l.autor))
     total = sum(l.valor for l in linhas if l.valor is not None)
 
     return CorrespondenciasResult(empresa=empresa.nome, mes=mes_normalizado, linhas=linhas, total=total)
+
+
+def editar_correspondencia(
+    db: Session, correspondencia_id: int, advogado: str, autor: str, adv_preposto: str,
+    valor_texto: str, tipo_acao: str,
+) -> bool:
+    """Edita um registro específico de Correspondência — a pedido da
+    Clara (2026-11-25): corrigir um registro errado sem precisar reimportar
+    a planilha inteira. `valor` é recalculado a partir do `valor_texto`
+    novo, mesma regra do import (`parse_valor_monetario`). Devolve False se
+    o id não existir (ex.: já foi excluído por outra aba/pessoa)."""
+    c = db.get(Correspondencia, correspondencia_id)
+    if c is None:
+        return False
+    c.advogado = advogado
+    c.autor = autor
+    c.adv_preposto = adv_preposto
+    c.valor_texto = valor_texto
+    c.valor = parse_valor_monetario(valor_texto)
+    c.tipo_acao = tipo_acao
+    db.commit()
+    return True
+
+
+def excluir_correspondencia(db: Session, correspondencia_id: int) -> bool:
+    """Exclui UM registro específico de Correspondência — a pedido da
+    Clara (2026-11-25). Devolve False se o id não existir."""
+    c = db.get(Correspondencia, correspondencia_id)
+    if c is None:
+        return False
+    db.delete(c)
+    db.commit()
+    return True

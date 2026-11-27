@@ -22,15 +22,14 @@ AREAS_CONFIGURACAO = [
         "descricao": "Setores por operadora — usados nos vínculos de usuário.",
     },
     {
-        "url": "/app/chamados", "rotulo": "Chamados", "icone": "suporte",
-        "descricao": "Chamados de suporte abertos pelo pop-up, em qualquer tela.",
-    },
-    {
         "url": "/app/auditoria", "rotulo": "Auditoria", "icone": "auditoria",
         "descricao": "Histórico de ações no sistema — quem fez o quê e quando.",
     },
+    # Relatórios das Assessorias e Chamados saíram de dentro de Configuração
+    # (2026-10-14, a pedido da Clara) — ganharam item próprio na barra
+    # lateral (ver app/web/menu.py), não fazem mais parte desta lista.
     {
-        "url": "/app/relatorios-assessorias", "rotulo": "Relatórios das Assessorias", "icone": "relatorios",
-        "descricao": "Gerador de relatórios mensais por assessoria (EWS, WNR...).",
+        "url": "/app/faixas-audiencia", "rotulo": "Faixas de Audiências", "icone": "audiencias",
+        "descricao": "Faixas de preço por quantidade de audiências no mês.",
     },
 ]

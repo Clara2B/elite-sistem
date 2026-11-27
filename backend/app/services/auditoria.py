@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -9,6 +10,21 @@ from sqlalchemy.orm import Session
 from app.models import LogAuditoria, Usuario
 
 POR_PAGINA = 50
+_FUSO_BRASIL = ZoneInfo("America/Sao_Paulo")
+
+
+def _inicio_do_dia_em_utc(dia: date) -> datetime:
+    """`criado_em` é gravado em UTC (`datetime.utcnow()`), mas quem filtra
+    por data na tela pensa em dias de Brasília — sem essa conversão, filtrar
+    por "hoje" tanto escondia registros de hoje à noite (gravados já no dia
+    seguinte em UTC) quanto mostrava registros de ontem à noite (ainda "hoje"
+    em UTC). Ver también app/web/templates.py::_horario_brasil, mesmo bug
+    relatado pela Clara em 2026-10-19, na exibição."""
+    return datetime.combine(dia, time.min, tzinfo=_FUSO_BRASIL).astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _fim_do_dia_em_utc(dia: date) -> datetime:
+    return datetime.combine(dia, time.max, tzinfo=_FUSO_BRASIL).astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def registrar(
@@ -69,9 +85,9 @@ def listar(
     if acao:
         query = query.where(LogAuditoria.acao == acao)
     if data_inicio is not None:
-        query = query.where(LogAuditoria.criado_em >= datetime.combine(data_inicio, time.min))
+        query = query.where(LogAuditoria.criado_em >= _inicio_do_dia_em_utc(data_inicio))
     if data_fim is not None:
-        query = query.where(LogAuditoria.criado_em <= datetime.combine(data_fim, time.max))
+        query = query.where(LogAuditoria.criado_em <= _fim_do_dia_em_utc(data_fim))
 
     total_registros = _contar(db, query)
 

@@ -3,11 +3,11 @@ from __future__ import annotations
 from datetime import date
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Request, UploadFile
+from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.api._shared import salvar_temp
+from app.api._shared import remover_temp, salvar_temp
 from app.auth import PAPEIS_GLOBAIS
 from app.db import get_db
 from app.models import Usuario
@@ -37,6 +37,7 @@ def _contexto_base(db: Session, usuario: Usuario) -> dict:
         "funcionarios": listar_funcionarios(db, apenas_ativos=False),
         "filtro": {},
         "resultado": None,
+        "eventos": None,
         "prazos": processos_service.prazos_proximos(db, dias=30),
         "mensagem": None,
         "erro": None,
@@ -52,6 +53,7 @@ def tela(
     tipo: str = "geral",
     empresa: str | None = None,
     assistente: str | None = None,
+    pagina: int = 1,
     mensagem: str | None = None,
     usuario: Usuario = Depends(_acesso_elite),
     db: Session = Depends(get_db),
@@ -66,6 +68,12 @@ def tela(
         "empresa": empresa or "",
         "assistente": assistente or "",
     }
+    # Só quem tem processo em escopo nesse período aparece no menu — a
+    # pedido da Clara (2026-11-24).
+    ids_com_processo = processos_service.ids_empresas_com_processo(
+        db, contexto["filtro"]["periodo_ini"], contexto["filtro"]["periodo_fim"]
+    )
+    contexto["empresas"] = [e for e in contexto["empresas"] if e.id in ids_com_processo]
     try:
         if tipo == "empresa":
             if not empresa:
@@ -73,9 +81,18 @@ def tela(
             resultado = processos_service.gerar_relatorio_por_empresa(
                 db, empresa, contexto["filtro"]["periodo_ini"], contexto["filtro"]["periodo_fim"], assistente or None,
             )
+            # Lista EDITÁVEL com os andamentos (EventoProcesso) dessa empresa
+            # no período — só admin, mesmo padrão dos outros módulos.
+            if usuario.papel_global in PAPEIS_GLOBAIS:
+                contexto["eventos"] = processos_service.listar_eventos(
+                    db, empresa, contexto["filtro"]["periodo_ini"], contexto["filtro"]["periodo_fim"],
+                )
         else:
+            # Paginado por empresa (a pedido da Clara, 2026-11-25) — período
+            # longo com muitas empresas virava uma página enorme e lenta.
             resultado = processos_service.gerar_relatorio_geral(
                 db, contexto["filtro"]["periodo_ini"], contexto["filtro"]["periodo_fim"], assistente or None,
+                pagina=pagina,
             )
     except ValueError as e:
         contexto["erro"] = str(e)
@@ -92,14 +109,15 @@ async def importar(
     usuario: Usuario = Depends(_acesso_elite),
     db: Session = Depends(get_db),
 ):
-    path = salvar_temp(arquivo)
     contexto = _contexto_base(db, usuario)
     padrao_ini, padrao_fim = _periodo_padrao()
     contexto["filtro"] = {
         "periodo_ini": padrao_ini, "periodo_fim": padrao_fim,
         "tipo": "geral", "empresa": "", "assistente": "",
     }
+    path = None
     try:
+        path = salvar_temp(arquivo)
         resumo = processos_service.importar_planilha(db, path, usuario_id=usuario.id)
     except ValueError as e:
         contexto["erro"] = str(e)
@@ -111,6 +129,9 @@ async def importar(
             f"{resumo.linhas_atualizadas} desses com dado atualizado agora)."
         )
         contexto["prazos"] = processos_service.prazos_proximos(db, dias=30)
+    finally:
+        if path:
+            remover_temp(path)
     return templates.TemplateResponse(request, "processos.html", contexto)
 
 
@@ -127,6 +148,61 @@ def resolver(
     else:
         registrar(db, usuario, "RESOLVEU_EVENTO_PROCESSO", entidade="evento_processo", entidade_id=evento_id)
     return RedirectResponse("/app/processos", status_code=303)
+
+
+@router.post("/eventos/{evento_id}/editar")
+def editar_evento(
+    evento_id: int,
+    periodo_ini: date = Form(...),
+    periodo_fim: date = Form(...),
+    empresa: str = Form(...),
+    assistente: str = Form(""),
+    data: date = Form(...),
+    tipo_evento_nome: str = Form(...),
+    observacao: str = Form(""),
+    prazo_fatal: bool = Form(False),
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Edita UM andamento específico — a pedido da Clara (2026-11-25), pra
+    corrigir um registro errado sem precisar reimportar a planilha
+    inteira. Só Admin Superior/T.I."""
+    editado = processos_service.editar_evento(db, evento_id, data, tipo_evento_nome, observacao or None, prazo_fatal)
+    if editado:
+        registrar(db, usuario, "EDITOU_EVENTO_PROCESSO", entidade="evento_processo", entidade_id=str(evento_id))
+        mensagem = quote("Registro atualizado.")
+    else:
+        mensagem = quote("Esse registro já não existe mais (pode já ter sido excluído).")
+    return RedirectResponse(
+        f"/app/processos?periodo_ini={periodo_ini}&periodo_fim={periodo_fim}&tipo=empresa"
+        f"&empresa={quote(empresa)}&assistente={quote(assistente)}&mensagem={mensagem}",
+        status_code=303,
+    )
+
+
+@router.post("/eventos/{evento_id}/excluir")
+def excluir_evento(
+    evento_id: int,
+    periodo_ini: date = Form(...),
+    periodo_fim: date = Form(...),
+    empresa: str = Form(...),
+    assistente: str = Form(""),
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Exclui UM andamento específico — a pedido da Clara (2026-11-25). Só
+    Admin Superior/T.I."""
+    excluido = processos_service.excluir_evento(db, evento_id)
+    if excluido:
+        registrar(db, usuario, "EXCLUIU_EVENTO_PROCESSO", entidade="evento_processo", entidade_id=str(evento_id))
+        mensagem = quote("Registro excluído.")
+    else:
+        mensagem = quote("Esse registro já não existe mais (pode já ter sido excluído).")
+    return RedirectResponse(
+        f"/app/processos?periodo_ini={periodo_ini}&periodo_fim={periodo_fim}&tipo=empresa"
+        f"&empresa={quote(empresa)}&assistente={quote(assistente)}&mensagem={mensagem}",
+        status_code=303,
+    )
 
 
 @router.post("/apagar-tudo")

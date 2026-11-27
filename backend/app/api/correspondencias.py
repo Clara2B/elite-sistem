@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api._shared import salvar_temp
+from app.api._shared import remover_temp, salvar_temp
 from app.auth import require_admin, require_modulo
 from app.db import get_db
 from app.excel_export import gerar_excel_correspondencias
@@ -24,12 +24,16 @@ def importar(
     usuario: Usuario = Depends(_acesso_elite),
     db: Session = Depends(get_db),
 ):
-    path = salvar_temp(arquivo)
+    path = None
     try:
+        path = salvar_temp(arquivo)
         resumo = correspondencias_service.importar_planilha(db, path)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    registrar(db, usuario, "IMPORTOU_CORRESPONDENCIAS", entidade="correspondencia", detalhes=str(resumo))
+    finally:
+        if path:
+            remover_temp(path)
+    registrar(db, usuario, "IMPORTOU_CORRESPONDENTES", entidade="correspondencia", detalhes=str(resumo))
     return resumo
 
 
@@ -42,8 +46,8 @@ def apagar_tudo(
     Superior/T.I."""
     total = correspondencias_service.apagar_todas_correspondencias(db)
     registrar(
-        db, usuario, "APAGOU_TODAS_CORRESPONDENCIAS",
-        entidade="correspondencia", detalhes=f"{total} correspondência(s) apagada(s)",
+        db, usuario, "APAGOU_TODOS_CORRESPONDENTES",
+        entidade="correspondencia", detalhes=f"{total} correspondente(s) apagado(s)",
     )
     return {"apagados": total}
 
@@ -59,7 +63,7 @@ def relatorio(
         resultado = correspondencias_service.gerar_relatorio(db, empresa, mes)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    registrar(db, usuario, "GEROU_RELATORIO_CORRESPONDENCIAS", entidade="empresa_cliente", entidade_id=empresa)
+    registrar(db, usuario, "GEROU_RELATORIO_CORRESPONDENTES", entidade="empresa_cliente", entidade_id=empresa)
     return {
         "empresa": resultado.empresa,
         "mes": resultado.mes,
@@ -79,9 +83,9 @@ def relatorio_pdf(
         resultado = correspondencias_service.gerar_relatorio(db, empresa, mes)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    registrar(db, usuario, "GEROU_RELATORIO_CORRESPONDENCIAS_PDF", entidade="empresa_cliente", entidade_id=empresa)
+    registrar(db, usuario, "GEROU_RELATORIO_CORRESPONDENTES_PDF", entidade="empresa_cliente", entidade_id=empresa)
     pdf_bytes = gerar_pdf_correspondencias(resultado)
-    nome_arquivo = nome_arquivo_pdf("correspondencias", resultado.empresa, resultado.mes)
+    nome_arquivo = nome_arquivo_pdf("correspondentes", resultado.empresa, resultado.mes)
     return Response(
         content=pdf_bytes, media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},
@@ -99,9 +103,9 @@ def relatorio_xlsx(
         resultado = correspondencias_service.gerar_relatorio(db, empresa, mes)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    registrar(db, usuario, "GEROU_RELATORIO_CORRESPONDENCIAS_XLSX", entidade="empresa_cliente", entidade_id=empresa)
+    registrar(db, usuario, "GEROU_RELATORIO_CORRESPONDENTES_XLSX", entidade="empresa_cliente", entidade_id=empresa)
     excel_bytes = gerar_excel_correspondencias(resultado)
-    nome_arquivo = nome_arquivo_xlsx("correspondencias", resultado.empresa, resultado.mes)
+    nome_arquivo = nome_arquivo_xlsx("correspondentes", resultado.empresa, resultado.mes)
     return Response(
         content=excel_bytes, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},

@@ -78,8 +78,8 @@ def admin_token(db) -> str:
     )
     db.add(usuario)
     db.commit()
-    sessao = criar_sessao(db, usuario)
-    return sessao.token
+    _, token = criar_sessao(db, usuario)
+    return token
 
 
 @pytest.fixture()

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.api._shared import salvar_temp
+from app.api._shared import remover_temp, salvar_temp
 from app.auth import PAPEIS_GLOBAIS
 from app.db import get_db
 from app.models import Usuario
@@ -35,10 +35,21 @@ def tela(
     usuario: Usuario = Depends(_acesso_elite),
     db: Session = Depends(get_db),
 ):
+    # Período/status usados pra filtrar o menu de empresas (só quem tem
+    # laudo aparece — a pedido da Clara, 2026-11-24) seguem o mesmo padrão
+    # já pré-selecionado no template quando a tela abre sem filtro nenhum:
+    # mês/ano de hoje e a primeira opção de status.
+    periodo_ini_menu, periodo_fim_menu = laudos_service.periodo_20_a_20(
+        ano or date.today().year, mes or date.today().month
+    )
+    status_menu = status or laudos_service.OPCOES_STATUS[0]
+    ids_com_laudo = laudos_service.ids_empresas_com_laudo(db, periodo_ini_menu, periodo_fim_menu, status_menu)
+
+    eh_admin = usuario.papel_global in PAPEIS_GLOBAIS
     contexto = {
         "usuario": usuario,
         "menu": itens_menu(db, usuario),
-        "empresas": listar_empresas(db, apenas_ativas=False),
+        "empresas": [e for e in listar_empresas(db, apenas_ativas=False) if e.id in ids_com_laudo],
         "opcoes_status": laudos_service.OPCOES_STATUS,
         "hoje": date.today(),
         "filtro": {"empresa": empresa, "ano": ano, "mes": mes, "status": status},
@@ -47,7 +58,10 @@ def tela(
         "resumo": None,
         "resumo_texto": None,
         "erro": erro,
-        "eh_admin": usuario.papel_global in PAPEIS_GLOBAIS,
+        "eh_admin": eh_admin,
+        # Só calcula pra admin — mesma varredura da tabela inteira que
+        # `detectar_duplicatas` faz não interessa pra quem não vê a seção.
+        "duplicatas": laudos_service.detectar_duplicatas(db) if eh_admin else [],
     }
     # O resumo é sempre GERAL — cobre todas as empresas, ignorando o filtro
     # de "Empresa" do relatório detalhado (que continua servindo só pra
@@ -82,7 +96,13 @@ async def importar(
     usuario: Usuario = Depends(_acesso_elite),
     db: Session = Depends(get_db),
 ):
-    path = salvar_temp(arquivo)
+    # Lista cheia aqui (sem o filtro "só quem tem resultado" do período
+    # atual) de propósito: a planilha recém-importada pode trazer laudo de
+    # um período diferente de hoje, ou empresa nova — filtrar pelo período
+    # de hoje faria a empresa que acabou de ser importada desaparecer do
+    # menu bem na hora que a Clara mais precisa vê-la pra confirmar que o
+    # import funcionou.
+    eh_admin = usuario.papel_global in PAPEIS_GLOBAIS
     contexto = {
         "usuario": usuario,
         "menu": itens_menu(db, usuario),
@@ -95,19 +115,48 @@ async def importar(
         "resumo_texto": None,
         "mensagem": None,
         "erro": None,
-        "eh_admin": usuario.papel_global in PAPEIS_GLOBAIS,
+        "eh_admin": eh_admin,
     }
+    # `path` só existe se `salvar_temp` passar da validação (tipo/tamanho do
+    # arquivo) — None aqui faz o `finally` abaixo saber que não há nada
+    # pra remover.
+    path = None
     try:
+        path = salvar_temp(arquivo)
         resumo = laudos_service.importar_planilha(db, path)
     except ValueError as e:
         contexto["erro"] = str(e)
     else:
         registrar(db, usuario, "IMPORTOU_LAUDOS", entidade="laudo", detalhes=str(resumo))
         contexto["mensagem"] = (
-            f"{resumo.linhas_novas} linha(s) nova(s) importada(s) "
-            f"({resumo.linhas_ja_existentes} já existiam de antes)."
+            f"{resumo.linhas_novas} linha(s) nova(s) importada(s), "
+            f"{resumo.linhas_atualizadas} atualizada(s) "
+            f"({resumo.linhas_ja_existentes} já existiam sem mudança)."
         )
+    finally:
+        if path:
+            remover_temp(path)
+    contexto["duplicatas"] = laudos_service.detectar_duplicatas(db) if eh_admin else []
     return templates.TemplateResponse(request, "laudos.html", contexto)
+
+
+@router.post("/{laudo_id}/excluir")
+def excluir(
+    laudo_id: int,
+    usuario: Usuario = Depends(admin_logado_web),
+    db: Session = Depends(get_db),
+):
+    """Exclui UM laudo específico — usado pra resolver uma duplicata
+    apontada na seção "Possíveis duplicatas" da tela, depois da Clara
+    decidir qual dos dois manter (ver laudos_service.detectar_duplicatas).
+    Só Admin Superior/T.I."""
+    excluido = laudos_service.excluir_laudo(db, laudo_id)
+    if excluido:
+        registrar(db, usuario, "EXCLUIU_LAUDO", entidade="laudo", entidade_id=str(laudo_id))
+        mensagem = quote("Laudo excluído.")
+    else:
+        mensagem = quote("Esse laudo já não existe mais (pode já ter sido excluído).")
+    return RedirectResponse(f"/app/laudos?mensagem={mensagem}", status_code=303)
 
 
 @router.post("/apagar-tudo")
