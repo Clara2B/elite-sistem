@@ -32,6 +32,24 @@
   --shadow-lg: 0 12px 32px rgba(15, 31, 48, 0.14);
   --sidebar-w: 248px;
   color-scheme: light;
+
+  /* Cores decorativas dos cartões de módulo (ver .grid-modulos abaixo) —
+     o 1º módulo sempre usa --accent/--accent-soft (o azul padrão), os
+     demais ciclam por essas 7. */
+  --mod-2: #0d9488;
+  --mod-2-soft: #e6f7f5;
+  --mod-3: #7c3aed;
+  --mod-3-soft: #f1ebfd;
+  --mod-4: #b45309;
+  --mod-4-soft: #fdf1e0;
+  --mod-5: #be185d;
+  --mod-5-soft: #fbe8f0;
+  --mod-6: #0e7490;
+  --mod-6-soft: #e3f4f7;
+  --mod-7: #4338ca;
+  --mod-7-soft: #ecebfb;
+  --mod-8: #475569;
+  --mod-8-soft: #eef1f4;
 }
 
 /* Modo escuro (2026-09-28) — segue a preferência do sistema por padrão, e o
@@ -63,6 +81,20 @@
     --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
     --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.45);
     color-scheme: dark;
+    --mod-2: #2dd4bf;
+    --mod-2-soft: rgba(45, 212, 191, 0.16);
+    --mod-3: #a78bfa;
+    --mod-3-soft: rgba(167, 139, 250, 0.18);
+    --mod-4: #fbbf24;
+    --mod-4-soft: rgba(251, 191, 36, 0.16);
+    --mod-5: #f472b6;
+    --mod-5-soft: rgba(244, 114, 182, 0.16);
+    --mod-6: #22d3ee;
+    --mod-6-soft: rgba(34, 211, 238, 0.16);
+    --mod-7: #818cf8;
+    --mod-7-soft: rgba(129, 140, 248, 0.18);
+    --mod-8: #94a3b8;
+    --mod-8-soft: rgba(148, 163, 184, 0.16);
   }
 }
 :root[data-theme="dark"] {
@@ -90,6 +122,20 @@
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.45);
   color-scheme: dark;
+  --mod-2: #2dd4bf;
+  --mod-2-soft: rgba(45, 212, 191, 0.16);
+  --mod-3: #a78bfa;
+  --mod-3-soft: rgba(167, 139, 250, 0.18);
+  --mod-4: #fbbf24;
+  --mod-4-soft: rgba(251, 191, 36, 0.16);
+  --mod-5: #f472b6;
+  --mod-5-soft: rgba(244, 114, 182, 0.16);
+  --mod-6: #22d3ee;
+  --mod-6-soft: rgba(34, 211, 238, 0.16);
+  --mod-7: #818cf8;
+  --mod-7-soft: rgba(129, 140, 248, 0.18);
+  --mod-8: #94a3b8;
+  --mod-8-soft: rgba(148, 163, 184, 0.16);
 }
 
 * {
@@ -355,6 +401,20 @@ h2 {
   width: 20px;
   height: 20px;
 }
+
+/* Paleta decorativa por módulo (2026-11-27, a pedido da Clara — "sistema
+   parece nível mediano no design"): cada cartão do Início/Configuração
+   ganha uma cor de destaque diferente, em vez de todos usarem o mesmo azul
+   genérico. Cicla por posição (nth-child), não por significado — é só
+   variedade visual, nunca indica status (por isso evita o vermelho/verde
+   já usados como --danger/--ok). */
+.grid-modulos .modulo:nth-child(8n+2) .icone-wrap { background: var(--mod-2-soft); color: var(--mod-2); }
+.grid-modulos .modulo:nth-child(8n+3) .icone-wrap { background: var(--mod-3-soft); color: var(--mod-3); }
+.grid-modulos .modulo:nth-child(8n+4) .icone-wrap { background: var(--mod-4-soft); color: var(--mod-4); }
+.grid-modulos .modulo:nth-child(8n+5) .icone-wrap { background: var(--mod-5-soft); color: var(--mod-5); }
+.grid-modulos .modulo:nth-child(8n+6) .icone-wrap { background: var(--mod-6-soft); color: var(--mod-6); }
+.grid-modulos .modulo:nth-child(8n+7) .icone-wrap { background: var(--mod-7-soft); color: var(--mod-7); }
+.grid-modulos .modulo:nth-child(8n+8) .icone-wrap { background: var(--mod-8-soft); color: var(--mod-8); }
 .modulo .titulo {
   font-weight: 650;
   color: var(--heading);
@@ -555,7 +615,7 @@ thead th {
   text-align: left;
   color: var(--heading);
   background: var(--surface-alt);
-  padding: 11px 14px;
+  padding: 9px 14px;
   font-weight: 650;
   font-size: 0.78rem;
   text-transform: uppercase;
@@ -563,7 +623,11 @@ thead th {
   border-bottom: 1px solid var(--border);
 }
 tbody td {
-  padding: 11px 14px;
+  /* Reduzido de 11px pra 8px (2026-11-27, a pedido da Clara: listas
+     administrativas longas — Empresas, Processos etc. — rolavam demais
+     pra densidade que o conteúdo (uma linha de texto/input) realmente
+     precisa). */
+  padding: 8px 14px;
   border-bottom: 1px solid var(--border);
   /* texto longo (palavra ou link sem espaço) quebra dentro da célula, em vez
      de estourar a largura da tabela e forçar rolagem horizontal da página
