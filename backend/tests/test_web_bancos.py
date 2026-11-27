@@ -165,3 +165,36 @@ def test_importar_da_planilha_google_sem_id_configurado_mostra_erro(client, db, 
 
     assert resposta.status_code == 400
     assert "GOOGLE_SHEETS_ID" in resposta.text
+
+
+def test_lista_pagina_quando_passa_de_30(db, client):
+    """A pedido da Clara (2026-11-27): listagem administrativa sem
+    paginação virava uma página enorme conforme o cadastro crescia."""
+    _logar_admin(db, client)
+    for i in range(35):
+        db.add(Banco(nome=f"BANCO {i:02d}", cnpj=CNPJ_VALIDO, email="contato@teste.com.br"))
+    db.commit()
+
+    resp = client.get("/app/bancos")
+    assert resp.status_code == 200
+    assert "Página 1 de 2" in resp.text
+    assert "Cadastrados (35)" in resp.text
+
+    resp_pagina2 = client.get("/app/bancos", params={"pagina": 2})
+    assert resp_pagina2.status_code == 200
+    assert "Página 2 de 2" in resp_pagina2.text
+
+
+def test_busca_filtra_por_nome_cnpj_ou_email(db, client):
+    _logar_admin(db, client)
+    db.add(Banco(nome="BANCO ALFA", cnpj="11.222.333/0001-81", email="contato@alfa.com.br"))
+    db.add(Banco(nome="BANCO BETA", cnpj="22.333.444/0001-70", email="contato@beta.com.br"))
+    db.commit()
+
+    resp = client.get("/app/bancos", params={"busca": "alfa"})
+    assert "BANCO ALFA" in resp.text
+    assert "BANCO BETA" not in resp.text
+
+    resp_por_email = client.get("/app/bancos", params={"busca": "beta.com.br"})
+    assert "BANCO BETA" in resp_por_email.text
+    assert "BANCO ALFA" not in resp_por_email.text

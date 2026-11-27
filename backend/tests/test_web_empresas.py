@@ -181,3 +181,50 @@ def test_modais_de_massa_exigem_confirmacao_por_texto(client, db):
     assert 'data-confirmar-texto="EXCLUIR"' in resposta.text
     assert 'data-confirmar-texto="REALOCAR"' in resposta.text
     assert resposta.text.count("data-confirmar-alvo") >= 4  # 2 modais novos + sincronizar + excluir-inativas
+
+
+def test_lista_pagina_quando_passa_de_30(client, db):
+    """A pedido da Clara (2026-11-27): listagem administrativa sem
+    paginação virava uma página enorme conforme o cadastro crescia."""
+    _logar_admin(db, client)
+    for i in range(35):
+        get_or_create_empresa(db, f"WEB PAGINACAO EMPRESA {i:02d}")
+    db.commit()
+
+    resposta = client.get("/app/empresas")
+    assert resposta.status_code == 200
+    assert "Página 1 de 2" in resposta.text
+    assert "Cadastradas (35)" in resposta.text
+
+    resposta_pagina2 = client.get("/app/empresas", params={"pagina": 2})
+    assert resposta_pagina2.status_code == 200
+    assert "Página 2 de 2" in resposta_pagina2.text
+
+
+def test_busca_filtra_por_nome_mas_dropdowns_mostram_todas(client, db):
+    """A busca/paginação só afeta a tabela principal — os seletores
+    "mover histórico para" (exclusão/realocação individual e em massa)
+    continuam listando TODAS as empresas, senão ficaria impossível realocar
+    pra uma empresa que não está na página/busca atual."""
+    _logar_admin(db, client)
+    alfa = get_or_create_empresa(db, "WEB BUSCA EMPRESA ALFA")
+    beta = get_or_create_empresa(db, "WEB BUSCA EMPRESA BETA")
+    db.commit()
+
+    resposta = client.get("/app/empresas", params={"busca": "alfa"})
+    assert resposta.status_code == 200
+    assert "WEB BUSCA EMPRESA ALFA" in resposta.text
+    # fora da tabela paginada, "beta" não some: continua disponível nos
+    # dropdowns de destino (realocação), que usam a lista completa.
+    assert f'value="{beta.id}"' in resposta.text
+    assert f'value="{alfa.id}"' in resposta.text
+
+
+def test_busca_sem_resultado_mostra_mensagem_especifica(client, db):
+    _logar_admin(db, client)
+    get_or_create_empresa(db, "WEB BUSCA EMPRESA GAMA")
+    db.commit()
+
+    resposta = client.get("/app/empresas", params={"busca": "inexistente-xyz"})
+    assert resposta.status_code == 200
+    assert "Nenhuma empresa encontrada para essa busca." in resposta.text

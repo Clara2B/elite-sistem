@@ -20,6 +20,7 @@ from app.services.bancos import (
     importar_planilha_bancos,
     listar_bancos,
 )
+from app.utils import normalize, paginar
 from app.web.auth import require_modulo_web
 from app.web.menu import itens_menu
 from app.web.templates import templates
@@ -31,11 +32,22 @@ router = APIRouter(prefix="/app/bancos")
 _acesso_eximia = require_modulo_web("AUDIENCIAS")
 
 
-def _contexto_base(db: Session, usuario: Usuario) -> dict:
+def _contexto_base(db: Session, usuario: Usuario, busca: str | None = None, pagina: int = 1) -> dict:
+    todos = listar_bancos(db, apenas_ativos=False)
+    if busca:
+        alvo = normalize(busca)
+        todos = [
+            b for b in todos
+            if alvo in normalize(b.nome) or alvo in normalize(b.cnpj) or alvo in normalize(b.cnpj_alternativo or "")
+            or alvo in normalize(b.email)
+        ]
+    pagina_dados = paginar(todos, pagina)
     return {
         "usuario": usuario,
         "menu": itens_menu(db, usuario),
-        "bancos": listar_bancos(db, apenas_ativos=False),
+        "bancos": pagina_dados.itens,
+        "pagina": pagina_dados,
+        "busca": busca or "",
         "mensagem": None,
         "erro": None,
     }
@@ -44,12 +56,14 @@ def _contexto_base(db: Session, usuario: Usuario) -> dict:
 @router.get("")
 def tela(
     request: Request,
+    busca: str | None = None,
+    pagina: int = 1,
     erro: str | None = None,
     mensagem: str | None = None,
     usuario: Usuario = Depends(_acesso_eximia),
     db: Session = Depends(get_db),
 ):
-    contexto = _contexto_base(db, usuario)
+    contexto = _contexto_base(db, usuario, busca, pagina)
     contexto["erro"] = erro
     contexto["mensagem"] = mensagem
     return templates.TemplateResponse(request, "bancos.html", contexto)

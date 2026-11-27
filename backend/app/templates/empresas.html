@@ -9,6 +9,7 @@
 {% block conteudo %}
   {% import "_icones.html" as icones %}
   {% import "_flash.html" as flash %}
+  {% import "_paginacao.html" as paginacao %}
   <h1>Empresas-clientes</h1>
   <p class="subtitulo">Cadastro, CNPJ e ativação das empresas atendidas por ELITE e EXÍMIA.</p>
 
@@ -17,11 +18,11 @@
 
   <div class="card">
     <div class="card-header">
-      <h2>Cadastradas ({{ empresas|length }})</h2>
-      {% if empresas %}
-        <input type="text" id="busca-empresas" class="busca-lista" placeholder="Buscar por nome ou CNPJ..."
+      <h2>Cadastradas ({{ pagina.total_itens }})</h2>
+      <form method="get" action="/app/empresas">
+        <input type="text" name="busca" value="{{ busca }}" class="busca-lista" placeholder="Buscar por nome ou CNPJ..."
                aria-label="Buscar empresa por nome ou CNPJ" autocomplete="off">
-      {% endif %}
+      </form>
     </div>
     {% if empresas %}
       {% for e in empresas %}
@@ -84,9 +85,6 @@
                 </td>
               </tr>
             {% endfor %}
-            <tr id="linha-busca-vazia" style="display:none;">
-              <td colspan="5" class="vazio">Nenhuma empresa encontrada para essa busca.</td>
-            </tr>
           </tbody>
         </table>
       </div>
@@ -110,7 +108,7 @@
                 <label for="destino-{{ e.id }}">Mover histórico vinculado para</label>
                 <select id="destino-{{ e.id }}" name="empresa_destino_id" form="excluir-{{ e.id }}" required>
                   <option value="">Selecione...</option>
-                  {% for outra in empresas %}
+                  {% for outra in todas_empresas %}
                     {% if outra.id != e.id %}
                       <option value="{{ outra.id }}">{{ outra.nome }}</option>
                     {% endif %}
@@ -143,7 +141,7 @@
             <label for="destino-em-massa-excluir">Mover histórico vinculado para</label>
             <select id="destino-em-massa-excluir" name="empresa_destino_id" form="form-excluir-em-massa">
               <option value="">Selecione...</option>
-              {% for outra in empresas %}
+              {% for outra in todas_empresas %}
                 <option value="{{ outra.id }}" data-opcao-destino>{{ outra.nome }}</option>
               {% endfor %}
             </select>
@@ -176,7 +174,7 @@
             <label for="destino-em-massa-realocar">Mover todo o histórico para</label>
             <select id="destino-em-massa-realocar" name="empresa_destino_id" form="form-realocar-em-massa" required>
               <option value="">Selecione...</option>
-              {% for outra in empresas %}
+              {% for outra in todas_empresas %}
                 <option value="{{ outra.id }}" data-opcao-destino>{{ outra.nome }}</option>
               {% endfor %}
             </select>
@@ -195,6 +193,9 @@
           </form>
         </div>
       </dialog>
+      {{ paginacao.nav(pagina, "/app/empresas", busca) }}
+    {% elif busca %}
+      <p class="vazio">Nenhuma empresa encontrada para essa busca.</p>
     {% else %}
       <p class="vazio">Nenhuma empresa-cliente cadastrada ainda.</p>
     {% endif %}
@@ -228,7 +229,7 @@
       {{ icones.icone('empresas') }} Sincronizar com a lista oficial
     </button>
 
-    {% set inativas = empresas | selectattr('ativo', 'equalto', false) | list %}
+    {% set inativas = todas_empresas | selectattr('ativo', 'equalto', false) | list %}
     <p class="subtitulo" style="margin-top: 22px;">
       Exclui de verdade todas as {{ inativas | length }} empresa(s) marcada(s) como
       <strong>Inativa</strong> hoje (mesma proteção: uma empresa só é excluída se não tiver laudo,

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from dataclasses import dataclass
 from datetime import date, datetime
 
 import pandas as pd
@@ -148,3 +149,30 @@ def nome_arquivo_xlsx(*partes: str) -> str:
     """Mesma lógica de `nome_arquivo_pdf` (2026-10-05, versão em Excel dos
     relatórios) — ver app/excel_export.py."""
     return _nome_arquivo(".xlsx", partes)
+
+
+@dataclass
+class Pagina:
+    itens: list
+    pagina_atual: int
+    total_paginas: int
+    total_itens: int
+
+
+def paginar(itens: list, pagina: int, por_pagina: int = 30) -> Pagina:
+    """Pagina uma lista já carregada em memória — a pedido da Clara
+    (2026-11-27), pras listagens administrativas (Empresas/Bancos/
+    Funcionários), que nunca passam de algumas centenas de linhas: buscar
+    tudo do banco e paginar aqui em Python é mais simples do que replicar
+    LIMIT/OFFSET em cada serviço, sem custo real de performance nesse
+    tamanho de tabela. `pagina` fora do intervalo (negativa, zero, ou maior
+    que o total de páginas) é ajustada pro limite mais próximo em vez de
+    devolver uma página vazia ou dar erro."""
+    total_itens = len(itens)
+    total_paginas = max(1, -(-total_itens // por_pagina))
+    pagina_atual = max(1, min(pagina, total_paginas))
+    inicio = (pagina_atual - 1) * por_pagina
+    return Pagina(
+        itens=itens[inicio:inicio + por_pagina], pagina_atual=pagina_atual,
+        total_paginas=total_paginas, total_itens=total_itens,
+    )
